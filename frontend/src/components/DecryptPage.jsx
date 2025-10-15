@@ -207,14 +207,14 @@ const DecryptPage = ({ onBack }) => {
               <div className="flex justify-between">
                 <span className="text-gray-400">Created:</span>
                 <span className="text-white">
-                  {new Date(metadata.created_at).toLocaleString()}
+                  {new Date(metadata.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'medium' })} IST
                 </span>
               </div>
               {metadata.expires_at && (
                 <div className="flex justify-between">
                   <span className="text-gray-400">Expires:</span>
                   <span className="text-white">
-                    {new Date(metadata.expires_at).toLocaleString()}
+                    {new Date(metadata.expires_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'medium' })} IST
                   </span>
                 </div>
               )}

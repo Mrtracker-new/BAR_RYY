@@ -243,7 +243,7 @@ function App() {
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-400">Created:</span>
                     <span className="text-white">
-                      {new Date(barResult.metadata.created_at).toLocaleString()}
+                      {new Date(barResult.metadata.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'medium' })} IST
                     </span>
                   </div>
                 </div>
