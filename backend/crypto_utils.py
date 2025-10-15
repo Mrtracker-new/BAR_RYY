@@ -114,7 +114,7 @@ def validate_bar_access(metadata: dict, password: str = None) -> tuple:
         expires_at_str = metadata["expires_at"]
         # Handle both old format (no Z) and new format (with Z)
         if expires_at_str.endswith('Z'):
-            expires_at_str = expires_at_str.replace('Z', '+00:00')
+            expires_at_str = expires_at_str[:-1]  # Remove Z, treat as naive UTC
         expires_at = datetime.fromisoformat(expires_at_str)
         if datetime.utcnow() > expires_at:
             errors.append("File has expired")
