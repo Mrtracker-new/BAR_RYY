@@ -337,13 +337,9 @@ async def decrypt_uploaded_bar_file(file: UploadFile = File(...), password: str 
         
         views_remaining = max(0, metadata.get("max_views", 0) - metadata["current_views"])
         
-        # Repack the .bar file with updated metadata (incremented view count)
-        # This is critical for enforcing view limits!
-        updated_bar_data = crypto_utils.pack_bar_file(encrypted_data, metadata, key)
-        
-        # Create multipart response with both decrypted file and updated .bar file
-        # Encode the updated .bar file in base64 to send in header
-        updated_bar_base64 = base64.b64encode(updated_bar_data).decode('utf-8')
+        # Note: We can't update the .bar file since user uploaded it directly
+        # This means view count enforcement relies on user not keeping copies of original file
+        # This is a known limitation of client-side .bar file approach
         
         # Return file data with metadata
         return Response(
@@ -355,9 +351,7 @@ async def decrypt_uploaded_bar_file(file: UploadFile = File(...), password: str 
                 "X-BAR-Should-Destroy": str(should_destroy).lower(),
                 "X-BAR-View-Only": str(metadata.get('view_only', False)).lower(),
                 "X-BAR-Filename": metadata["filename"],
-                "X-BAR-Metadata": json.dumps(metadata),
-                "X-BAR-Updated-File": updated_bar_base64,  # Send updated .bar file to replace user's copy
-                "X-BAR-Updated-Size": str(len(updated_bar_data))
+                "X-BAR-Metadata": json.dumps(metadata)
             }
         )
         
