@@ -22,6 +22,15 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=[
+        "X-BAR-Views-Remaining",
+        "X-BAR-Should-Destroy",
+        "X-BAR-View-Only",
+        "X-BAR-Filename",
+        "X-BAR-Storage-Mode",
+        "X-BAR-Destroyed",
+        "X-BAR-Metadata"
+    ],
 )
 
 # Directories
