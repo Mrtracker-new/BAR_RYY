@@ -1,12 +1,21 @@
 import React, { useState } from 'react';
+import { Routes, Route, useParams } from 'react-router-dom';
 import axios from 'axios';
 import { Download, PackageOpen, AlertCircle, Link2, Copy } from 'lucide-react';
 import FileUpload from './components/FileUpload';
 import RulesPanel from './components/RulesPanel';
 import ContainerAnimation from './components/ContainerAnimation';
 import DecryptPage from './components/DecryptPage';
+import SharePage from './components/SharePage';
 
-function App() {
+// Wrapper component for share page route
+const SharePageWrapper = () => {
+  const { token } = useParams();
+  return <SharePage token={token} />;
+};
+
+// Main app component
+function MainApp() {
   const [uploadedFile, setUploadedFile] = useState(null);
   const [fileInfo, setFileInfo] = useState(null);
   const [rules, setRules] = useState({
@@ -283,13 +292,13 @@ function App() {
                       <div className="flex items-center space-x-2">
                         <input
                           type="text"
-                          value={`http://localhost:8000/share/${barResult.access_token}`}
+                          value={`${window.location.origin}/share/${barResult.access_token}`}
                           readOnly
                           className="flex-1 px-3 py-2 bg-dark-600 border border-dark-500 rounded text-white text-sm font-mono"
                         />
                         <button
                           onClick={() => {
-                            navigator.clipboard.writeText(`http://localhost:8000/share/${barResult.access_token}`);
+                            navigator.clipboard.writeText(`${window.location.origin}/share/${barResult.access_token}`);
                             alert('Link copied to clipboard!');
                           }}
                           className="p-2 bg-gold-500 hover:bg-gold-600 text-black rounded transition-all"
@@ -349,6 +358,16 @@ function App() {
         </div>
       </footer>
     </div>
+  );
+}
+
+// App with routing
+function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<MainApp />} />
+      <Route path="/share/:token" element={<SharePageWrapper />} />
+    </Routes>
   );
 }
 
