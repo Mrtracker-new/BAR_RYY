@@ -468,14 +468,18 @@ async def share_file(token: str, password: str = ""):
             print(f"🔥 File destroyed after reaching max views")
         
         # Return decrypted file
+        # For view-only, use 'inline' instead of 'attachment' to let browser display it
+        view_only = metadata.get('view_only', False)
+        content_disposition = "inline" if view_only else f"attachment; filename={metadata['filename']}"
+        
         return Response(
             content=decrypted_data,
             media_type="application/octet-stream",
             headers={
-                "Content-Disposition": f"attachment; filename={metadata['filename']}",
+                "Content-Disposition": content_disposition,
                 "X-BAR-Views-Remaining": str(views_remaining),
                 "X-BAR-Should-Destroy": str(should_destroy).lower(),
-                "X-BAR-View-Only": str(metadata.get('view_only', False)).lower(),
+                "X-BAR-View-Only": str(view_only).lower(),
                 "X-BAR-Filename": metadata["filename"],
                 "X-BAR-Storage-Mode": "server"
             }
