@@ -1,194 +1,176 @@
-# BAR Web - Burn After Reading
+# BAR Web - Burn After Reading 🔥
 
-A secure file encryption and sharing application with self-destruct capabilities. BAR Web allows you to encrypt files with configurable access controls, including view limits, expiration times, and password protection.
+Hey there! 👋 
 
-## 🔥 Features
+So I built this project because I thought it would be cool to have a way to share files that automatically self-destruct after being viewed. You know, like those spy movies where messages disappear after being read? Yeah, that's the vibe.
 
-- **Self-Destruct Files**: Set maximum view counts (1-N views) before automatic deletion
-- **Time-Based Expiry**: Configure expiration times (in minutes) for files
-- **Password Protection**: Optional password encryption for sensitive files
-- **Secure Encryption**: AES-256 encryption with cryptographic best practices
-- **View-Only Mode**: Prevent file downloads while allowing viewing
-- **Webhook Notifications**: Get notified when files are accessed
-- **BAR Container Format**: Encrypted `.bar` files with embedded metadata
+## What Does It Do?
 
-## 🛠️ Tech Stack
+Basically, you can:
+- Upload a file and encrypt it
+- Set how many times it can be viewed (like just once, or maybe 5 times)
+- Add an expiration time if you want
+- Protect it with a password
+- Share the encrypted `.bar` file with someone
+- Once they hit the view limit... BOOM! 💥 File's gone forever
 
-### Backend
-- **FastAPI**: High-performance Python web framework
-- **Uvicorn**: ASGI server
-- **Cryptography**: Industry-standard encryption library
-- **Pydantic**: Data validation
+Pretty neat, right?
 
-### Frontend
-- **React**: UI library
-- **Vite**: Fast build tool
-- **Tailwind CSS**: Utility-first CSS framework
-- **Axios**: HTTP client
-- **Lucide React**: Icon library
+## Cool Features I Added
 
-## 📋 Prerequisites
+- **Self-Destruct**: Files actually destroy themselves after reaching the view limit (I fixed a bug where this wasn't working properly 😅)
+- **Password Protection**: Lock your files with a password for extra security
+- **Time Bombs**: Set files to expire after a certain time
+- **View-Only Mode**: Let people see the file but not download it
+- **AES-256 Encryption**: Because we're doing this properly
+- **Webhook Alerts**: Get notified when someone views your file
 
-- Python 3.8 or higher
-- Node.js 16+ and npm
-- Git
+## Tech I Used
 
-## 🚀 Quick Start
+**Backend:**
+- FastAPI (it's really fast, hence the name)
+- Python cryptography libraries
+- Some other Python stuff
 
-### Windows
+**Frontend:**
+- React (because everyone uses React)
+- Vite (super fast build tool)
+- Tailwind CSS (makes things look pretty without much effort)
+- Axios for API calls
 
-1. **Clone the repository**
+## What You'll Need
+
+Before you start, make sure you have:
+- Python 3.8 or newer
+- Node.js (version 16 or higher) and npm
+- Git (obviously)
+
+## Getting Started
+
+### For Windows Users (Easy Mode)
+
+I made some batch files to make life easier:
+
+1. **Clone this repo**
 ```bash
-git clone <repository-url>
+git clone https://github.com/Mrtracker-new/BAR_RYY.git
 cd BAR-Web
 ```
 
-2. **Run setup script**
+2. **Run the setup**
 ```bash
 setup.bat
 ```
+This installs everything you need for both frontend and backend.
 
-3. **Start the application**
+3. **Start it up**
 ```bash
 start.bat
 ```
+This opens two terminal windows - one for backend, one for frontend.
 
-The backend will start on `http://localhost:8000` and the frontend on `http://localhost:5173`.
+Then just go to:
+- Frontend: `http://localhost:5173`
+- Backend API: `http://localhost:8000`
 
-### Manual Setup
+### Manual Setup (If You Want More Control)
 
-#### Backend Setup
+**Backend:**
 ```bash
 cd backend
-python -m pip install -r requirements.txt
+pip install -r requirements.txt
 python app.py
 ```
 
-#### Frontend Setup
+**Frontend:**
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-## 📁 Project Structure
+## How It's Organized
 
 ```
 BAR-Web/
-├── backend/
-│   ├── app.py                 # FastAPI application
-│   ├── crypto_utils.py        # Encryption utilities
-│   ├── crypto_utils_v2.py     # Enhanced crypto functions
-│   ├── decrypt_bar.py         # BAR file decryption
-│   ├── decrypt_upload.py      # Upload decryption
-│   └── requirements.txt       # Python dependencies
-├── frontend/
-│   ├── src/                   # React source code
-│   ├── index.html             # Entry HTML
-│   ├── package.json           # Node dependencies
-│   ├── vite.config.js         # Vite configuration
-│   └── tailwind.config.js     # Tailwind configuration
-├── setup.bat                  # Windows setup script
-├── start.bat                  # Windows start script
-└── README.md                  # This file
+├── backend/          # Python/FastAPI stuff
+│   ├── app.py              # Main API
+│   ├── crypto_utils.py     # All the encryption magic
+│   └── requirements.txt    # Python packages
+├── frontend/         # React app
+│   ├── src/                # React components
+│   ├── package.json        # NPM packages
+│   └── vite.config.js      # Build config
+├── setup.bat         # Run this first
+└── start.bat         # Run this to start everything
 ```
 
-## 🔐 How It Works
+## How Does It Work?
 
-1. **Upload**: Upload a file through the web interface
-2. **Configure**: Set security parameters:
-   - Maximum view count
-   - Expiration time
-   - Password protection (optional)
-   - View-only mode
-   - Webhook URL (optional)
-3. **Seal**: The file is encrypted and packaged into a `.bar` container
-4. **Share**: Download and share the `.bar` file
-5. **Access**: Recipients decrypt the file with proper credentials
-6. **Burn**: After reaching view limit or expiration, the file is destroyed
+1. **Upload Your File**: Drag and drop whatever you want to secure
+2. **Set Your Rules**: 
+   - How many times can it be viewed?
+   - Should it expire after some time?
+   - Need a password?
+   - View-only mode?
+3. **Seal It**: The app encrypts everything and creates a `.bar` file
+4. **Share**: Download the `.bar` file and send it to whoever
+5. **They Open It**: They upload the `.bar` file, enter password (if you set one), and boom - they get the file
+6. **Self-Destruct**: Once view limit is hit or time expires, the file destroys itself
 
-## 🔑 API Endpoints
+Each time someone views the file, it gets updated with a new view count. So you can't just keep using the same `.bar` file over and over (I learned that the hard way when fixing a bug 😂)
 
-### `POST /upload`
-Upload a file for encryption
+## The API (If You're Curious)
 
-### `POST /seal`
-Seal uploaded file with encryption and access rules
-```json
-{
-  "filename": "document.pdf",
-  "max_views": 1,
-  "expiry_minutes": 60,
-  "password": "optional_password",
-  "webhook_url": "https://example.com/webhook",
-  "view_only": false
-}
-```
+The backend has a few endpoints:
+- `POST /upload` - Upload your file
+- `POST /seal` - Encrypt it and create the .bar file
+- `GET /download/{bar_id}` - Download the .bar file
+- `POST /decrypt-upload` - Decrypt a .bar file (this is what the frontend uses)
 
-### `GET /download/{bar_id}`
-Download the generated `.bar` file
+You can check out the full API docs at `http://localhost:8000/docs` when running.
 
-### `POST /decrypt/{bar_id}`
-Decrypt and retrieve the original file
-```json
-{
-  "password": "optional_password"
-}
-```
+## Security Stuff
 
-## 🛡️ Security Features
+I'm using:
+- **AES-256 encryption** (the good stuff)
+- **PBKDF2** for password-based keys
+- **SHA-256** for file integrity checks
+- Cryptographically secure random keys
 
-- **AES-256 Encryption**: Military-grade encryption standard
-- **Key Derivation**: PBKDF2 for password-based encryption
-- **File Integrity**: SHA-256 hash verification
-- **Secure Random**: Cryptographically secure random key generation
-- **Metadata Protection**: Encrypted metadata within BAR container
+Basically, it's secure. I didn't just use `password123` as the encryption key or anything like that 😅
 
-## 📝 Development
+## If You Run Into Issues
 
-### Frontend Development
-```bash
-cd frontend
-npm run dev      # Start dev server
-npm run build    # Build for production
-npm run preview  # Preview production build
-```
+**"Port already in use" error:**
+- Someone's already using port 8000 or 5173
+- Either close that other app, or change the ports in `app.py` (backend) and `vite.config.js` (frontend)
 
-### Backend Development
-```bash
-cd backend
-python app.py    # Start FastAPI server
-```
+**"Python not found":**
+- Install Python from [python.org](https://www.python.org/)
+- Make sure to check "Add to PATH" during installation
 
-## 🤝 Contributing
+**"Node/NPM not found":**
+- Install Node.js from [nodejs.org](https://nodejs.org/)
+- It comes with npm included
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+**File won't decrypt:**
+- Make sure you're using the LATEST .bar file (it updates after each view)
+- Check if the password is correct
+- Maybe you hit the view limit already?
 
-## 📄 License
+## Contributing
 
-This project is open source and available under the MIT License.
+Found a bug? Want to add a feature? PRs are welcome! Just fork it and send a pull request.
 
-## ⚠️ Disclaimer
+## License
 
-This tool is designed for secure file sharing. Users are responsible for compliance with applicable laws and regulations regarding encryption and data protection in their jurisdiction.
+MIT License - do whatever you want with it!
 
-## 🐛 Troubleshooting
+## Disclaimer
 
-### Port Already in Use
-If port 8000 or 5173 is already in use, modify the port in:
-- Backend: `app.py` (uvicorn port parameter)
-- Frontend: `vite.config.js`
-
-### Python Not Found
-Ensure Python is installed and added to PATH. Download from [python.org](https://www.python.org/)
-
-### Node/NPM Not Found
-Ensure Node.js is installed. Download from [nodejs.org](https://nodejs.org/)
-
-## 📧 Support
-
-For issues and questions, please open an issue on GitHub.
+This is a project I made for learning and fun. Use it responsibly and make sure you're following your local laws about encryption. I'm not responsible if you use this for something sketchy 😉
 
 ---
 
-**Built with 🔒 for secure, private file sharing**
+**Made with ☕ and a lot of debugging**
