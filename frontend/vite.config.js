@@ -11,7 +11,8 @@ export default defineConfig({
       '/download': 'http://localhost:8000',
       '/decrypt': 'http://localhost:8000',
       '/decrypt-upload': 'http://localhost:8000',
-      '/info': 'http://localhost:8000'
+      '/info': 'http://localhost:8000',
+      '/share': 'http://localhost:8000'
     }
   }
 })
