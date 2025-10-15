@@ -9,6 +9,7 @@ import shutil
 import json
 import base64
 from datetime import datetime
+import mimetypes
 import crypto_utils
 
 
@@ -468,19 +469,30 @@ async def share_file(token: str, password: str = ""):
             print(f"🔥 File destroyed after reaching max views")
         
         # Return decrypted file
-        # For view-only, use 'inline' instead of 'attachment' to let browser display it
+        # For view-only, use 'inline' with proper MIME type to let browser display it
         view_only = metadata.get('view_only', False)
-        content_disposition = "inline" if view_only else f"attachment; filename={metadata['filename']}"
+        filename = metadata['filename']
+        
+        # Determine proper MIME type for inline viewing
+        if view_only:
+            # Guess MIME type from filename
+            mime_type, _ = mimetypes.guess_type(filename)
+            if not mime_type:
+                mime_type = "application/octet-stream"
+            content_disposition = f"inline; filename={filename}"
+        else:
+            mime_type = "application/octet-stream"
+            content_disposition = f"attachment; filename={filename}"
         
         return Response(
             content=decrypted_data,
-            media_type="application/octet-stream",
+            media_type=mime_type,
             headers={
                 "Content-Disposition": content_disposition,
                 "X-BAR-Views-Remaining": str(views_remaining),
                 "X-BAR-Should-Destroy": str(should_destroy).lower(),
                 "X-BAR-View-Only": str(view_only).lower(),
-                "X-BAR-Filename": metadata["filename"],
+                "X-BAR-Filename": filename,
                 "X-BAR-Storage-Mode": "server"
             }
         )

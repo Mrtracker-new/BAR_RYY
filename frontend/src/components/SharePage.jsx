@@ -11,6 +11,7 @@ const SharePage = ({ token }) => {
   const [fileName, setFileName] = useState(null);
   const [isViewOnly, setIsViewOnly] = useState(false);
   const [viewsRemaining, setViewsRemaining] = useState(null);
+  const [successMessage, setSuccessMessage] = useState(null);
 
   const handleDownload = async () => {
     setIsLoading(true);
@@ -40,8 +41,7 @@ const SharePage = ({ token }) => {
         const fileBlob = new Blob([response.data]);
         const fileUrl = URL.createObjectURL(fileBlob);
         setFileData(fileUrl);
-        
-        alert(`📄 View-Only Mode\n\nThis file can be viewed but not downloaded.\n${retrievedViewsRemaining} view(s) remaining.`);
+        setSuccessMessage(`File loaded successfully. ${retrievedViewsRemaining} view(s) remaining.`);
       } else {
         // Download the file
         const blob = new Blob([response.data], { type: 'application/octet-stream' });
@@ -56,9 +56,9 @@ const SharePage = ({ token }) => {
 
         // Show success message
         if (shouldDestroy) {
-          alert('✅ File downloaded!\n\n⚠️ This was the last view. The file has been destroyed and this link will no longer work.');
+          setSuccessMessage('✅ File downloaded! ⚠️ This was the last view. The file has been destroyed.');
         } else {
-          alert(`✅ File downloaded!\n\n${retrievedViewsRemaining} view(s) remaining on this link.`);
+          setSuccessMessage(`✅ File downloaded! ${retrievedViewsRemaining} view(s) remaining.`);
         }
       }
 
@@ -104,6 +104,13 @@ const SharePage = ({ token }) => {
               <div className="p-4 bg-red-500/20 border border-red-500 rounded-lg flex items-center space-x-3">
                 <AlertCircle className="text-red-500" size={24} />
                 <p className="text-red-300 text-sm text-left">{error}</p>
+              </div>
+            )}
+
+            {successMessage && (
+              <div className="p-4 bg-green-500/20 border border-green-500 rounded-lg flex items-center space-x-3">
+                <FileCheck className="text-green-500" size={24} />
+                <p className="text-green-300 text-sm text-left">{successMessage}</p>
               </div>
             )}
 
