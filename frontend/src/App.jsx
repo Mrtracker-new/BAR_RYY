@@ -283,13 +283,13 @@ function App() {
                       <div className="flex items-center space-x-2">
                         <input
                           type="text"
-                          value={`${window.location.origin}/share/${barResult.access_token}`}
+                          value={`http://localhost:8000/share/${barResult.access_token}`}
                           readOnly
                           className="flex-1 px-3 py-2 bg-dark-600 border border-dark-500 rounded text-white text-sm font-mono"
                         />
                         <button
                           onClick={() => {
-                            navigator.clipboard.writeText(`${window.location.origin}/share/${barResult.access_token}`);
+                            navigator.clipboard.writeText(`http://localhost:8000/share/${barResult.access_token}`);
                             alert('Link copied to clipboard!');
                           }}
                           className="p-2 bg-gold-500 hover:bg-gold-600 text-black rounded transition-all"
