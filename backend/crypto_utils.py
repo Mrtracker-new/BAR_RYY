@@ -105,7 +105,7 @@ def unpack_bar_file(bar_data: bytes) -> tuple:
     return encrypted_data, metadata, key
 
 
-def validate_bar_access(metadata: dict, password: str = None) -> tuple:
+def validate_bar_access(metadata: dict, password: str = None, skip_password_check: bool = False) -> tuple:
     """Validate if BAR file can be accessed"""
     errors = []
     
@@ -129,8 +129,9 @@ def validate_bar_access(metadata: dict, password: str = None) -> tuple:
         if current_views >= max_views:
             errors.append(f"Maximum views reached ({current_views}/{max_views})")
     
-    # Check password
-    if metadata.get("password_protected") and not password:
-        errors.append("Password required")
+    # Check password (only if not already validated)
+    if not skip_password_check:
+        if metadata.get("password_protected") and not password:
+            errors.append("Password required")
     
     return len(errors) == 0, errors

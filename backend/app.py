@@ -443,8 +443,8 @@ async def share_file(token: str, request: DecryptRequest):
                 # For security, you should regenerate these files
                 print("⚠️ WARNING: File has password protection but no password_hash (old file format)")
         
-        # Validate access (expiry, view count) - Don't check password again, already validated above
-        is_valid, errors = crypto_utils.validate_bar_access(metadata, None)
+        # Validate access (expiry, view count) - Skip password check since we already validated it
+        is_valid, errors = crypto_utils.validate_bar_access(metadata, None, skip_password_check=True)
         
         if not is_valid:
             print(f"❌ Access validation failed: {errors}")
