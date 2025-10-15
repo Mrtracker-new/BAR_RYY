@@ -7,6 +7,10 @@ const SharePage = ({ token }) => {
   const [metadata, setMetadata] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [fileData, setFileData] = useState(null);
+  const [fileName, setFileName] = useState(null);
+  const [isViewOnly, setIsViewOnly] = useState(false);
+  const [viewsRemaining, setViewsRemaining] = useState(null);
 
   const handleDownload = async () => {
     setIsLoading(true);
@@ -21,34 +25,41 @@ const SharePage = ({ token }) => {
       });
 
       // Get metadata from headers
-      const fileName = response.headers['x-bar-filename'];
-      const viewsRemaining = response.headers['x-bar-views-remaining'] || '0';
+      const retrievedFileName = response.headers['x-bar-filename'];
+      const retrievedViewsRemaining = response.headers['x-bar-views-remaining'] || '0';
       const shouldDestroy = response.headers['x-bar-should-destroy'] === 'true';
       const viewOnly = response.headers['x-bar-view-only'] === 'true';
 
+      setFileName(retrievedFileName);
+      setViewsRemaining(retrievedViewsRemaining);
+      setIsViewOnly(viewOnly);
+
       // Check if view-only mode
       if (viewOnly) {
-        alert('⚠️ This file is in VIEW-ONLY mode.\n\nDownloads are not allowed. Contact the sender for a downloadable version.');
-        setError('This file is view-only and cannot be downloaded');
-        return;
-      }
-
-      // Download the file
-      const blob = new Blob([response.data], { type: 'application/octet-stream' });
-      const downloadUrl = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.download = fileName || 'decrypted_file';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(downloadUrl);
-
-      // Show success message
-      if (shouldDestroy) {
-        alert('✅ File downloaded!\n\n⚠️ This was the last view. The file has been destroyed and this link will no longer work.');
+        // Display the file instead of downloading
+        const fileBlob = new Blob([response.data]);
+        const fileUrl = URL.createObjectURL(fileBlob);
+        setFileData(fileUrl);
+        
+        alert(`📄 View-Only Mode\n\nThis file can be viewed but not downloaded.\n${retrievedViewsRemaining} view(s) remaining.`);
       } else {
-        alert(`✅ File downloaded!\n\n${viewsRemaining} view(s) remaining on this link.`);
+        // Download the file
+        const blob = new Blob([response.data], { type: 'application/octet-stream' });
+        const downloadUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = retrievedFileName || 'decrypted_file';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(downloadUrl);
+
+        // Show success message
+        if (shouldDestroy) {
+          alert('✅ File downloaded!\n\n⚠️ This was the last view. The file has been destroyed and this link will no longer work.');
+        } else {
+          alert(`✅ File downloaded!\n\n${retrievedViewsRemaining} view(s) remaining on this link.`);
+        }
       }
 
     } catch (err) {
@@ -109,15 +120,17 @@ const SharePage = ({ token }) => {
                 />
               </div>
 
-              <button
-                onClick={handleDownload}
-                disabled={isLoading}
-                className={`w-full py-4 rounded-lg font-bold text-lg transition-all duration-300 ${
-                  isLoading
-                    ? 'bg-dark-600 text-gray-500 cursor-not-allowed'
-                    : 'bg-gold-500 hover:bg-gold-600 text-black hover:scale-105'
-                }`}
-              >
+              {/* Only show download button if not already viewing a file */}
+              {!fileData && (
+                <button
+                  onClick={handleDownload}
+                  disabled={isLoading}
+                  className={`w-full py-4 rounded-lg font-bold text-lg transition-all duration-300 ${
+                    isLoading
+                      ? 'bg-dark-600 text-gray-500 cursor-not-allowed'
+                      : 'bg-gold-500 hover:bg-gold-600 text-black hover:scale-105'
+                  }`}
+                >
                 {isLoading ? (
                   <span className="flex items-center justify-center space-x-2">
                     <Lock className="animate-spin" size={20} />
@@ -129,14 +142,59 @@ const SharePage = ({ token }) => {
                     <span>Download File</span>
                   </span>
                 )}
-              </button>
+                </button>
+              )}
             </div>
 
-            <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-              <p className="text-yellow-400 text-sm">
-                ⚠️ <strong>Warning:</strong> This link may have limited views. Once the view limit is reached, the file will be permanently destroyed.
-              </p>
-            </div>
+            {!fileData && (
+              <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                <p className="text-yellow-400 text-sm">
+                  ⚠️ <strong>Warning:</strong> This link may have limited views. Once the view limit is reached, the file will be permanently destroyed.
+                </p>
+              </div>
+            )}
+
+            {/* File Viewer for View-Only Mode */}
+            {fileData && isViewOnly && (
+              <div className="mt-6 border-2 border-gold-500 rounded-lg overflow-hidden bg-dark-900">
+                <div className="bg-gold-500/20 p-3 border-b border-gold-500">
+                  <p className="text-gold-500 font-semibold text-sm">
+                    📄 Viewing: {fileName}
+                  </p>
+                  <p className="text-gray-400 text-xs mt-1">
+                    View-Only Mode - Downloads Disabled
+                  </p>
+                </div>
+                <div className="p-4 max-h-96 overflow-auto">
+                  {fileName && (
+                    fileName.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i) ? (
+                      <img src={fileData} alt={fileName} className="max-w-full h-auto mx-auto" />
+                    ) : fileName.match(/\.(mp4|webm|ogg)$/i) ? (
+                      <video controls className="max-w-full h-auto mx-auto">
+                        <source src={fileData} />
+                      </video>
+                    ) : fileName.match(/\.(mp3|wav|ogg)$/i) ? (
+                      <audio controls className="w-full">
+                        <source src={fileData} />
+                      </audio>
+                    ) : fileName.match(/\.pdf$/i) ? (
+                      <iframe src={fileData} className="w-full h-96" title={fileName} />
+                    ) : fileName.match(/\.(txt|md|json|xml|csv)$/i) ? (
+                      <iframe src={fileData} className="w-full h-96 bg-white" title={fileName} />
+                    ) : (
+                      <div className="text-center py-8">
+                        <p className="text-gray-400">
+                          Cannot preview this file type ({fileName.split('.').pop()}).
+                        </p>
+                        <p className="text-gray-500 text-sm mt-2">
+                          This file is view-only and cannot be downloaded.
+                        </p>
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
