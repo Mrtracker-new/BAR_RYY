@@ -394,9 +394,10 @@ async def decrypt_uploaded_bar_file(file: UploadFile = File(...), password: str 
         raise HTTPException(status_code=500, detail=f"Decryption failed: {str(e)}")
 
 
-@app.get("/share/{token}")
-async def share_file(token: str, password: str = ""):
+@app.post("/share/{token}")
+async def share_file(token: str, request: DecryptRequest):
     """Server-side access endpoint - properly enforces view limits"""
+    password = request.password or ""
     try:
         # Find BAR file by token
         bar_file = os.path.join(GENERATED_DIR, f"{token}.bar")
@@ -410,6 +411,13 @@ async def share_file(token: str, password: str = ""):
         
         encrypted_data, metadata, key = crypto_utils.unpack_bar_file(bar_data)
         
+        print(f"\n=== SHARE ACCESS REQUEST ===")
+        print(f"Token: {token}")
+        print(f"Password provided: {bool(password and password.strip())}")
+        print(f"Password protected: {metadata.get('password_protected')}")
+        print(f"View only: {metadata.get('view_only')}")
+        print(f"Current views: {metadata.get('current_views')}/{metadata.get('max_views')}")
+        
         # Validate password if protected
         if metadata.get("password_protected"):
             if not password or not password.strip():
@@ -419,7 +427,7 @@ async def share_file(token: str, password: str = ""):
             stored_hash = metadata.get("password_hash")
             if stored_hash:
                 import hashlib
-                provided_hash = hashlib.sha256(password.encode()).hexdigest()
+                provided_hash = hashlib.sha256(password.strip().encode()).hexdigest()
                 
                 if provided_hash != stored_hash:
                     raise HTTPException(status_code=403, detail="Invalid password")
@@ -428,9 +436,8 @@ async def share_file(token: str, password: str = ""):
                 # For security, you should regenerate these files
                 print("WARNING: File has password protection but no password_hash (old file format)")
         
-        # Validate access (expiry, view count)
-        password_to_check = password if password and password.strip() else None
-        is_valid, errors = crypto_utils.validate_bar_access(metadata, password_to_check)
+        # Validate access (expiry, view count) - Don't check password again, already validated above
+        is_valid, errors = crypto_utils.validate_bar_access(metadata, None)
         
         if not is_valid:
             raise HTTPException(status_code=403, detail="; ".join(errors))

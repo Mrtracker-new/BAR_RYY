@@ -18,12 +18,13 @@ const SharePage = ({ token }) => {
     setError(null);
 
     try {
-      // Call backend API at /api/share (not /share which is a frontend route)
-      const url = `http://localhost:8000/share/${token}${password ? `?password=${encodeURIComponent(password)}` : ''}`;
+      // Call backend API with POST to avoid browser interception
+      const url = `http://localhost:8000/share/${token}`;
       
-      const response = await axios.get(url, {
-        responseType: 'arraybuffer'
-      });
+      const response = await axios.post(url, 
+        { password: password || null },
+        { responseType: 'arraybuffer' }
+      );
 
       // Get metadata from headers (axios lowercases header names)
       console.log('Response headers:', response.headers);
@@ -69,18 +70,23 @@ const SharePage = ({ token }) => {
 
     } catch (err) {
       console.error('Download error:', err);
+      console.error('Error response:', err.response);
+      
       let errorMsg = 'Failed to download file: ';
       
       if (err.response?.status === 404) {
         errorMsg = '🚫 File not found or already destroyed';
       } else if (err.response?.status === 403) {
-        errorMsg = '🚫 Access denied: ' + (err.response?.data?.detail || 'Invalid password or view limit reached');
+        // Get the actual error message from backend
+        const detail = err.response?.data?.detail || 'Invalid password or view limit reached';
+        errorMsg = '🚫 Access denied: ' + detail;
       } else if (err.response?.data?.detail) {
         errorMsg += err.response.data.detail;
       } else {
         errorMsg += err.message;
       }
       
+      console.error('Error message:', errorMsg);
       setError(errorMsg);
     } finally {
       setIsLoading(false);
