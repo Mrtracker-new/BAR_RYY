@@ -44,11 +44,11 @@ def decrypt_file(encrypted_data: bytes, key: bytes) -> bytes:
 def create_bar_metadata(filename: str, max_views: int, expiry_minutes: int, 
                         password_protected: bool, webhook_url: str = None, view_only: bool = False) -> dict:
     """Create metadata for BAR file"""
-    created_at = datetime.utcnow().isoformat()
+    created_at = datetime.utcnow().isoformat() + 'Z'  # Add Z to indicate UTC
     expires_at = None
     
     if expiry_minutes > 0:
-        expires_at = (datetime.utcnow() + timedelta(minutes=expiry_minutes)).isoformat()
+        expires_at = (datetime.utcnow() + timedelta(minutes=expiry_minutes)).isoformat() + 'Z'  # Add Z to indicate UTC
     
     metadata = {
         "filename": filename,
@@ -111,7 +111,11 @@ def validate_bar_access(metadata: dict, password: str = None) -> tuple:
     
     # Check expiry
     if metadata.get("expires_at"):
-        expires_at = datetime.fromisoformat(metadata["expires_at"])
+        expires_at_str = metadata["expires_at"]
+        # Handle both old format (no Z) and new format (with Z)
+        if expires_at_str.endswith('Z'):
+            expires_at_str = expires_at_str.replace('Z', '+00:00')
+        expires_at = datetime.fromisoformat(expires_at_str)
         if datetime.utcnow() > expires_at:
             errors.append("File has expired")
     
