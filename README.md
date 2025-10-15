@@ -18,7 +18,8 @@ Pretty neat, right?
 
 ## Cool Features I Added
 
-- **Self-Destruct**: Files actually destroy themselves after reaching the view limit (I fixed a bug where this wasn't working properly 😅)
+- **Dual Storage Modes**: Choose between Client-Side (download file) or Server-Side (shareable link)
+- **Self-Destruct**: Files actually destroy themselves after reaching the view limit (properly enforced with server-side mode! 🎉)
 - **Password Protection**: Lock your files with a password for extra security
 - **Time Bombs**: Set files to expire after a certain time
 - **View-Only Mode**: Let people see the file but not download it
@@ -107,26 +108,38 @@ BAR-Web/
 
 ## How Does It Work?
 
-1. **Upload Your File**: Drag and drop whatever you want to secure
-2. **Set Your Rules**: 
-   - How many times can it be viewed?
-   - Should it expire after some time?
-   - Need a password?
-   - View-only mode?
-3. **Seal It**: The app encrypts everything and creates a `.bar` file
-4. **Share**: Download the `.bar` file and send it to whoever
-5. **They Open It**: They upload the `.bar` file, enter password (if you set one), and boom - they get the file
-6. **Self-Destruct**: Once view limit is hit or time expires, the file destroys itself
+### You Get Two Options:
 
-Each time someone views the file, it gets updated with a new view count. So you can't just keep using the same `.bar` file over and over (I learned that the hard way when fixing a bug 😂)
+**Option 1: Client-Side (Download File)** 📥
+1. Upload your file and set rules (expiry, password, etc.)
+2. Download the encrypted `.bar` file
+3. Share it however you want (email, USB, cloud storage)
+4. Recipient uploads and decrypts it
+5. ⚠️ Note: View limits can't be enforced here (people can keep copies)
+
+**Option 2: Server-Side (Shareable Link)** 🔒
+1. Upload your file and set rules + view count limit
+2. Get a shareable link
+3. Share the link (copy/paste)
+4. Recipient clicks link to download
+5. ✅ View limits are PROPERLY enforced! File auto-destructs after max views
+
+### Why Two Modes?
+
+I discovered that with client-side `.bar` files, people can just keep the original file and use it unlimited times (whoops 😅). So I added server-side mode where the file stays on the server and view counts actually work!
+
+**TL;DR:**
+- Need strict view limits? → Use **Server-Side**
+- Want simple file sharing? → Use **Client-Side**
 
 ## The API (If You're Curious)
 
 The backend has a few endpoints:
 - `POST /upload` - Upload your file
-- `POST /seal` - Encrypt it and create the .bar file
-- `GET /download/{bar_id}` - Download the .bar file
-- `POST /decrypt-upload` - Decrypt a .bar file (this is what the frontend uses)
+- `POST /seal` - Encrypt it and create the .bar file (supports both storage modes)
+- `GET /download/{bar_id}` - Download the .bar file (client-side mode)
+- `GET /share/{token}` - Access server-side files with proper view tracking
+- `POST /decrypt-upload` - Decrypt a .bar file (client-side mode)
 
 You can check out the full API docs at `http://localhost:8000/docs` when running.
 
