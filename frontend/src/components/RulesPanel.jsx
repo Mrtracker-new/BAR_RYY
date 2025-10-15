@@ -1,5 +1,5 @@
 import React from 'react';
-import { Eye, Clock, Lock, Webhook, ShieldAlert } from 'lucide-react';
+import { Eye, Clock, Lock, Webhook, ShieldAlert, Server, Download } from 'lucide-react';
 
 const RulesPanel = ({ rules, onRulesChange }) => {
   const handleMaxViewsChange = (value) => {
@@ -26,27 +26,85 @@ const RulesPanel = ({ rules, onRulesChange }) => {
         Security Rules
       </h2>
 
-      {/* Max Views */}
-      <div className="space-y-3">
-        <div className="flex items-center space-x-3">
-          <Eye className="text-gold-500" size={20} />
-          <label className="text-lg text-gray-300">Self-Destruct After Views</label>
+      {/* Storage Mode */}
+      <div className="space-y-3 bg-dark-700 border border-dark-600 rounded-lg p-4">
+        <label className="text-lg text-gray-300 font-semibold">Storage Mode</label>
+        <div className="space-y-3">
+          <label className="flex items-start space-x-3 cursor-pointer group">
+            <input
+              type="radio"
+              name="storageMode"
+              value="client"
+              checked={rules.storageMode === 'client' || !rules.storageMode}
+              onChange={(e) => onRulesChange({ ...rules, storageMode: 'client' })}
+              className="mt-1 w-5 h-5 rounded-full border-dark-600 bg-dark-700 text-gold-500 focus:ring-gold-500 focus:ring-2 cursor-pointer"
+            />
+            <div className="flex-1">
+              <div className="flex items-center space-x-2">
+                <Download size={18} className="text-gold-500" />
+                <span className="text-gray-200 font-medium group-hover:text-gold-400">Client-Side (Download File)</span>
+              </div>
+              <p className="text-sm text-gray-500 mt-1">
+                Download .bar file and share it manually. Simple but view limits can be bypassed by keeping copies.
+              </p>
+            </div>
+          </label>
+          <label className="flex items-start space-x-3 cursor-pointer group">
+            <input
+              type="radio"
+              name="storageMode"
+              value="server"
+              checked={rules.storageMode === 'server'}
+              onChange={(e) => onRulesChange({ ...rules, storageMode: 'server' })}
+              className="mt-1 w-5 h-5 rounded-full border-dark-600 bg-dark-700 text-gold-500 focus:ring-gold-500 focus:ring-2 cursor-pointer"
+            />
+            <div className="flex-1">
+              <div className="flex items-center space-x-2">
+                <Server size={18} className="text-gold-500" />
+                <span className="text-gray-200 font-medium group-hover:text-gold-400">Server-Side (Shareable Link)</span>
+              </div>
+              <p className="text-sm text-gray-500 mt-1">
+                Get a shareable link. View limits properly enforced. File stored on server until destroyed.
+              </p>
+            </div>
+          </label>
         </div>
-        <div className="flex items-center space-x-4">
-          <input
-            type="range"
-            min="1"
-            max="5"
-            value={rules.maxViews}
-            onChange={(e) => handleMaxViewsChange(e.target.value)}
-            className="flex-1 h-2 bg-dark-600 rounded-lg appearance-none cursor-pointer accent-gold-500"
-          />
-          <span className="text-2xl font-bold text-gold-500 w-12 text-center">
-            {rules.maxViews}
-          </span>
-        </div>
-        <p className="text-sm text-gray-500">File will be destroyed after {rules.maxViews} view(s)</p>
       </div>
+
+      {/* Max Views - Only for Server-Side */}
+      {rules.storageMode === 'server' ? (
+        <div className="space-y-3">
+          <div className="flex items-center space-x-3">
+            <Eye className="text-gold-500" size={20} />
+            <label className="text-lg text-gray-300">Self-Destruct After Views</label>
+          </div>
+          <div className="flex items-center space-x-4">
+            <input
+              type="range"
+              min="1"
+              max="5"
+              value={rules.maxViews}
+              onChange={(e) => handleMaxViewsChange(e.target.value)}
+              className="flex-1 h-2 bg-dark-600 rounded-lg appearance-none cursor-pointer accent-gold-500"
+            />
+            <span className="text-2xl font-bold text-gold-500 w-12 text-center">
+              {rules.maxViews}
+            </span>
+          </div>
+          <p className="text-sm text-gray-500">File will be destroyed after {rules.maxViews} view(s)</p>
+        </div>
+      ) : (
+        <div className="space-y-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
+          <div className="flex items-center space-x-3">
+            <Eye className="text-yellow-500" size={20} />
+            <label className="text-lg text-yellow-400 font-semibold">View Count Limit Unavailable</label>
+          </div>
+          <p className="text-sm text-yellow-300">
+            View count tracking doesn't work with client-side mode (users can keep copies of the .bar file). 
+            Switch to <strong>Server-Side</strong> storage to enable proper view limit enforcement.
+          </p>
+        </div>
+      )}
 
       {/* Expiry Time */}
       <div className="space-y-3">

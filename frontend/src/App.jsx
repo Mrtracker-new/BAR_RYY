@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import { Download, PackageOpen, AlertCircle } from 'lucide-react';
+import { Download, PackageOpen, AlertCircle, Link2, Copy } from 'lucide-react';
 import FileUpload from './components/FileUpload';
 import RulesPanel from './components/RulesPanel';
 import ContainerAnimation from './components/ContainerAnimation';
@@ -10,6 +10,7 @@ function App() {
   const [uploadedFile, setUploadedFile] = useState(null);
   const [fileInfo, setFileInfo] = useState(null);
   const [rules, setRules] = useState({
+    storageMode: 'client',  // 'client' or 'server'
     maxViews: 1,
     expiryMinutes: 0,
     expiryValue: 0,
@@ -66,7 +67,8 @@ function App() {
         expiry_minutes: rules.expiryMinutes,
         password: rules.password || null,
         webhook_url: rules.webhookUrl || null,
-        view_only: rules.viewOnly || false
+        view_only: rules.viewOnly || false,
+        storage_mode: rules.storageMode || 'client'
       };
 
       const response = await axios.post('/seal', sealData);
@@ -94,6 +96,7 @@ function App() {
     setFileInfo(null);
     setError(null);
     setRules({
+      storageMode: 'client',
       maxViews: 1,
       expiryMinutes: 0,
       expiryValue: 0,
@@ -168,13 +171,21 @@ function App() {
                       <span className="text-green-500 font-semibold">Ready to Seal</span>
                     </div>
                     <div className="flex justify-between">
+                      <span className="text-gray-400">Storage:</span>
+                      <span className="text-white">
+                        {rules.storageMode === 'server' ? '🔒 Server-Side' : '📥 Client-Side'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
                       <span className="text-gray-400">File:</span>
                       <span className="text-white">{uploadedFile.name}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Max Views:</span>
-                      <span className="text-white">{rules.maxViews}</span>
-                    </div>
+                    {rules.storageMode === 'server' && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Max Views:</span>
+                        <span className="text-white">{rules.maxViews}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between">
                       <span className="text-gray-400">Expiry:</span>
                       <span className="text-white">
@@ -228,33 +239,79 @@ function App() {
                 </h2>
                 
                 <div className="bg-dark-900 rounded-lg p-6 space-y-3">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">Filename:</span>
-                    <span className="text-white font-mono">{barResult.bar_filename}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">BAR ID:</span>
-                    <span className="text-white font-mono">{barResult.bar_id.substring(0, 16)}...</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">Max Views:</span>
-                    <span className="text-white">{barResult.metadata.max_views}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">Created:</span>
-                    <span className="text-white">
-                      {new Date(barResult.metadata.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'medium' })} IST
-                    </span>
-                  </div>
+                  {barResult.storage_mode === 'server' ? (
+                    <>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">Storage Mode:</span>
+                        <span className="text-green-500 font-semibold">🔒 Server-Side (Enforced Limits)</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">Max Views:</span>
+                        <span className="text-white">{barResult.metadata.max_views}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">Created:</span>
+                        <span className="text-white">
+                          {new Date(barResult.metadata.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'medium' })} IST
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">Storage Mode:</span>
+                        <span className="text-yellow-500 font-semibold">📥 Client-Side (Download File)</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">Filename:</span>
+                        <span className="text-white font-mono">{barResult.bar_filename}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">Created:</span>
+                        <span className="text-white">
+                          {new Date(barResult.metadata.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'medium' })} IST
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
-                <button
-                  onClick={handleDownloadBar}
-                  className="w-full py-4 bg-gold-500 hover:bg-gold-600 text-black font-bold text-lg rounded-lg transition-all duration-300 hover:scale-105 flex items-center justify-center space-x-3"
-                >
-                  <Download size={24} />
-                  <span>Download .BAR File</span>
-                </button>
+                {barResult.storage_mode === 'server' ? (
+                  <>
+                    <div className="bg-dark-700 border border-gold-500/30 rounded-lg p-4">
+                      <label className="text-sm text-gray-400 mb-2 block">Shareable Link:</label>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="text"
+                          value={`${window.location.origin}/share/${barResult.access_token}`}
+                          readOnly
+                          className="flex-1 px-3 py-2 bg-dark-600 border border-dark-500 rounded text-white text-sm font-mono"
+                        />
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(`${window.location.origin}/share/${barResult.access_token}`);
+                            alert('Link copied to clipboard!');
+                          }}
+                          className="p-2 bg-gold-500 hover:bg-gold-600 text-black rounded transition-all"
+                          title="Copy link"
+                        >
+                          <Copy size={20} />
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-400 text-center">
+                      Share this link with anyone. View limits will be properly enforced! 🔐
+                    </p>
+                  </>
+                ) : (
+                  <button
+                    onClick={handleDownloadBar}
+                    className="w-full py-4 bg-gold-500 hover:bg-gold-600 text-black font-bold text-lg rounded-lg transition-all duration-300 hover:scale-105 flex items-center justify-center space-x-3"
+                  >
+                    <Download size={24} />
+                    <span>Download .BAR File</span>
+                  </button>
+                )}
 
                 <button
                   onClick={handleReset}
@@ -263,11 +320,19 @@ function App() {
                   Create Another Container
                 </button>
 
-                <div className="mt-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-                  <p className="text-yellow-400 text-sm">
-                    ⚠️ <strong>Important:</strong> Keep this .BAR file safe. Once the view limit is reached or it expires, the file will be permanently destroyed and cannot be recovered.
-                  </p>
-                </div>
+                {barResult.storage_mode === 'server' ? (
+                  <div className="mt-6 p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
+                    <p className="text-green-400 text-sm">
+                      ✅ <strong>Server-Side Storage:</strong> View limits are properly enforced! The file will auto-destruct after {barResult.metadata.max_views} view(s) or when it expires.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mt-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                    <p className="text-yellow-400 text-sm">
+                      ⚠️ <strong>Client-Side Storage:</strong> View limits cannot be enforced (users can keep copies). For proper security, use Server-Side storage mode instead.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </div>

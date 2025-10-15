@@ -38,6 +38,7 @@ class SealRequest(BaseModel):
     password: Optional[str] = None
     webhook_url: Optional[str] = None
     view_only: bool = False
+    storage_mode: str = 'client'  # 'client' or 'server'
 
 
 class DecryptRequest(BaseModel):
@@ -150,14 +151,36 @@ async def seal_container(request: SealRequest):
         # Clean up uploaded file
         os.remove(uploaded_file)
         
-        return {
-            "success": True,
-            "bar_id": bar_id,
-            "bar_filename": bar_filename,
-            "download_url": f"/download/{bar_id}",
-            "metadata": metadata,
-            "message": "Container sealed successfully"
-        }
+        # Generate response based on storage mode
+        if request.storage_mode == 'server':
+            # Server-side: Generate access token and shareable link
+            access_token = str(uuid.uuid4())
+            # Store mapping from token to bar_id (in production, use database)
+            # For now, we'll use the token as part of the filename
+            token_bar_filename = f"{access_token}.bar"
+            token_bar_path = os.path.join(GENERATED_DIR, token_bar_filename)
+            # Rename the bar file to use token
+            os.rename(bar_path, token_bar_path)
+            
+            return {
+                "success": True,
+                "storage_mode": "server",
+                "access_token": access_token,
+                "share_url": f"/share/{access_token}",
+                "metadata": metadata,
+                "message": "Container sealed and stored on server"
+            }
+        else:
+            # Client-side: Return download URL (current behavior)
+            return {
+                "success": True,
+                "storage_mode": "client",
+                "bar_id": bar_id,
+                "bar_filename": bar_filename,
+                "download_url": f"/download/{bar_id}",
+                "metadata": metadata,
+                "message": "Container sealed successfully"
+            }
         
     except HTTPException:
         raise
@@ -362,6 +385,85 @@ async def decrypt_uploaded_bar_file(file: UploadFile = File(...), password: str 
         error_detail = f"Decryption failed: {str(e)}\n{traceback.format_exc()}"
         print(error_detail)
         raise HTTPException(status_code=500, detail=f"Decryption failed: {str(e)}")
+
+
+@app.get("/share/{token}")
+async def share_file(token: str, password: str = ""):
+    """Server-side access endpoint - properly enforces view limits"""
+    try:
+        # Find BAR file by token
+        bar_file = os.path.join(GENERATED_DIR, f"{token}.bar")
+        
+        if not os.path.exists(bar_file):
+            raise HTTPException(status_code=404, detail="File not found or already destroyed")
+        
+        # Read and unpack BAR file
+        with open(bar_file, "rb") as f:
+            bar_data = f.read()
+        
+        encrypted_data, metadata, key = crypto_utils.unpack_bar_file(bar_data)
+        
+        # Validate access
+        password_to_check = password if password and password.strip() else None
+        is_valid, errors = crypto_utils.validate_bar_access(metadata, password_to_check)
+        
+        if not is_valid:
+            raise HTTPException(status_code=403, detail="; ".join(errors))
+        
+        # Decrypt file
+        try:
+            decrypted_data = crypto_utils.decrypt_file(encrypted_data, key)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail="Decryption failed")
+        
+        # Verify integrity
+        file_hash = crypto_utils.calculate_file_hash(decrypted_data)
+        if file_hash != metadata.get("file_hash"):
+            raise HTTPException(status_code=500, detail="File integrity check failed")
+        
+        # Update view count
+        metadata["current_views"] = metadata.get("current_views", 0) + 1
+        
+        # Check if should destroy
+        should_destroy = False
+        if metadata.get("max_views", 0) > 0:
+            if metadata["current_views"] >= metadata["max_views"]:
+                should_destroy = True
+        
+        views_remaining = max(0, metadata.get("max_views", 0) - metadata["current_views"])
+        
+        # CRITICAL: Update the .bar file on server with incremented view count
+        if not should_destroy:
+            updated_bar_data = crypto_utils.pack_bar_file(encrypted_data, metadata, key)
+            with open(bar_file, "wb") as f:
+                f.write(updated_bar_data)
+            print(f"✓ View count updated: {metadata['current_views']}/{metadata.get('max_views', 0)}")
+        else:
+            # Destroy the file
+            os.remove(bar_file)
+            print(f"🔥 File destroyed after reaching max views")
+        
+        # Return decrypted file
+        return Response(
+            content=decrypted_data,
+            media_type="application/octet-stream",
+            headers={
+                "Content-Disposition": f"attachment; filename={metadata['filename']}",
+                "X-BAR-Views-Remaining": str(views_remaining),
+                "X-BAR-Should-Destroy": str(should_destroy).lower(),
+                "X-BAR-View-Only": str(metadata.get('view_only', False)).lower(),
+                "X-BAR-Filename": metadata["filename"],
+                "X-BAR-Storage-Mode": "server"
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_detail = f"Access failed: {str(e)}\n{traceback.format_exc()}"
+        print(error_detail)
+        raise HTTPException(status_code=500, detail=f"Access failed: {str(e)}")
 
 
 @app.get("/info/{bar_id}")
