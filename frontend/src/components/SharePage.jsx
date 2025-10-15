@@ -21,8 +21,16 @@ const SharePage = ({ token }) => {
 
       // Get metadata from headers
       const fileName = response.headers['x-bar-filename'];
-      const viewsRemaining = response.headers['x-bar-views-remaining'];
+      const viewsRemaining = response.headers['x-bar-views-remaining'] || '0';
       const shouldDestroy = response.headers['x-bar-should-destroy'] === 'true';
+      const viewOnly = response.headers['x-bar-view-only'] === 'true';
+
+      // Check if view-only mode
+      if (viewOnly) {
+        alert('⚠️ This file is in VIEW-ONLY mode.\n\nDownloads are not allowed. Contact the sender for a downloadable version.');
+        setError('This file is view-only and cannot be downloaded');
+        return;
+      }
 
       // Download the file
       const blob = new Blob([response.data], { type: 'application/octet-stream' });

@@ -114,7 +114,11 @@ async def seal_container(request: SealRequest):
         file_hash = crypto_utils.calculate_file_hash(file_data)
         
         # Generate encryption key
+        password_hash = None
         if request.password:
+            # Store password hash for validation
+            import hashlib
+            password_hash = hashlib.sha256(request.password.encode()).hexdigest()
             # Use password-derived key
             salt = os.urandom(16)
             key = crypto_utils.derive_key_from_password(request.password, salt)
@@ -135,6 +139,8 @@ async def seal_container(request: SealRequest):
             view_only=request.view_only
         )
         metadata["file_hash"] = file_hash
+        if password_hash:
+            metadata["password_hash"] = password_hash
         
         # Pack into .bar file
         bar_data = crypto_utils.pack_bar_file(encrypted_data, metadata, key)
@@ -403,7 +409,20 @@ async def share_file(token: str, password: str = ""):
         
         encrypted_data, metadata, key = crypto_utils.unpack_bar_file(bar_data)
         
-        # Validate access
+        # Validate password if protected
+        if metadata.get("password_protected"):
+            if not password or not password.strip():
+                raise HTTPException(status_code=403, detail="Password required")
+            
+            # Check password hash
+            import hashlib
+            provided_hash = hashlib.sha256(password.encode()).hexdigest()
+            stored_hash = metadata.get("password_hash")
+            
+            if stored_hash and provided_hash != stored_hash:
+                raise HTTPException(status_code=403, detail="Invalid password")
+        
+        # Validate access (expiry, view count)
         password_to_check = password if password and password.strip() else None
         is_valid, errors = crypto_utils.validate_bar_access(metadata, password_to_check)
         
