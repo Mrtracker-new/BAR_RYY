@@ -414,13 +414,18 @@ async def share_file(token: str, password: str = ""):
             if not password or not password.strip():
                 raise HTTPException(status_code=403, detail="Password required")
             
-            # Check password hash
-            import hashlib
-            provided_hash = hashlib.sha256(password.encode()).hexdigest()
+            # Check password hash (only for new files that have it)
             stored_hash = metadata.get("password_hash")
-            
-            if stored_hash and provided_hash != stored_hash:
-                raise HTTPException(status_code=403, detail="Invalid password")
+            if stored_hash:
+                import hashlib
+                provided_hash = hashlib.sha256(password.encode()).hexdigest()
+                
+                if provided_hash != stored_hash:
+                    raise HTTPException(status_code=403, detail="Invalid password")
+            else:
+                # Old file without password_hash - can't validate password
+                # For security, you should regenerate these files
+                print("WARNING: File has password protection but no password_hash (old file format)")
         
         # Validate access (expiry, view count)
         password_to_check = password if password and password.strip() else None
