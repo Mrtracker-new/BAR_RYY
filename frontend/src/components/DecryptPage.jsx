@@ -74,16 +74,46 @@ const DecryptPage = ({ onBack }) => {
       const shouldDestroy = response.headers['x-bar-should-destroy'] === 'true';
       const metadataJson = response.headers['x-bar-metadata'];
       const metadataObj = JSON.parse(metadataJson);
+      const updatedBarFileBase64 = response.headers['x-bar-updated-file'];
 
       // Get decrypted file data
       const decryptedBytes = new Uint8Array(response.data);
+
+      // CRITICAL: Save updated .bar file to replace user's copy
+      // This ensures view count is enforced properly
+      if (updatedBarFileBase64 && !shouldDestroy) {
+        try {
+          // Decode base64 to binary
+          const binaryString = atob(updatedBarFileBase64);
+          const len = binaryString.length;
+          const updatedBarBytes = new Uint8Array(len);
+          for (let i = 0; i < len; i++) {
+            updatedBarBytes[i] = binaryString.charCodeAt(i);
+          }
+          
+          // Auto-download the updated .bar file to replace user's copy
+          const barBlob = new Blob([updatedBarBytes], { type: 'application/octet-stream' });
+          const barUrl = URL.createObjectURL(barBlob);
+          const barLink = document.createElement('a');
+          barLink.href = barUrl;
+          barLink.download = barFile.name; // Same name as original
+          document.body.appendChild(barLink);
+          barLink.click();
+          document.body.removeChild(barLink);
+          URL.revokeObjectURL(barUrl);
+          
+          console.log('✅ Updated .bar file saved with incremented view count');
+        } catch (err) {
+          console.error('Failed to save updated .bar file:', err);
+        }
+      }
 
       // Show view count info
       if (viewsRemaining > 0) {
         console.log(`Views remaining: ${viewsRemaining}`);
       }
       if (shouldDestroy) {
-        alert('⚠️ This was the last view! File will be destroyed.');
+        alert('⚠️ This was the last view! File will be destroyed. Do NOT use this .bar file again.');
       }
 
       // Check if view-only mode is enabled
@@ -104,9 +134,14 @@ const DecryptPage = ({ onBack }) => {
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
         
-        const msg = shouldDestroy 
-          ? '✅ File decrypted! This was the last view.' 
-          : `✅ File decrypted! ${viewsRemaining} views remaining.`;
+        let msg;
+        if (shouldDestroy) {
+          msg = '✅ File decrypted! This was the last view. The .bar file is now destroyed.';
+        } else if (updatedBarFileBase64) {
+          msg = `✅ File decrypted successfully!\n\n⚠️ IMPORTANT: An updated .bar file has been downloaded with ${viewsRemaining} view(s) remaining. Replace your old .bar file with this new one!`;
+        } else {
+          msg = `✅ File decrypted! ${viewsRemaining} views remaining.`;
+        }
         alert(msg);
       }
 
