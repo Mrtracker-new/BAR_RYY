@@ -13,7 +13,8 @@ const SharePage = ({ token }) => {
     setError(null);
 
     try {
-      const url = `/share/${token}${password ? `?password=${encodeURIComponent(password)}` : ''}`;
+      // Call backend API at /api/share (not /share which is a frontend route)
+      const url = `http://localhost:8000/share/${token}${password ? `?password=${encodeURIComponent(password)}` : ''}`;
       
       const response = await axios.get(url, {
         responseType: 'arraybuffer'
