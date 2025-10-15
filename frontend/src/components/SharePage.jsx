@@ -25,11 +25,16 @@ const SharePage = ({ token }) => {
         responseType: 'arraybuffer'
       });
 
-      // Get metadata from headers
+      // Get metadata from headers (axios lowercases header names)
+      console.log('Response headers:', response.headers);
       const retrievedFileName = response.headers['x-bar-filename'];
       const retrievedViewsRemaining = response.headers['x-bar-views-remaining'] || '0';
       const shouldDestroy = response.headers['x-bar-should-destroy'] === 'true';
       const viewOnly = response.headers['x-bar-view-only'] === 'true';
+      
+      console.log('View Only:', viewOnly);
+      console.log('File Name:', retrievedFileName);
+      console.log('Views Remaining:', retrievedViewsRemaining);
 
       setFileName(retrievedFileName);
       setViewsRemaining(retrievedViewsRemaining);
