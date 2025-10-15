@@ -44,7 +44,11 @@ const SharePage = ({ token }) => {
       // Check if view-only mode
       if (viewOnly) {
         // Display the file instead of downloading
-        const fileBlob = new Blob([response.data]);
+        // Get MIME type from response or guess from filename
+        const contentType = response.headers['content-type'] || 'application/octet-stream';
+        console.log('Content-Type:', contentType);
+        
+        const fileBlob = new Blob([response.data], { type: contentType });
         const fileUrl = URL.createObjectURL(fileBlob);
         setFileData(fileUrl);
         setSuccessMessage(`File loaded successfully. ${retrievedViewsRemaining} view(s) remaining.`);
