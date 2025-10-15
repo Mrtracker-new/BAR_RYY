@@ -78,7 +78,14 @@ const SharePage = ({ token }) => {
         errorMsg = '🚫 File not found or already destroyed';
       } else if (err.response?.status === 403) {
         // Get the actual error message from backend
-        const detail = err.response?.data?.detail || 'Invalid password or view limit reached';
+        let detail = 'Unknown error';
+        if (err.response?.data) {
+          if (typeof err.response.data === 'string') {
+            detail = err.response.data;
+          } else if (err.response.data.detail) {
+            detail = err.response.data.detail;
+          }
+        }
         errorMsg = '🚫 Access denied: ' + detail;
       } else if (err.response?.data?.detail) {
         errorMsg += err.response.data.detail;

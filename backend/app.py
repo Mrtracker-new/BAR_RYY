@@ -421,6 +421,7 @@ async def share_file(token: str, request: DecryptRequest):
         # Validate password if protected
         if metadata.get("password_protected"):
             if not password or not password.strip():
+                print("❌ Password required but not provided")
                 raise HTTPException(status_code=403, detail="Password required")
             
             # Check password hash (only for new files that have it)
@@ -428,19 +429,28 @@ async def share_file(token: str, request: DecryptRequest):
             if stored_hash:
                 import hashlib
                 provided_hash = hashlib.sha256(password.strip().encode()).hexdigest()
+                print(f"Password validation:")
+                print(f"  Stored hash: {stored_hash[:16]}...")
+                print(f"  Provided hash: {provided_hash[:16]}...")
+                print(f"  Match: {provided_hash == stored_hash}")
                 
                 if provided_hash != stored_hash:
+                    print("❌ Password hash mismatch!")
                     raise HTTPException(status_code=403, detail="Invalid password")
+                print("✅ Password validated successfully")
             else:
                 # Old file without password_hash - can't validate password
                 # For security, you should regenerate these files
-                print("WARNING: File has password protection but no password_hash (old file format)")
+                print("⚠️ WARNING: File has password protection but no password_hash (old file format)")
         
         # Validate access (expiry, view count) - Don't check password again, already validated above
         is_valid, errors = crypto_utils.validate_bar_access(metadata, None)
         
         if not is_valid:
+            print(f"❌ Access validation failed: {errors}")
             raise HTTPException(status_code=403, detail="; ".join(errors))
+        
+        print("✅ Access validation passed")
         
         # Decrypt file
         try:
