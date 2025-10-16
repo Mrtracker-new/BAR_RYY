@@ -8,14 +8,14 @@ const ContainerAnimation = ({ isSealing }) => {
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
       <div className="bg-dark-800 border-2 border-gold-500 rounded-xl p-12 max-w-md w-full mx-4 terminal-glow">
         <div className="text-center space-y-6">
-          <div className="relative">
+          <div className="relative w-32 h-32 mx-auto">
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="w-32 h-32 border-4 border-gold-500/30 rounded-full animate-ping"></div>
             </div>
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="w-24 h-24 border-4 border-gold-500 rounded-full animate-spin border-t-transparent"></div>
             </div>
-            <div className="relative flex items-center justify-center pt-8">
+            <div className="absolute inset-0 flex items-center justify-center">
               <Lock className="text-gold-500 animate-pulse" size={64} />
             </div>
           </div>
