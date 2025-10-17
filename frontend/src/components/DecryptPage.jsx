@@ -219,13 +219,25 @@ const DecryptPage = ({ onBack }) => {
                 </div>
               )}
               <div className="flex justify-between">
-                <span className="text-gray-400">Max Views:</span>
-                <span className="text-white">{metadata.max_views || 'Unlimited'}</span>
+                <span className="text-gray-400">Storage Mode:</span>
+                <span className="text-white">
+                  {metadata.storage_mode === 'server' ? '🔒 Server-Side' : '📥 Client-Side'}
+                  {!metadata.storage_mode && <span className="text-xs text-gray-500 ml-2">(legacy file)</span>}
+                </span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Current Views:</span>
-                <span className="text-white">{metadata.current_views || 0}</span>
-              </div>
+              {/* Only show view counts for SERVER-SIDE files */}
+              {metadata.storage_mode === 'server' && (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Max Views:</span>
+                    <span className="text-white">{metadata.max_views || 'Unlimited'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Current Views:</span>
+                    <span className="text-white">{metadata.current_views || 0}</span>
+                  </div>
+                </>
+              )}
               <div className="flex justify-between">
                 <span className="text-gray-400">Password Protected:</span>
                 <span className={metadata.password_protected ? 'text-yellow-500' : 'text-green-500'}>
@@ -273,11 +285,27 @@ const DecryptPage = ({ onBack }) => {
           )}
         </button>
 
-        <div className="mt-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-          <p className="text-yellow-400 text-sm">
-            ⚠️ <strong>Warning:</strong> Decrypting this file may count as a view and could trigger self-destruct if the view limit is reached.
-          </p>
-        </div>
+        {/* Show different warnings based on storage mode */}
+        {barFile && !metadata && (
+          <div className="mt-6 p-4 bg-gray-500/10 border border-gray-500/30 rounded-lg">
+            <p className="text-gray-400 text-sm">
+              📄 Select a .bar file to see its information
+            </p>
+          </div>
+        )}
+        {metadata?.storage_mode === 'server' ? (
+          <div className="mt-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+            <p className="text-yellow-400 text-sm">
+              ⚠️ <strong>Server-Side File:</strong> Decrypting counts as a view and could trigger self-destruct if the limit is reached.
+            </p>
+          </div>
+        ) : metadata ? (
+          <div className="mt-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+            <p className="text-blue-400 text-sm">
+              ℹ️ <strong>Client-Side File:</strong> View limits are not enforced. You can decrypt this file as many times as you want.
+            </p>
+          </div>
+        ) : null}
       </div>
     </div>
     </>
