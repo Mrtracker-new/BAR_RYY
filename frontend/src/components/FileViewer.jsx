@@ -18,17 +18,39 @@ const FileViewer = ({ fileData, fileName, fileType, onClose, allowDownload = tru
   const getFileCategory = () => {
     const ext = fileName.toLowerCase().split('.').pop();
     
-    if (['txt', 'md', 'json', 'xml', 'csv', 'log'].includes(ext)) return 'text';
-    if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'].includes(ext)) return 'image';
-    if (['mp4', 'webm', 'ogg', 'mov'].includes(ext)) return 'video';
-    if (['mp3', 'wav', 'ogg', 'm4a'].includes(ext)) return 'audio';
+    // Text-based files (plain text, markdown, logs, config)
+    if (['txt', 'md', 'log', 'ini', 'cfg', 'conf', 'yaml', 'yml', 'toml'].includes(ext)) return 'text';
+    
+    // Code files (programming languages)
+    if (['js', 'jsx', 'ts', 'tsx', 'py', 'java', 'cpp', 'c', 'h', 'cs', 'php', 'rb', 'go', 'rs', 'swift', 'kt', 'dart', 'sh', 'bash', 'ps1'].includes(ext)) return 'code';
+    
+    // Data files (JSON, XML, CSV, SQL)
+    if (['json', 'xml', 'csv', 'sql', 'graphql'].includes(ext)) return 'data';
+    
+    // Web files (HTML, CSS)
+    if (['html', 'htm', 'css', 'scss', 'sass', 'less'].includes(ext)) return 'web';
+    
+    // Images
+    if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico'].includes(ext)) return 'image';
+    
+    // Videos
+    if (['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv'].includes(ext)) return 'video';
+    
+    // Audio
+    if (['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac'].includes(ext)) return 'audio';
+    
+    // PDF
     if (ext === 'pdf') return 'pdf';
+    
+    // Office documents (use Google Docs Viewer)
+    if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp'].includes(ext)) return 'office';
     
     return 'other';
   };
 
   const renderContent = () => {
     const category = getFileCategory();
+    const ext = fileName.toLowerCase().split('.').pop();
     
     switch (category) {
       case 'text':
@@ -37,6 +59,55 @@ const FileViewer = ({ fileData, fileName, fileType, onClose, allowDownload = tru
             <pre className="text-gray-300 whitespace-pre-wrap font-mono text-sm">
               {new TextDecoder().decode(fileData)}
             </pre>
+          </div>
+        );
+      
+      case 'code':
+        return (
+          <div className="bg-dark-900 rounded-lg p-6 overflow-auto max-h-[600px]">
+            <div className="flex items-center justify-between mb-3 pb-2 border-b border-dark-700">
+              <span className="text-gold-500 text-sm font-mono">.{ext}</span>
+              <span className="text-gray-500 text-xs">Code File</span>
+            </div>
+            <pre className="text-gray-300 whitespace-pre-wrap font-mono text-sm">
+              {new TextDecoder().decode(fileData)}
+            </pre>
+          </div>
+        );
+      
+      case 'data':
+        return (
+          <div className="bg-dark-900 rounded-lg p-6 overflow-auto max-h-[600px]">
+            <div className="flex items-center justify-between mb-3 pb-2 border-b border-dark-700">
+              <span className="text-gold-500 text-sm font-mono">.{ext}</span>
+              <span className="text-gray-500 text-xs">Data File</span>
+            </div>
+            <pre className="text-gray-300 whitespace-pre-wrap font-mono text-sm">
+              {new TextDecoder().decode(fileData)}
+            </pre>
+          </div>
+        );
+      
+      case 'web':
+        return (
+          <div className="bg-dark-900 rounded-lg overflow-hidden">
+            <div className="bg-dark-800 p-3 border-b border-dark-700">
+              <span className="text-gold-500 text-sm font-mono">{fileName}</span>
+            </div>
+            {ext === 'html' || ext === 'htm' ? (
+              <iframe 
+                srcDoc={new TextDecoder().decode(fileData)}
+                className="w-full h-[600px] bg-white"
+                title={fileName}
+                sandbox="allow-same-origin"
+              />
+            ) : (
+              <div className="p-6 overflow-auto max-h-[600px]">
+                <pre className="text-gray-300 whitespace-pre-wrap font-mono text-sm">
+                  {new TextDecoder().decode(fileData)}
+                </pre>
+              </div>
+            )}
           </div>
         );
 
@@ -86,6 +157,34 @@ const FileViewer = ({ fileData, fileName, fileType, onClose, allowDownload = tru
             />
           </div>
         );
+      
+      case 'office':
+        return (
+          <div className="bg-dark-900 rounded-lg p-12 text-center">
+            <div className="inline-block p-6 bg-blue-500/20 rounded-full mb-4">
+              📄
+            </div>
+            <h3 className="text-xl font-semibold text-gray-300 mb-2">
+              Office Document Detected
+            </h3>
+            <p className="text-gray-500 mb-4">
+              {fileName} (.{ext})
+            </p>
+            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 mb-6 max-w-md mx-auto">
+              <p className="text-blue-400 text-sm">
+                ℹ️ Office documents (Word, Excel, PowerPoint) cannot be previewed directly in the browser for security reasons.
+              </p>
+            </div>
+            {allowDownload && (
+              <button
+                onClick={handleDownload}
+                className="px-6 py-3 bg-gold-500 hover:bg-gold-600 text-black font-semibold rounded-lg transition-all"
+              >
+                Download to Open in Office
+              </button>
+            )}
+          </div>
+        );
 
       default:
         return (
@@ -94,8 +193,11 @@ const FileViewer = ({ fileData, fileName, fileType, onClose, allowDownload = tru
             <h3 className="text-xl font-semibold text-gray-300 mb-2">
               Preview Not Available
             </h3>
-            <p className="text-gray-500 mb-6">
-              This file type cannot be previewed in the browser.
+            <p className="text-gray-500 mb-4">
+              This file type (.{ext}) cannot be previewed in the browser.
+            </p>
+            <p className="text-gray-600 text-sm mb-6">
+              📝 Supported formats: Images, Videos, Audio, PDF, Office docs, Code files, HTML, and more
             </p>
             {allowDownload && (
               <button
