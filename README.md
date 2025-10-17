@@ -18,26 +18,45 @@ Pretty neat, right?
 
 ## Cool Features I Added
 
+### 🔐 Security Features
 - **Dual Storage Modes**: Choose between Client-Side (download file) or Server-Side (shareable link)
-- **Self-Destruct**: Files actually destroy themselves after reaching the view limit (properly enforced with server-side mode! 🎉)
-- **Password Protection**: Lock your files with a password for extra security
-- **Time Bombs**: Set files to expire after a certain time
-- **View-Only Mode**: Let people see the file but not download it
-- **AES-256 Encryption**: Because we're doing this properly
-- **Webhook Alerts**: Get notified when someone views your file
+- **Smart View Count Enforcement**: Server-side files enforce view limits; client-side files don't (honest UX!)
+- **Self-Destruct**: Files actually destroy themselves after reaching the view limit (server-side only)
+- **Password Protection**: Lock your files with a password using PBKDF2 key derivation
+- **Time Bombs**: Set files to expire after minutes, hours, or days
+- **View-Only Mode**: Let people preview files in-browser without downloading
+- **AES-256 Encryption**: Industry-standard encryption
+- **File Integrity Checks**: SHA-256 hashes detect tampering
+- **Webhook Alerts**: Get notified when someone views your file (coming soon)
+
+### 🎨 UI/UX Features
+- **Rich File Viewer**: Preview 50+ file types in-browser
+  - Images (JPG, PNG, GIF, WebP, SVG, etc.)
+  - Videos (MP4, WebM, AVI, MKV, etc.)
+  - Audio (MP3, WAV, FLAC, AAC, etc.)
+  - Documents (PDF)
+  - Code files (JS, Python, Java, C++, Go, Rust, etc.)
+  - Data files (JSON, XML, CSV, SQL)
+  - Web files (HTML renders in iframe!)
+  - Text files (Markdown, YAML, logs, etc.)
+- **Dark Theme**: Easy on the eyes
+- **Responsive Design**: Works on desktop and mobile
+- **Real-time Metadata Display**: See file info, expiry, and access controls
 
 ## Tech I Used
 
 **Backend:**
-- FastAPI (it's really fast, hence the name)
-- Python cryptography libraries
-- Some other Python stuff
+- FastAPI - High-performance async API framework
+- Cryptography library - For AES-256 encryption and key derivation
+- Uvicorn - ASGI server
+- Python 3.8+ - Modern Python goodness
 
 **Frontend:**
-- React (because everyone uses React)
-- Vite (super fast build tool)
-- Tailwind CSS (makes things look pretty without much effort)
-- Axios for API calls
+- React 18 - Modern UI library with hooks
+- Vite - Lightning-fast build tool and dev server
+- Tailwind CSS - Utility-first styling
+- Axios - Promise-based HTTP client
+- Lucide React - Beautiful icons
 
 ## What You'll Need
 
@@ -94,16 +113,30 @@ npm run dev
 
 ```
 BAR-Web/
-├── backend/          # Python/FastAPI stuff
-│   ├── app.py              # Main API
-│   ├── crypto_utils.py     # All the encryption magic
-│   └── requirements.txt    # Python packages
-├── frontend/         # React app
-│   ├── src/                # React components
-│   ├── package.json        # NPM packages
-│   └── vite.config.js      # Build config
-├── setup.bat         # Run this first
-└── start.bat         # Run this to start everything
+├── backend/                    # Python/FastAPI backend
+│   ├── app.py                  # Main API routes
+│   ├── crypto_utils.py         # Encryption/decryption utilities
+│   ├── client_storage.py       # Client-side file handling (no view enforcement)
+│   ├── server_storage.py       # Server-side file handling (full enforcement)
+│   ├── requirements.txt        # Python dependencies
+│   ├── uploads/                # Temporary upload storage
+│   └── generated/              # Generated .bar files
+├── frontend/                   # React frontend
+│   ├── src/
+│   │   ├── App.jsx             # Main app component
+│   │   ├── components/
+│   │   │   ├── FileUpload.jsx  # Drag-n-drop upload
+│   │   │   ├── FileViewer.jsx  # Rich file preview (50+ formats)
+│   │   │   ├── RulesPanel.jsx  # Security rules configuration
+│   │   │   ├── SharePage.jsx   # Server-side file access
+│   │   │   └── DecryptPage.jsx # Client-side file decryption
+│   │   ├── main.jsx            # React entry point
+│   │   └── index.css           # Global styles
+│   ├── package.json            # NPM dependencies
+│   └── vite.config.js          # Vite configuration
+├── setup.bat                   # Windows setup script
+├── start.bat                   # Windows start script
+└── README.md                   # You are here!
 ```
 
 ## How Does It Work?
@@ -134,24 +167,51 @@ I discovered that with client-side `.bar` files, people can just keep the origin
 
 ## The API (If You're Curious)
 
-The backend has a few endpoints:
-- `POST /upload` - Upload your file
-- `POST /seal` - Encrypt it and create the .bar file (supports both storage modes)
-- `GET /download/{bar_id}` - Download the .bar file (client-side mode)
-- `GET /share/{token}` - Access server-side files with proper view tracking
-- `POST /decrypt-upload` - Decrypt a .bar file (client-side mode)
+The backend has these main endpoints:
 
-You can check out the full API docs at `http://localhost:8000/docs` when running.
+### File Upload & Encryption
+- `POST /upload` - Upload your file to temporary storage
+- `POST /seal` - Encrypt and create .bar file (supports both storage modes)
+  - Client-side: Returns .bar file for download
+  - Server-side: Returns shareable link with access token
 
-## Security Stuff
+### File Access
+- `GET /download/{bar_id}` - Download encrypted .bar file (client-side)
+- `POST /share/{token}` - Access server-side files with view tracking
+- `POST /decrypt-upload` - Decrypt uploaded .bar file (client-side)
 
-I'm using:
-- **AES-256 encryption** (the good stuff)
-- **PBKDF2** for password-based keys
-- **SHA-256** for file integrity checks
-- Cryptographically secure random keys
+### Info & Utilities
+- `GET /info/{bar_id}` - Get metadata about a .bar file
+- `GET /storage-info` - Compare client-side vs server-side capabilities
+- `GET /` - API info and available endpoints
 
-Basically, it's secure. I didn't just use `password123` as the encryption key or anything like that 😅
+**Interactive API Docs:**
+Visit `http://localhost:8000/docs` when running for full Swagger documentation!
+
+## Security Architecture
+
+### Encryption
+- **AES-256 (Fernet)**: Symmetric encryption for file data
+- **Random Key Generation**: Cryptographically secure keys for non-password mode
+- **PBKDF2-HMAC-SHA256**: Password-derived keys with 100,000 iterations
+- **Base64 Encoding**: Safe text representation of binary data
+
+### Integrity & Authentication
+- **SHA-256 Hashing**: Detect file tampering
+- **Password Hashing**: SHA-256 hashes stored (not plaintext)
+- **Metadata Signing**: Included in encrypted .bar file
+
+### Access Control
+- **Server-Side Enforcement**: View counts tracked on server, can't be bypassed
+- **Client-Side Validation**: Expiry and password checked (but copyable)
+- **Time-Based Expiry**: UTC timestamps prevent timezone manipulation
+
+### Storage Separation
+We use separate modules for different security contexts:
+- `client_storage.py` - Handles downloadable files (honest about limitations)
+- `server_storage.py` - Handles server-hosted files (full enforcement)
+
+This separation ensures we're **honest** about what can and can't be enforced!
 
 ## If You Run Into Issues
 
@@ -168,13 +228,46 @@ Basically, it's secure. I didn't just use `password123` as the encryption key or
 - It comes with npm included
 
 **File won't decrypt:**
-- Make sure you're using the LATEST .bar file (it updates after each view)
-- Check if the password is correct
-- Maybe you hit the view limit already?
+- **Server-side files**: View limit might be reached (they're destroyed automatically)
+- **Client-side files**: Check password or expiry time
+- Make sure you're using a valid .bar file (not corrupted)
+
+**PDF/Files not previewing:**
+- Refresh the browser page
+- Check browser console for errors (F12)
+- Some file types need download to open (Office docs)
+
+**View count not working:**
+- Client-side files DON'T enforce view limits (by design)
+- Switch to server-side mode if you need view count enforcement
+
+## Future Features (Ideas)
+
+Things I'm thinking about adding:
+- 📧 Email/SMS notifications on file access
+- 📊 Analytics dashboard for server-side files
+- 🔐 Two-factor authentication for sensitive files
+- 📱 QR code generation for easy mobile sharing
+- 🎨 Toast notifications (instead of alerts)
+- ⏱️ Live countdown timers for expiring files
+- 🌐 Geolocation restrictions
+- 🛡️ Rate limiting and CAPTCHA
+- 💧 Watermarking for view-only files
 
 ## Contributing
 
-Found a bug? Want to add a feature? PRs are welcome! Just fork it and send a pull request.
+Found a bug? Want to add a feature? PRs are welcome!
+
+1. Fork the repo
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+**Code Style:**
+- Backend: Follow PEP 8
+- Frontend: Use Prettier for formatting
+- Add comments for complex logic
 
 ## License
 
