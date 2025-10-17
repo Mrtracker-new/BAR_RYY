@@ -4,16 +4,52 @@ import { X, Eye, Download, AlertTriangle } from 'lucide-react';
 const FileViewer = ({ fileData, fileName, fileType, onClose, allowDownload = true }) => {
   const [dataUrl, setDataUrl] = useState(null);
 
+  // Function to get the correct MIME type from filename
+  const getMimeType = () => {
+    const ext = fileName.toLowerCase().split('.').pop();
+    
+    const mimeTypes = {
+      // Images
+      'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif',
+      'bmp': 'image/bmp', 'webp': 'image/webp', 'svg': 'image/svg+xml', 'ico': 'image/x-icon',
+      
+      // Videos
+      'mp4': 'video/mp4', 'webm': 'video/webm', 'ogg': 'video/ogg', 'mov': 'video/quicktime',
+      'avi': 'video/x-msvideo', 'mkv': 'video/x-matroska',
+      
+      // Audio
+      'mp3': 'audio/mpeg', 'wav': 'audio/wav', 'm4a': 'audio/mp4', 'flac': 'audio/flac',
+      'aac': 'audio/aac',
+      
+      // Documents
+      'pdf': 'application/pdf',
+      'doc': 'application/msword',
+      'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'xls': 'application/vnd.ms-excel',
+      'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'ppt': 'application/vnd.ms-powerpoint',
+      'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      
+      // Text
+      'txt': 'text/plain', 'html': 'text/html', 'htm': 'text/html', 'css': 'text/css',
+      'js': 'text/javascript', 'json': 'application/json', 'xml': 'application/xml',
+      'csv': 'text/csv', 'md': 'text/markdown'
+    };
+    
+    return mimeTypes[ext] || fileType || 'application/octet-stream';
+  };
+
   useEffect(() => {
     if (fileData) {
-      // Create blob URL for the file
-      const blob = new Blob([fileData], { type: fileType || 'application/octet-stream' });
+      // Create blob URL with the correct MIME type
+      const correctMimeType = getMimeType();
+      const blob = new Blob([fileData], { type: correctMimeType });
       const url = URL.createObjectURL(blob);
       setDataUrl(url);
 
       return () => URL.revokeObjectURL(url);
     }
-  }, [fileData, fileType]);
+  }, [fileData, fileName]);
 
   const getFileCategory = () => {
     const ext = fileName.toLowerCase().split('.').pop();
