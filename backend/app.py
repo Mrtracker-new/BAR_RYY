@@ -11,6 +11,8 @@ import base64
 from datetime import datetime
 import mimetypes
 import crypto_utils
+import client_storage
+import server_storage
 
 
 app = FastAPI(title="BAR Web API", version="1.0")
@@ -63,8 +65,18 @@ async def root():
         "endpoints": [
             "/upload - Upload file",
             "/seal - Seal and generate .bar file",
-            "/decrypt/{bar_id} - Decrypt and retrieve file"
+            "/decrypt/{bar_id} - Decrypt and retrieve file",
+            "/storage-info - Get storage mode capabilities"
         ]
+    }
+
+
+@app.get("/storage-info")
+async def storage_info():
+    """Get information about client-side vs server-side storage capabilities"""
+    return {
+        "client_side": client_storage.get_storage_info(),
+        "server_side": server_storage.get_storage_info()
     }
 
 
@@ -139,15 +151,25 @@ async def seal_container(request: SealRequest):
         # Encrypt file
         encrypted_data = crypto_utils.encrypt_file(file_data, key)
         
-        # Create metadata
-        metadata = crypto_utils.create_bar_metadata(
-            filename=request.filename,
-            max_views=request.max_views,
-            expiry_minutes=request.expiry_minutes,
-            password_protected=bool(request.password),
-            webhook_url=request.webhook_url,
-            view_only=request.view_only
-        )
+        # Create metadata based on storage mode
+        if request.storage_mode == 'server':
+            metadata = server_storage.create_server_metadata(
+                filename=request.filename,
+                max_views=request.max_views,
+                expiry_minutes=request.expiry_minutes,
+                password_protected=bool(request.password),
+                webhook_url=request.webhook_url,
+                view_only=request.view_only
+            )
+        else:
+            metadata = client_storage.create_client_metadata(
+                filename=request.filename,
+                expiry_minutes=request.expiry_minutes,
+                password_protected=bool(request.password),
+                webhook_url=request.webhook_url,
+                view_only=request.view_only
+            )
+        
         metadata["file_hash"] = file_hash
         if password_hash:
             metadata["password_hash"] = password_hash
@@ -329,27 +351,24 @@ async def decrypt_uploaded_bar_file(file: UploadFile = File(...), password: str 
         encrypted_data, metadata, key = crypto_utils.unpack_bar_file(bar_data)
         
         # Debug logging
-        print(f"\n=== DECRYPT REQUEST ===")
-        print(f"Max Views: {metadata.get('max_views')}")
-        print(f"Current Views: {metadata.get('current_views')}")
+        storage_mode = metadata.get('storage_mode', 'client')
+        print(f"\n=== DECRYPT REQUEST (CLIENT-SIDE) ===")
+        print(f"Storage Mode: {storage_mode}")
         print(f"Password Protected: {metadata.get('password_protected')}")
         print(f"Expires At: {metadata.get('expires_at')}")
         print(f"Password Provided: {bool(password and password.strip())}")
         
-        # Validate access (only check password if it was set)
+        # Validate access using CLIENT storage module (no view count enforcement)
         password_to_check = password if password and password.strip() else None
-        is_valid, errors = crypto_utils.validate_bar_access(metadata, password_to_check)
+        is_valid, errors = client_storage.validate_client_access(metadata, password_to_check)
         
         if not is_valid:
             error_msg = "; ".join(errors)
             print(f"\n!!! ACCESS DENIED !!!")
             print(f"Errors: {error_msg}")
-            print(f"Validation Details:")
-            print(f"  - Max views check: {metadata.get('current_views', 0)} >= {metadata.get('max_views', 0)}")
-            print(f"  - Result: {metadata.get('current_views', 0) >= metadata.get('max_views', 0)}")
             raise HTTPException(status_code=403, detail=error_msg)
         
-        print(f"✓ Access granted!")
+        print(f"✓ Access granted! (Client-side - view limits NOT enforced)")
         
         # Decrypt file
         try:
@@ -365,16 +384,10 @@ async def decrypt_uploaded_bar_file(file: UploadFile = File(...), password: str 
                 detail="File integrity check failed - possible tampering"
             )
         
-        # Update view count
-        metadata["current_views"] = metadata.get("current_views", 0) + 1
-        
-        # Check if should destroy
+        # Client-side files: view count NOT tracked or enforced
+        # Users can decrypt the same file multiple times
         should_destroy = False
-        if metadata.get("max_views", 0) > 0:
-            if metadata["current_views"] >= metadata["max_views"]:
-                should_destroy = True
-        
-        views_remaining = max(0, metadata.get("max_views", 0) - metadata["current_views"])
+        views_remaining = 0  # Not applicable for client-side
         
         # Note: We can't update the .bar file since user uploaded it directly
         # This means view count enforcement relies on user not keeping copies of original file
@@ -452,8 +465,8 @@ async def share_file(token: str, request: DecryptRequest):
                 # For security, you should regenerate these files
                 print("⚠️ WARNING: File has password protection but no password_hash (old file format)")
         
-        # Validate access (expiry, view count) - Skip password check since we already validated it
-        is_valid, errors = crypto_utils.validate_bar_access(metadata, None, skip_password_check=True)
+        # Validate access using SERVER storage module (full enforcement)
+        is_valid, errors = server_storage.validate_server_access(metadata, None, skip_password_check=True)
         
         if not is_valid:
             print(f"❌ Access validation failed: {errors}")
@@ -472,16 +485,10 @@ async def share_file(token: str, request: DecryptRequest):
         if file_hash != metadata.get("file_hash"):
             raise HTTPException(status_code=500, detail="File integrity check failed")
         
-        # Update view count
-        metadata["current_views"] = metadata.get("current_views", 0) + 1
-        
-        # Check if should destroy
-        should_destroy = False
-        if metadata.get("max_views", 0) > 0:
-            if metadata["current_views"] >= metadata["max_views"]:
-                should_destroy = True
-        
-        views_remaining = max(0, metadata.get("max_views", 0) - metadata["current_views"])
+        # Update view count using server storage module
+        metadata = server_storage.increment_view_count(metadata)
+        should_destroy = server_storage.should_destroy_file(metadata)
+        views_remaining = server_storage.get_views_remaining(metadata)
         
         # CRITICAL: Update the .bar file on server with incremented view count
         if not should_destroy:

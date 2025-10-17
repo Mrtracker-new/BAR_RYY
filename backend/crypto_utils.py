@@ -41,29 +41,7 @@ def decrypt_file(encrypted_data: bytes, key: bytes) -> bytes:
     return decrypted_data
 
 
-def create_bar_metadata(filename: str, max_views: int, expiry_minutes: int, 
-                        password_protected: bool, webhook_url: str = None, view_only: bool = False) -> dict:
-    """Create metadata for BAR file"""
-    created_at = datetime.utcnow().isoformat() + 'Z'  # Add Z to indicate UTC
-    expires_at = None
-    
-    if expiry_minutes > 0:
-        expires_at = (datetime.utcnow() + timedelta(minutes=expiry_minutes)).isoformat() + 'Z'  # Add Z to indicate UTC
-    
-    metadata = {
-        "filename": filename,
-        "created_at": created_at,
-        "expires_at": expires_at,
-        "max_views": max_views,
-        "current_views": 0,
-        "password_protected": password_protected,
-        "webhook_url": webhook_url,
-        "view_only": view_only,
-        "file_hash": "",
-        "version": "1.0"
-    }
-    
-    return metadata
+# DEPRECATED: Use client_storage.create_client_metadata() or server_storage.create_server_metadata() instead
 
 
 def calculate_file_hash(file_data: bytes) -> str:
@@ -105,33 +83,4 @@ def unpack_bar_file(bar_data: bytes) -> tuple:
     return encrypted_data, metadata, key
 
 
-def validate_bar_access(metadata: dict, password: str = None, skip_password_check: bool = False) -> tuple:
-    """Validate if BAR file can be accessed"""
-    errors = []
-    
-    # Check expiry
-    if metadata.get("expires_at"):
-        expires_at_str = metadata["expires_at"]
-        # Handle both old format (no Z) and new format (with Z)
-        if expires_at_str.endswith('Z'):
-            expires_at_str = expires_at_str[:-1]  # Remove Z, treat as naive UTC
-        expires_at = datetime.fromisoformat(expires_at_str)
-        if datetime.utcnow() > expires_at:
-            errors.append("File has expired")
-    
-    # Check max views - allow access if current_views < max_views
-    # The view will be incremented AFTER this validation
-    max_views = metadata.get("max_views", 0)
-    current_views = metadata.get("current_views", 0)
-    
-    if max_views > 0:
-        # Check if we've already used all views
-        if current_views >= max_views:
-            errors.append(f"Maximum views reached ({current_views}/{max_views})")
-    
-    # Check password (only if not already validated)
-    if not skip_password_check:
-        if metadata.get("password_protected") and not password:
-            errors.append("Password required")
-    
-    return len(errors) == 0, errors
+# DEPRECATED: Use client_storage.validate_client_access() or server_storage.validate_server_access() instead
