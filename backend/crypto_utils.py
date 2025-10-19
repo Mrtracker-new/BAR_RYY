@@ -62,9 +62,12 @@ def pack_bar_file(encrypted_data: bytes, metadata: dict, key: bytes) -> bytes:
     bar_json = json.dumps(bar_structure, indent=2)
     bar_bytes = bar_json.encode('utf-8')
     
+    # Obfuscate: Base64 encode the JSON so it's not readable in text editors
+    obfuscated_data = base64.b64encode(bar_bytes)
+    
     # Add BAR file header
     header = b"BAR_FILE_V1\n"
-    return header + bar_bytes
+    return header + obfuscated_data
 
 
 def unpack_bar_file(bar_data: bytes) -> tuple:
@@ -73,7 +76,10 @@ def unpack_bar_file(bar_data: bytes) -> tuple:
     if not bar_data.startswith(b"BAR_FILE_V1\n"):
         raise ValueError("Invalid BAR file format")
     
-    bar_json = bar_data[12:]  # Remove header
+    obfuscated_data = bar_data[12:]  # Remove header
+    
+    # Deobfuscate: Base64 decode to get the JSON
+    bar_json = base64.b64decode(obfuscated_data)
     bar_structure = json.loads(bar_json.decode('utf-8'))
     
     metadata = bar_structure["metadata"]

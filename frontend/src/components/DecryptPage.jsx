@@ -34,7 +34,11 @@ const DecryptPage = ({ onBack }) => {
           const text = event.target.result;
           // Skip "BAR_FILE_V1\n" header
           const jsonStart = text.indexOf('\n') + 1;
-          const jsonData = JSON.parse(text.substring(jsonStart));
+          const obfuscatedData = text.substring(jsonStart);
+          
+          // Decode base64 to get the JSON
+          const decodedJson = atob(obfuscatedData);
+          const jsonData = JSON.parse(decodedJson);
           setMetadata(jsonData.metadata);
         } catch (err) {
           console.error('Could not read metadata:', err);
