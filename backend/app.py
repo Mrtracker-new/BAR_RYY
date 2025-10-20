@@ -186,8 +186,8 @@ async def seal_container(request: SealRequest):
         with open(bar_path, "wb") as f:
             f.write(bar_data)
         
-        # Clean up uploaded file
-        os.remove(uploaded_file)
+        # Clean up uploaded file (secure deletion)
+        crypto_utils.secure_delete_file(uploaded_file)
         
         # Generate response based on storage mode
         if request.storage_mode == 'server':
@@ -318,8 +318,8 @@ async def decrypt_bar(bar_id: str, request: DecryptRequest):
             with open(bar_file, "wb") as f:
                 f.write(updated_bar)
         else:
-            # Destroy the BAR file
-            os.remove(bar_file)
+            # Destroy the BAR file (secure deletion)
+            crypto_utils.secure_delete_file(bar_file)
         
         # Return decrypted file
         original_filename = metadata.get("filename", "decrypted_file")
@@ -497,8 +497,8 @@ async def share_file(token: str, request: DecryptRequest):
                 f.write(updated_bar_data)
             print(f"✓ View count updated: {metadata['current_views']}/{metadata.get('max_views', 0)}")
         else:
-            # Destroy the file
-            os.remove(bar_file)
+            # Destroy the file (secure deletion)
+            crypto_utils.secure_delete_file(bar_file)
             print(f"🔥 File destroyed after reaching max views")
         
         # Return decrypted file

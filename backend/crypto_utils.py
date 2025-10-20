@@ -49,6 +49,52 @@ def calculate_file_hash(file_data: bytes) -> str:
     return hashlib.sha256(file_data).hexdigest()
 
 
+def secure_delete_file(file_path: str, passes: int = 3) -> None:
+    """
+    Securely delete a file by overwriting it before deletion.
+    
+    This prevents data recovery by:
+    1. Overwriting with random data (multiple passes)
+    2. Overwriting with zeros
+    3. Finally unlinking the file
+    
+    Args:
+        file_path: Path to the file to securely delete
+        passes: Number of random overwrite passes (default: 3)
+    """
+    if not os.path.exists(file_path):
+        return  # File doesn't exist, nothing to do
+    
+    try:
+        # Get file size
+        file_size = os.path.getsize(file_path)
+        
+        # Open file in write mode
+        with open(file_path, "r+b") as f:
+            # Pass 1-N: Overwrite with random data
+            for _ in range(passes):
+                f.seek(0)
+                f.write(os.urandom(file_size))
+                f.flush()
+                os.fsync(f.fileno())  # Force write to disk
+            
+            # Final pass: Overwrite with zeros
+            f.seek(0)
+            f.write(b'\x00' * file_size)
+            f.flush()
+            os.fsync(f.fileno())
+        
+        # Finally, unlink the file
+        os.remove(file_path)
+        
+    except Exception as e:
+        # If secure deletion fails, fall back to normal deletion
+        # (Better to delete insecurely than not at all)
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        raise e
+
+
 def pack_bar_file(encrypted_data: bytes, metadata: dict, key: bytes) -> bytes:
     """Pack encrypted file and metadata into BAR format"""
     # Create BAR file structure

@@ -22,6 +22,7 @@ Pretty neat, right?
 - **Dual Storage Modes**: Choose between Client-Side (download file) or Server-Side (shareable link)
 - **Smart View Count Enforcement**: Server-side files enforce view limits; client-side files don't (honest UX!)
 - **Self-Destruct**: Files actually destroy themselves after reaching the view limit (server-side only)
+- **Secure File Deletion**: Data is overwritten multiple times before deletion to prevent recovery
 - **Password Protection**: Lock your files with a password using PBKDF2 key derivation
 - **Time Bombs**: Set files to expire after minutes, hours, or days
 - **View-Only Mode**: Let people preview files in-browser without downloading
@@ -212,6 +213,13 @@ We use separate modules for different security contexts:
 - `server_storage.py` - Handles server-hosted files (full enforcement)
 
 This separation ensures we're **honest** about what can and can't be enforced!
+
+### Secure Deletion
+- **Multi-Pass Overwrite**: Files are overwritten with random data 3 times before deletion
+- **Zero-Fill Final Pass**: Final overwrite with zeros to ensure data is unrecoverable
+- **Forced Disk Sync**: Uses `fsync` to ensure data is written to physical disk
+- **Server-Side Only**: Only works for files stored on the server (not client-downloaded files)
+- **Automatic**: All file deletions use secure deletion automatically
 
 ## If You Run Into Issues
 
