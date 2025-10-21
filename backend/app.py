@@ -18,9 +18,20 @@ import server_storage
 app = FastAPI(title="BAR Web API", version="1.0")
 
 # Enable CORS for frontend
+allowed_origins = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+]
+
+# Add Railway frontend URL from environment variable
+if frontend_url := os.getenv("FRONTEND_URL"):
+    allowed_origins.append(frontend_url)
+    # Also allow without trailing slash
+    allowed_origins.append(frontend_url.rstrip("/"))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
