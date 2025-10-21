@@ -138,29 +138,29 @@ function MainApp() {
       
       {/* Header */}
       <header className="border-b border-dark-700 bg-dark-800/50 backdrop-blur">
-        <div className="container mx-auto px-6 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <PackageOpen className="text-gold-500" size={40} />
+        <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-6">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center space-x-3 sm:space-x-4">
+              <PackageOpen className="text-gold-500" size={32} />
               <div>
-                <h1 className="text-3xl font-bold text-gold-500 text-shadow-gold">
+                <h1 className="text-2xl sm:text-3xl font-bold text-gold-500 text-shadow-gold">
                   BAR Web
                 </h1>
-                <p className="text-gray-400 text-sm">Burn After Reading - Secure File Encryption</p>
+                <p className="text-gray-400 text-xs sm:text-sm hidden sm:block">Burn After Reading - Secure File Encryption</p>
               </div>
             </div>
             <button
               onClick={() => setShowDecrypt(!showDecrypt)}
-              className="px-6 py-2 bg-gold-500/20 hover:bg-gold-500/30 text-gold-500 rounded-lg transition-all duration-300 border border-gold-500/30 hover:border-gold-500"
+              className="px-4 sm:px-6 py-2 text-sm sm:text-base bg-gold-500/20 hover:bg-gold-500/30 text-gold-500 rounded-lg transition-all duration-300 border border-gold-500/30 hover:border-gold-500 whitespace-nowrap"
             >
-              {showDecrypt ? '📦 Create Container' : '🔓 Decrypt .BAR'}
+              {showDecrypt ? '📦 Create' : '🔓 Decrypt'}
             </button>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-6 py-12">
+      <main className="container mx-auto px-4 sm:px-6 py-6 sm:py-12">
         {showDecrypt ? (
           <DecryptPage onBack={() => setShowDecrypt(false)} />
         ) : (
@@ -173,11 +173,11 @@ function MainApp() {
         )}
 
         {!barResult ? (
-          <div className="grid lg:grid-cols-2 gap-8">
+          <div className="grid lg:grid-cols-2 gap-6 sm:gap-8">
             {/* Left Column - File Upload */}
             <div className="space-y-6">
               <div>
-                <h2 className="text-2xl font-bold text-gold-500 text-shadow-gold mb-4">
+                <h2 className="text-xl sm:text-2xl font-bold text-gold-500 text-shadow-gold mb-4">
                   Upload File
                 </h2>
                 <FileUpload
@@ -188,8 +188,8 @@ function MainApp() {
               </div>
 
               {uploadedFile && (
-                <div className="border border-dark-700 rounded-lg p-6 bg-dark-800">
-                  <h3 className="text-lg font-semibold text-gold-500 mb-4">Container Preview</h3>
+                <div className="border border-dark-700 rounded-lg p-4 sm:p-6 bg-dark-800">
+                  <h3 className="text-base sm:text-lg font-semibold text-gold-500 mb-4">Container Preview</h3>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-gray-400">Status:</span>
@@ -235,13 +235,13 @@ function MainApp() {
             </div>
 
             {/* Right Column - Rules Panel */}
-            <div className="border border-dark-700 rounded-lg p-6 bg-dark-800">
+            <div className="border border-dark-700 rounded-lg p-4 sm:p-6 bg-dark-800">
               <RulesPanel rules={rules} onRulesChange={setRules} />
               
               <button
                 onClick={handleSealContainer}
                 disabled={!uploadedFile || isSealing}
-                className={`w-full mt-8 py-4 rounded-lg font-bold text-lg transition-all duration-300 ${
+                className={`w-full mt-6 sm:mt-8 py-3 sm:py-4 rounded-lg font-bold text-base sm:text-lg transition-all duration-300 ${
                   uploadedFile && !isSealing
                     ? 'bg-gold-500 hover:bg-gold-600 text-black hover:scale-105 animate-glow'
                     : 'bg-dark-600 text-gray-500 cursor-not-allowed'
@@ -253,48 +253,48 @@ function MainApp() {
           </div>
         ) : (
           <div className="max-w-2xl mx-auto">
-            <div className="border-2 border-gold-500 rounded-xl p-8 bg-dark-800 terminal-glow">
+            <div className="border-2 border-gold-500 rounded-xl p-6 sm:p-8 bg-dark-800 terminal-glow">
               <div className="text-center space-y-6">
                 <div className="inline-block p-6 bg-gold-500/20 rounded-full">
                   <PackageOpen className="text-gold-500" size={64} />
                 </div>
                 
-                <h2 className="text-3xl font-bold text-gold-500 text-shadow-gold">
+                <h2 className="text-2xl sm:text-3xl font-bold text-gold-500 text-shadow-gold">
                   Container Sealed Successfully!
                 </h2>
                 
-                <div className="bg-dark-900 rounded-lg p-6 space-y-3">
+                <div className="bg-dark-900 rounded-lg p-4 sm:p-6 space-y-3">
                   {barResult.storage_mode === 'server' ? (
                     <>
-                      <div className="flex justify-between text-sm">
+                      <div className="flex justify-between text-xs sm:text-sm flex-wrap gap-2">
                         <span className="text-gray-400">Storage Mode:</span>
-                        <span className="text-green-500 font-semibold">🔒 Server-Side (Enforced Limits)</span>
+                        <span className="text-green-500 font-semibold text-right">🔒 Server-Side</span>
                       </div>
-                      <div className="flex justify-between text-sm">
+                      <div className="flex justify-between text-xs sm:text-sm">
                         <span className="text-gray-400">Max Views:</span>
                         <span className="text-white">{barResult.metadata.max_views}</span>
                       </div>
-                      <div className="flex justify-between text-sm">
+                      <div className="flex justify-between text-xs sm:text-sm flex-wrap gap-2">
                         <span className="text-gray-400">Created:</span>
-                        <span className="text-white">
-                          {new Date(barResult.metadata.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'medium' })} IST
+                        <span className="text-white text-right">
+                          {new Date(barResult.metadata.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' })} IST
                         </span>
                       </div>
                     </>
                   ) : (
                     <>
-                      <div className="flex justify-between text-sm">
+                      <div className="flex justify-between text-xs sm:text-sm flex-wrap gap-2">
                         <span className="text-gray-400">Storage Mode:</span>
-                        <span className="text-yellow-500 font-semibold">📥 Client-Side (Download File)</span>
+                        <span className="text-yellow-500 font-semibold text-right">📥 Client-Side</span>
                       </div>
-                      <div className="flex justify-between text-sm">
+                      <div className="flex flex-col sm:flex-row sm:justify-between text-xs sm:text-sm gap-1 sm:gap-0">
                         <span className="text-gray-400">Filename:</span>
-                        <span className="text-white font-mono">{barResult.bar_filename}</span>
+                        <span className="text-white font-mono break-all">{barResult.bar_filename}</span>
                       </div>
-                      <div className="flex justify-between text-sm">
+                      <div className="flex justify-between text-xs sm:text-sm flex-wrap gap-2">
                         <span className="text-gray-400">Created:</span>
-                        <span className="text-white">
-                          {new Date(barResult.metadata.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'medium' })} IST
+                        <span className="text-white text-right">
+                          {new Date(barResult.metadata.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' })} IST
                         </span>
                       </div>
                     </>
@@ -303,24 +303,24 @@ function MainApp() {
 
                 {barResult.storage_mode === 'server' ? (
                   <>
-                    <div className="bg-dark-700 border border-gold-500/30 rounded-lg p-4">
-                      <label className="text-sm text-gray-400 mb-2 block">Shareable Link:</label>
+                    <div className="bg-dark-700 border border-gold-500/30 rounded-lg p-3 sm:p-4">
+                      <label className="text-xs sm:text-sm text-gray-400 mb-2 block">Shareable Link:</label>
                       <div className="flex items-center space-x-2">
                         <input
                           type="text"
                           value={`${window.location.origin}/share/${barResult.access_token}`}
                           readOnly
-                          className="flex-1 px-3 py-2 bg-dark-600 border border-dark-500 rounded text-white text-sm font-mono"
+                          className="flex-1 px-2 sm:px-3 py-2 bg-dark-600 border border-dark-500 rounded text-white text-xs sm:text-sm font-mono"
                         />
                         <button
                           onClick={() => {
                             navigator.clipboard.writeText(`${window.location.origin}/share/${barResult.access_token}`);
                             alert('Link copied to clipboard!');
                           }}
-                          className="p-2 bg-gold-500 hover:bg-gold-600 text-black rounded transition-all"
+                          className="p-2 bg-gold-500 hover:bg-gold-600 text-black rounded transition-all shrink-0"
                           title="Copy link"
                         >
-                          <Copy size={20} />
+                          <Copy size={18} className="sm:w-5 sm:h-5" />
                         </button>
                       </div>
                     </div>
@@ -331,9 +331,8 @@ function MainApp() {
                 ) : (
                   <button
                     onClick={handleDownloadBar}
-                    className="w-full py-4 bg-gold-500 hover:bg-gold-600 text-black font-bold text-lg rounded-lg transition-all duration-300 hover:scale-105 flex items-center justify-center space-x-3"
-                  >
-                    <Download size={24} />
+                    className="w-full py-3 sm:py-4 bg-gold-500 hover:bg-gold-600 text-black font-bold text-base sm:text-lg rounded-lg transition-all duration-300 hover:scale-105 flex items-center justify-center space-x-2 sm:space-x-3">
+                    <Download size={20} className="sm:w-6 sm:h-6" />
                     <span>Download .BAR File</span>
                   </button>
                 )}
@@ -367,10 +366,10 @@ function MainApp() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-dark-700 mt-20">
-        <div className="container mx-auto px-6 py-6 text-center text-gray-500 text-sm">
+      <footer className="border-t border-dark-700 mt-12 sm:mt-20">
+        <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-6 text-center text-gray-500 text-xs sm:text-sm">
           <p>BAR Web - Burn After Reading © 2025</p>
-          <p className="mt-2">Secure file encryption with self-destruct capabilities</p>
+          <p className="mt-1 sm:mt-2">Secure file encryption with self-destruct capabilities</p>
         </div>
       </footer>
     </div>

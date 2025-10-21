@@ -22,13 +22,13 @@ const RulesPanel = ({ rules, onRulesChange }) => {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gold-500 text-shadow-gold mb-6">
+      <h2 className="text-xl sm:text-2xl font-bold text-gold-500 text-shadow-gold mb-4 sm:mb-6">
         Security Rules
       </h2>
 
       {/* Storage Mode */}
-      <div className="space-y-3 bg-dark-700 border border-dark-600 rounded-lg p-4">
-        <label className="text-lg text-gray-300 font-semibold">Storage Mode</label>
+      <div className="space-y-3 bg-dark-700 border border-dark-600 rounded-lg p-3 sm:p-4">
+        <label className="text-base sm:text-lg text-gray-300 font-semibold">Storage Mode</label>
         <div className="space-y-3">
           <label className="flex items-start space-x-3 cursor-pointer group">
             <input
@@ -44,7 +44,7 @@ const RulesPanel = ({ rules, onRulesChange }) => {
                 <Download size={18} className="text-gold-500" />
                 <span className="text-gray-200 font-medium group-hover:text-gold-400">Client-Side (Download File)</span>
               </div>
-              <p className="text-sm text-gray-500 mt-1">
+              <p className="text-xs sm:text-sm text-gray-500 mt-1">
                 Download .bar file and share it manually. Simple but view limits can be bypassed by keeping copies.
               </p>
             </div>
@@ -63,7 +63,7 @@ const RulesPanel = ({ rules, onRulesChange }) => {
                 <Server size={18} className="text-gold-500" />
                 <span className="text-gray-200 font-medium group-hover:text-gold-400">Server-Side (Shareable Link)</span>
               </div>
-              <p className="text-sm text-gray-500 mt-1">
+              <p className="text-xs sm:text-sm text-gray-500 mt-1">
                 Get a shareable link. View limits properly enforced. File stored on server until destroyed.
               </p>
             </div>
@@ -74,9 +74,9 @@ const RulesPanel = ({ rules, onRulesChange }) => {
       {/* Max Views - Only for Server-Side */}
       {rules.storageMode === 'server' ? (
         <div className="space-y-3">
-          <div className="flex items-center space-x-3">
-            <Eye className="text-gold-500" size={20} />
-            <label className="text-lg text-gray-300">Self-Destruct After Views</label>
+          <div className="flex items-center space-x-2 sm:space-x-3">
+            <Eye className="text-gold-500" size={18} />
+            <label className="text-base sm:text-lg text-gray-300">Self-Destruct After Views</label>
           </div>
           <div className="flex items-center space-x-4">
             <input
@@ -91,15 +91,15 @@ const RulesPanel = ({ rules, onRulesChange }) => {
               {rules.maxViews}
             </span>
           </div>
-          <p className="text-sm text-gray-500">File will be destroyed after {rules.maxViews} view(s)</p>
+          <p className="text-xs sm:text-sm text-gray-500">File will be destroyed after {rules.maxViews} view(s)</p>
         </div>
       ) : (
-        <div className="space-y-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
-          <div className="flex items-center space-x-3">
-            <Eye className="text-yellow-500" size={20} />
-            <label className="text-lg text-yellow-400 font-semibold">View Count Limit Unavailable</label>
+        <div className="space-y-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 sm:p-4">
+          <div className="flex items-center space-x-2 sm:space-x-3">
+            <Eye className="text-yellow-500" size={18} />
+            <label className="text-base sm:text-lg text-yellow-400 font-semibold">View Count Limit Unavailable</label>
           </div>
-          <p className="text-sm text-yellow-300">
+          <p className="text-xs sm:text-sm text-yellow-300">
             View count tracking doesn't work with client-side mode (users can keep copies of the .bar file). 
             Switch to <strong>Server-Side</strong> storage to enable proper view limit enforcement.
           </p>
@@ -108,9 +108,9 @@ const RulesPanel = ({ rules, onRulesChange }) => {
 
       {/* Expiry Time */}
       <div className="space-y-3">
-        <div className="flex items-center space-x-3">
-          <Clock className="text-gold-500" size={20} />
-          <label className="text-lg text-gray-300">Auto-Expire After</label>
+        <div className="flex items-center space-x-2 sm:space-x-3">
+          <Clock className="text-gold-500" size={18} />
+          <label className="text-base sm:text-lg text-gray-300">Auto-Expire After</label>
         </div>
         <div className="flex items-center space-x-3">
           <input
@@ -131,16 +131,16 @@ const RulesPanel = ({ rules, onRulesChange }) => {
             <option value="days">Days</option>
           </select>
         </div>
-        <p className="text-sm text-gray-500">
+          <p className="text-xs sm:text-sm text-gray-500">
           {rules.expiryMinutes > 0 ? `Expires in ${rules.expiryValue} ${rules.expiryUnit}` : 'No expiration set'}
         </p>
       </div>
 
       {/* Password Protection */}
       <div className="space-y-3">
-        <div className="flex items-center space-x-3">
-          <Lock className="text-gold-500" size={20} />
-          <label className="text-lg text-gray-300">Password Protection (Optional)</label>
+        <div className="flex items-center space-x-2 sm:space-x-3">
+          <Lock className="text-gold-500" size={18} />
+          <label className="text-base sm:text-lg text-gray-300">Password Protection (Optional)</label>
         </div>
         <input
           type="password"
@@ -149,16 +149,16 @@ const RulesPanel = ({ rules, onRulesChange }) => {
           className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white focus:border-gold-500 focus:outline-none"
           placeholder="Leave empty for no password"
         />
-        <p className="text-sm text-gray-500">
+        <p className="text-xs sm:text-sm text-gray-500">
           {rules.password ? 'Password protection enabled' : 'No password protection'}
         </p>
       </div>
 
       {/* Tamper Alert Webhook */}
       <div className="space-y-3">
-        <div className="flex items-center space-x-3">
-          <Webhook className="text-gold-500" size={20} />
-          <label className="text-lg text-gray-300">Tamper Alert Webhook (Optional)</label>
+        <div className="flex items-center space-x-2 sm:space-x-3">
+          <Webhook className="text-gold-500" size={18} />
+          <label className="text-base sm:text-lg text-gray-300">Tamper Alert Webhook (Optional)</label>
         </div>
         <input
           type="url"
@@ -167,16 +167,16 @@ const RulesPanel = ({ rules, onRulesChange }) => {
           className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white focus:border-gold-500 focus:outline-none"
           placeholder="https://your-webhook-url.com"
         />
-        <p className="text-sm text-gray-500">
+        <p className="text-xs sm:text-sm text-gray-500">
           {rules.webhookUrl ? 'Webhook configured for tampering alerts' : 'No webhook configured'}
         </p>
       </div>
 
       {/* View Only Mode */}
       <div className="space-y-3 border-t border-dark-600 pt-6">
-        <div className="flex items-center space-x-3">
-          <ShieldAlert className="text-gold-500" size={20} />
-          <label className="text-lg text-gray-300">View Only Mode</label>
+        <div className="flex items-center space-x-2 sm:space-x-3">
+          <ShieldAlert className="text-gold-500" size={18} />
+          <label className="text-base sm:text-lg text-gray-300">View Only Mode</label>
         </div>
         <label className="flex items-center space-x-3 cursor-pointer">
           <input
@@ -189,7 +189,7 @@ const RulesPanel = ({ rules, onRulesChange }) => {
             Enable view-only mode for supported file types
           </span>
         </label>
-        <p className="text-sm text-gray-500">
+        <p className="text-xs sm:text-sm text-gray-500">
           {rules.viewOnly ? (
             <span className="text-yellow-400">
               ⚠️ Enabled: Files can only be viewed in browser (no downloads for .txt, .pdf, images, videos)

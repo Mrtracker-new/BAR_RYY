@@ -147,37 +147,37 @@ const DecryptPage = ({ onBack }) => {
       />
     )}
     <div className="max-w-3xl mx-auto">
-      <div className="mb-6">
+      <div className="mb-4 sm:mb-6">
         <button
           onClick={onBack}
-          className="text-gold-500 hover:text-gold-400 transition-colors"
+          className="text-sm sm:text-base text-gold-500 hover:text-gold-400 transition-colors"
         >
           ← Back to Create
         </button>
       </div>
 
-      <div className="border border-dark-700 rounded-xl p-8 bg-dark-800">
-        <div className="text-center mb-8">
-          <div className="inline-block p-4 bg-gold-500/20 rounded-full mb-4">
-            <Unlock className="text-gold-500" size={48} />
+      <div className="border border-dark-700 rounded-xl p-6 sm:p-8 bg-dark-800">
+        <div className="text-center mb-6 sm:mb-8">
+          <div className="inline-block p-3 sm:p-4 bg-gold-500/20 rounded-full mb-3 sm:mb-4">
+            <Unlock className="text-gold-500" size={40} />
           </div>
-          <h2 className="text-3xl font-bold text-gold-500 text-shadow-gold mb-2">
+          <h2 className="text-2xl sm:text-3xl font-bold text-gold-500 text-shadow-gold mb-2">
             Decrypt .BAR File
           </h2>
-          <p className="text-gray-400">
+          <p className="text-sm sm:text-base text-gray-400">
             Upload your .bar file to decrypt and retrieve the original file
           </p>
         </div>
 
         {error && (
-          <div className="mb-6 p-4 bg-red-500/20 border border-red-500 rounded-lg flex items-center space-x-3">
-            <AlertCircle className="text-red-500" size={24} />
-            <p className="text-red-300">{error}</p>
+          <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-red-500/20 border border-red-500 rounded-lg flex items-start space-x-2 sm:space-x-3">
+            <AlertCircle className="text-red-500 shrink-0" size={20} />
+            <p className="text-sm sm:text-base text-red-300">{error}</p>
           </div>
         )}
 
         {/* File Upload */}
-        <div className="mb-6">
+        <div className="mb-4 sm:mb-6">
           <input
             ref={fileInputRef}
             type="file"
@@ -187,13 +187,13 @@ const DecryptPage = ({ onBack }) => {
           />
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="w-full border-2 border-dashed border-dark-600 hover:border-gold-500 rounded-lg p-8 text-center transition-all duration-300 hover:bg-dark-700"
+            className="w-full border-2 border-dashed border-dark-600 hover:border-gold-500 rounded-lg p-6 sm:p-8 text-center transition-all duration-300 hover:bg-dark-700"
           >
-            <Upload className="mx-auto mb-3 text-gray-400" size={40} />
-            <p className="text-lg text-gray-300 mb-1">
+            <Upload className="mx-auto mb-2 sm:mb-3 text-gray-400" size={36} />
+            <p className="text-base sm:text-lg text-gray-300 mb-1 truncate px-2">
               {barFile ? barFile.name : 'Click to select .bar file'}
             </p>
-            <p className="text-sm text-gray-500">
+            <p className="text-xs sm:text-sm text-gray-500">
               {barFile ? 'Click to change file' : 'Only .bar files accepted'}
             </p>
           </button>
@@ -201,24 +201,24 @@ const DecryptPage = ({ onBack }) => {
 
         {/* Metadata Display */}
         {metadata && (
-          <div className="mb-6 bg-dark-900 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-gold-500 mb-4">File Information</h3>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
+          <div className="mb-4 sm:mb-6 bg-dark-900 rounded-lg p-4 sm:p-6">
+            <h3 className="text-base sm:text-lg font-semibold text-gold-500 mb-3 sm:mb-4">File Information</h3>
+            <div className="space-y-2 text-xs sm:text-sm">
+              <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
                 <span className="text-gray-400">Original Filename:</span>
-                <span className="text-white font-mono">{metadata.filename}</span>
+                <span className="text-white font-mono break-all">{metadata.filename}</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between flex-wrap gap-2">
                 <span className="text-gray-400">Created:</span>
-                <span className="text-white">
-                  {new Date(metadata.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'medium' })} IST
+                <span className="text-white text-right">
+                  {new Date(metadata.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' })} IST
                 </span>
               </div>
               {metadata.expires_at && (
-                <div className="flex justify-between">
+                <div className="flex justify-between flex-wrap gap-2">
                   <span className="text-gray-400">Expires:</span>
-                  <span className="text-white">
-                    {new Date(metadata.expires_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'medium' })} IST
+                  <span className="text-white text-right">
+                    {new Date(metadata.expires_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' })} IST
                   </span>
                 </div>
               )}
@@ -254,14 +254,14 @@ const DecryptPage = ({ onBack }) => {
 
         {/* Password Input */}
         {metadata?.password_protected && (
-          <div className="mb-6">
-            <label className="block text-gray-300 mb-2">Password</label>
+          <div className="mb-4 sm:mb-6">
+            <label className="block text-sm sm:text-base text-gray-300 mb-2">Password</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter password to decrypt"
-              className="w-full px-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-white focus:border-gold-500 focus:outline-none"
+              className="w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base bg-dark-700 border border-dark-600 rounded-lg text-white focus:border-gold-500 focus:outline-none"
             />
           </div>
         )}
@@ -270,7 +270,7 @@ const DecryptPage = ({ onBack }) => {
         <button
           onClick={handleDecrypt}
           disabled={!barFile || isDecrypting || (metadata?.password_protected && !password)}
-          className={`w-full py-4 rounded-lg font-bold text-lg transition-all duration-300 ${
+          className={`w-full py-3 sm:py-4 rounded-lg font-bold text-base sm:text-lg transition-all duration-300 ${
             barFile && !isDecrypting && (!metadata?.password_protected || password)
               ? 'bg-gold-500 hover:bg-gold-600 text-black hover:scale-105'
               : 'bg-dark-600 text-gray-500 cursor-not-allowed'
@@ -278,13 +278,13 @@ const DecryptPage = ({ onBack }) => {
         >
           {isDecrypting ? (
             <span className="flex items-center justify-center space-x-2">
-              <Lock className="animate-spin" size={20} />
+              <Lock className="animate-spin" size={18} />
               <span>Decrypting...</span>
             </span>
           ) : (
             <span className="flex items-center justify-center space-x-2">
-              <Unlock size={20} />
-              <span>Decrypt & Download File</span>
+              <Unlock size={18} />
+              <span>Decrypt & Download</span>
             </span>
           )}
         </button>

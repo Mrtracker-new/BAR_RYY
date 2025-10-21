@@ -48,7 +48,7 @@ const FileUpload = ({ onFileSelect, uploadedFile, onRemove }) => {
     <div className="w-full">
       {!uploadedFile ? (
         <div
-          className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition-all duration-300 ${
+          className={`border-2 border-dashed rounded-lg p-8 sm:p-12 text-center cursor-pointer transition-all duration-300 ${
             isDragging
               ? 'border-gold-500 bg-gold-500/10 scale-105'
               : 'border-dark-600 hover:border-gold-500/50 hover:bg-dark-800'
@@ -64,30 +64,30 @@ const FileUpload = ({ onFileSelect, uploadedFile, onRemove }) => {
             className="hidden"
             onChange={handleFileInput}
           />
-          <Upload className={`mx-auto mb-4 ${isDragging ? 'text-gold-500 animate-bounce' : 'text-gray-400'}`} size={48} />
-          <p className="text-lg mb-2 text-gray-300">
+          <Upload className={`mx-auto mb-3 sm:mb-4 ${isDragging ? 'text-gold-500 animate-bounce' : 'text-gray-400'}`} size={40} />
+          <p className="text-base sm:text-lg mb-2 text-gray-300">
             {isDragging ? 'Drop your file here' : 'Drag & drop your file here'}
           </p>
           <p className="text-sm text-gray-500">or click to browse</p>
-          <p className="text-xs text-gray-600 mt-4">Supports: PDF, TXT, DOCX, ZIP, and more</p>
+          <p className="text-xs text-gray-600 mt-3 sm:mt-4">Supports: PDF, TXT, DOCX, ZIP, and more</p>
         </div>
       ) : (
-        <div className="border border-gold-500/30 rounded-lg p-6 bg-dark-800 terminal-glow">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <div className="p-3 bg-gold-500/20 rounded-lg">
-                <File className="text-gold-500" size={32} />
+        <div className="border border-gold-500/30 rounded-lg p-4 sm:p-6 bg-dark-800 terminal-glow">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center space-x-3 sm:space-x-4 min-w-0 flex-1">
+              <div className="p-2 sm:p-3 bg-gold-500/20 rounded-lg shrink-0">
+                <File className="text-gold-500" size={28} />
               </div>
-              <div>
-                <p className="text-lg font-semibold text-gold-500">{uploadedFile.name}</p>
-                <p className="text-sm text-gray-400">{formatFileSize(uploadedFile.size)}</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-base sm:text-lg font-semibold text-gold-500 truncate">{uploadedFile.name}</p>
+                <p className="text-xs sm:text-sm text-gray-400">{formatFileSize(uploadedFile.size)}</p>
               </div>
             </div>
             <button
               onClick={onRemove}
-              className="p-2 hover:bg-red-500/20 rounded-lg transition-colors"
+              className="p-2 hover:bg-red-500/20 rounded-lg transition-colors shrink-0"
             >
-              <X className="text-red-400" size={24} />
+              <X className="text-red-400" size={20} />
             </button>
           </div>
         </div>
