@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Routes, Route, useParams } from 'react-router-dom';
-import axios from 'axios';
+import axios from './config/axios';
 import { Download, PackageOpen, AlertCircle, Link2, Copy } from 'lucide-react';
 import FileUpload from './components/FileUpload';
 import RulesPanel from './components/RulesPanel';

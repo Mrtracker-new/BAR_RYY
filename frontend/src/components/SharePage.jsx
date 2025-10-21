@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import axios from '../config/axios';
 import { Lock, Download, AlertCircle, FileCheck } from 'lucide-react';
 
 const SharePage = ({ token }) => {
@@ -19,9 +19,7 @@ const SharePage = ({ token }) => {
 
     try {
       // Call backend API with POST to avoid browser interception
-      const url = `http://localhost:8000/share/${token}`;
-      
-      const response = await axios.post(url, 
+      const response = await axios.post(`/share/${token}`,
         { password: password || null },
         { responseType: 'arraybuffer' }
       );

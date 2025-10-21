@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import axios from 'axios';
+import axios from '../config/axios';
 import { Lock, Unlock, FileDown, AlertCircle, Upload } from 'lucide-react';
 import FileViewer from './FileViewer';
 
