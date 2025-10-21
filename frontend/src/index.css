@@ -27,4 +27,19 @@ code {
     box-shadow: 0 0 10px rgba(251, 191, 36, 0.3),
                 inset 0 0 10px rgba(251, 191, 36, 0.1);
   }
+
+  .animate-slide-in {
+    animation: slideIn 0.3s ease-out;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }

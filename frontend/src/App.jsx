@@ -7,6 +7,7 @@ import RulesPanel from './components/RulesPanel';
 import ContainerAnimation from './components/ContainerAnimation';
 import DecryptPage from './components/DecryptPage';
 import SharePage from './components/SharePage';
+import Toast from './components/Toast';
 
 // Wrapper component for share page route
 const SharePageWrapper = () => {
@@ -32,6 +33,11 @@ function MainApp() {
   const [barResult, setBarResult] = useState(null);
   const [error, setError] = useState(null);
   const [showDecrypt, setShowDecrypt] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+  };
 
   const handleFileSelect = async (file) => {
     setError(null);
@@ -315,7 +321,7 @@ function MainApp() {
                         <button
                           onClick={() => {
                             navigator.clipboard.writeText(`${window.location.origin}/share/${barResult.access_token}`);
-                            alert('Link copied to clipboard!');
+                            showToast('Link copied to clipboard!', 'success');
                           }}
                           className="p-2 bg-gold-500 hover:bg-gold-600 text-black rounded transition-all shrink-0"
                           title="Copy link"
@@ -364,6 +370,15 @@ function MainApp() {
         </>
         )}
       </main>
+
+      {/* Toast Notifications */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
 
       {/* Footer */}
       <footer className="border-t border-dark-700 mt-12 sm:mt-20">

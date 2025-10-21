@@ -1,8 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { X, Eye, Download, AlertTriangle } from 'lucide-react';
+import Toast from './Toast';
 
 const FileViewer = ({ fileData, fileName, fileType, onClose, allowDownload = true }) => {
   const [dataUrl, setDataUrl] = useState(null);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (message, type = 'info') => {
+    setToast({ message, type });
+  };
 
   // Function to get the correct MIME type from filename
   const getMimeType = () => {
@@ -250,7 +256,7 @@ const FileViewer = ({ fileData, fileName, fileType, onClose, allowDownload = tru
 
   const handleDownload = () => {
     if (!allowDownload) {
-      alert('Downloads are disabled for this file. View-only mode is active.');
+      showToast('Downloads are disabled for this file. View-only mode is active.', 'error');
       return;
     }
 
@@ -263,6 +269,15 @@ const FileViewer = ({ fileData, fileName, fileType, onClose, allowDownload = tru
   };
 
   return (
+    <>
+    {/* Toast Notifications */}
+    {toast && (
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        onClose={() => setToast(null)}
+      />
+    )}
     <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-dark-800 border border-dark-700 rounded-xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
@@ -321,6 +336,7 @@ const FileViewer = ({ fileData, fileName, fileType, onClose, allowDownload = tru
         </div>
       </div>
     </div>
+    </>
   );
 };
 

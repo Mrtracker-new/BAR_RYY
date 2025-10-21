@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import axios from '../config/axios';
 import { Lock, Unlock, FileDown, AlertCircle, Upload } from 'lucide-react';
 import FileViewer from './FileViewer';
+import Toast from './Toast';
 
 const DecryptPage = ({ onBack }) => {
   const [barFile, setBarFile] = useState(null);
@@ -12,6 +13,11 @@ const DecryptPage = ({ onBack }) => {
   const [showViewer, setShowViewer] = useState(false);
   const [decryptedData, setDecryptedData] = useState(null);
   const fileInputRef = useRef(null);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+  };
 
   const handleFileSelect = async (e) => {
     const file = e.target.files[0];
@@ -87,7 +93,7 @@ const DecryptPage = ({ onBack }) => {
         console.log(`Views remaining: ${viewsRemaining}`);
       }
       if (shouldDestroy) {
-        alert('⚠️ This was the last view! File will be destroyed. Do NOT use this .bar file again.');
+        showToast('⚠️ This was the last view! File destroyed. Do NOT use this .bar file again.', 'error');
       }
 
       // Check if view-only mode is enabled
@@ -109,9 +115,9 @@ const DecryptPage = ({ onBack }) => {
         URL.revokeObjectURL(url);
         
         const msg = shouldDestroy 
-          ? '✅ File decrypted! This was the last view.\n\n⚠️ DO NOT use this .bar file again!' 
+          ? '✅ File decrypted! This was the last view. ⚠️ DO NOT use this .bar file again!' 
           : `✅ File decrypted! ${viewsRemaining} view(s) remaining.`;
-        alert(msg);
+        showToast(msg, shouldDestroy ? 'error' : 'success');
       }
 
     } catch (err) {
@@ -134,6 +140,15 @@ const DecryptPage = ({ onBack }) => {
 
   return (
     <>
+    {/* Toast Notifications */}
+    {toast && (
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        onClose={() => setToast(null)}
+      />
+    )}
+
     {showViewer && decryptedData && metadata && (
       <FileViewer
         fileData={decryptedData}
