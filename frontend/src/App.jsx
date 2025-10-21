@@ -95,7 +95,8 @@ function MainApp() {
 
   const handleDownloadBar = () => {
     if (barResult) {
-      window.open(`/download/${barResult.bar_id}`, '_blank');
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
+      window.open(`${backendUrl}/download/${barResult.bar_id}`, '_blank');
     }
   };
 
