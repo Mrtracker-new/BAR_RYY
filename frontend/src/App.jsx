@@ -94,9 +94,24 @@ function MainApp() {
   };
 
   const handleDownloadBar = () => {
-    if (barResult) {
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
-      window.open(`${backendUrl}/download/${barResult.bar_id}`, '_blank');
+    if (barResult && barResult.bar_data) {
+      // Decode base64 bar data
+      const binaryString = atob(barResult.bar_data);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      
+      // Create blob and download
+      const blob = new Blob([bytes], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = barResult.bar_filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
     }
   };
 

@@ -220,13 +220,20 @@ async def seal_container(request: SealRequest):
                 "message": "Container sealed and stored on server"
             }
         else:
-            # Client-side: Return download URL (current behavior)
+            # Client-side: Return .bar file data directly (Railway has ephemeral filesystem)
+            # Encode as base64 for JSON transport
+            import base64
+            bar_data_b64 = base64.b64encode(bar_data).decode('utf-8')
+            
+            # Clean up - don't store on server for client-side mode
+            if os.path.exists(bar_path):
+                os.remove(bar_path)
+            
             return {
                 "success": True,
                 "storage_mode": "client",
-                "bar_id": bar_id,
                 "bar_filename": bar_filename,
-                "download_url": f"/download/{bar_id}",
+                "bar_data": bar_data_b64,
                 "metadata": metadata,
                 "message": "Container sealed successfully"
             }
