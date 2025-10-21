@@ -1,7 +1,7 @@
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Response
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Response, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 from typing import Optional
 import os
 import uuid
@@ -13,6 +13,7 @@ import mimetypes
 import crypto_utils
 import client_storage
 import server_storage
+import security
 
 
 app = FastAPI(title="BAR Web API", version="1.0")
@@ -63,6 +64,40 @@ class SealRequest(BaseModel):
     view_only: bool = False
     storage_mode: str = 'client'  # 'client' or 'server'
 
+    @validator('filename')
+    def validate_filename(cls, v):
+        if not security.validate_filename(v):
+            raise ValueError('Invalid filename')
+        if not security.validate_file_extension(v):
+            raise ValueError('File type not allowed')
+        return security.sanitize_filename(v)
+
+    @validator('max_views')
+    def validate_max_views(cls, v):
+        if v < 1 or v > 100:
+            raise ValueError('Max views must be between 1 and 100')
+        return v
+
+    @validator('expiry_minutes')
+    def validate_expiry(cls, v):
+        if v < 0 or v > 43200:  # Max 30 days
+            raise ValueError('Expiry must be between 0 and 43200 minutes (30 days)')
+        return v
+
+    @validator('password')
+    def validate_password(cls, v):
+        if v:
+            is_valid, error = security.validate_password_strength(v)
+            if not is_valid:
+                raise ValueError(error)
+        return v
+
+    @validator('webhook_url')
+    def validate_webhook(cls, v):
+        if v and not security.validate_webhook_url(v):
+            raise ValueError('Invalid webhook URL')
+        return v
+
 
 class DecryptRequest(BaseModel):
     password: Optional[str] = None
@@ -70,7 +105,7 @@ class DecryptRequest(BaseModel):
 
 @app.get("/")
 async def root():
-    return {
+    resp = JSONResponse(content={
         "message": "BAR Web API - Burn After Reading",
         "version": "1.0",
         "endpoints": [
@@ -79,7 +114,8 @@ async def root():
             "/decrypt/{bar_id} - Decrypt and retrieve file",
             "/storage-info - Get storage mode capabilities"
         ]
-    }
+    })
+    return security.add_security_headers(resp)
 
 
 @app.get("/storage-info")
@@ -92,36 +128,66 @@ async def storage_info():
 
 
 @app.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(request: Request, file: UploadFile = File(...)):
     """Upload a file temporarily"""
     try:
-        # Generate unique ID for this upload
+        # Rate limiting
+        security.check_rate_limit(request, limit=10)
+        
+        # Validate filename
+        if not security.validate_filename(file.filename):
+            raise HTTPException(status_code=400, detail="Invalid filename")
+        
+        # Validate file extension
+        if not security.validate_file_extension(file.filename):
+            raise HTTPException(status_code=400, detail="File type not allowed")
+        
+        # Sanitize filename
+        safe_filename = security.sanitize_filename(file.filename)
+        
+        # Check file size
+        file_size = 0
+        chunk_size = 1024 * 1024  # 1MB chunks
         file_id = str(uuid.uuid4())
-        file_extension = os.path.splitext(file.filename)[1]
-        # Store with pattern: {file_id}__{original_filename}
-        temp_filename = f"{file_id}__{file.filename}"
+        temp_filename = f"{file_id}__{safe_filename}"
         temp_path = os.path.join(UPLOAD_DIR, temp_filename)
         
-        # Save uploaded file
+        # Save file with size limit
         with open(temp_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+            while chunk := await file.read(chunk_size):
+                file_size += len(chunk)
+                if file_size > security.MAX_FILE_SIZE:
+                    # Clean up partial file
+                    buffer.close()
+                    os.remove(temp_path)
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File too large. Maximum size is {security.MAX_FILE_SIZE // (1024*1024)}MB"
+                    )
+                buffer.write(chunk)
         
-        return {
+        response = {
             "success": True,
             "file_id": file_id,
-            "filename": file.filename,
+            "filename": safe_filename,
             "temp_filename": temp_filename,
-            "size": os.path.getsize(temp_path),
+            "size": file_size,
             "message": "File uploaded successfully"
         }
+        return JSONResponse(content=response)
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+        error_msg = security.sanitize_error_message(str(e))
+        raise HTTPException(status_code=500, detail=error_msg)
 
 
 @app.post("/seal")
-async def seal_container(request: SealRequest):
+async def seal_container(req: Request, request: SealRequest):
     """Seal the file with encryption and rules, generate .bar file"""
     try:
+        # Rate limit
+        security.check_rate_limit(req, limit=10)
         # Find uploaded file - look for file with pattern {uuid}__{filename}
         uploaded_file = None
         
@@ -211,7 +277,9 @@ async def seal_container(request: SealRequest):
             # Rename the bar file to use token
             os.rename(bar_path, token_bar_path)
             
-            return {
+        result = None
+        if request.storage_mode == 'server':
+            result = {
                 "success": True,
                 "storage_mode": "server",
                 "access_token": access_token,
@@ -221,15 +289,11 @@ async def seal_container(request: SealRequest):
             }
         else:
             # Client-side: Return .bar file data directly (Railway has ephemeral filesystem)
-            # Encode as base64 for JSON transport
             import base64
             bar_data_b64 = base64.b64encode(bar_data).decode('utf-8')
-            
-            # Clean up - don't store on server for client-side mode
             if os.path.exists(bar_path):
                 os.remove(bar_path)
-            
-            return {
+            result = {
                 "success": True,
                 "storage_mode": "client",
                 "bar_filename": bar_filename,
@@ -237,6 +301,7 @@ async def seal_container(request: SealRequest):
                 "metadata": metadata,
                 "message": "Container sealed successfully"
             }
+        return JSONResponse(content=result)
         
     except HTTPException:
         raise
@@ -244,7 +309,7 @@ async def seal_container(request: SealRequest):
         import traceback
         error_detail = f"Seal failed: {str(e)}\n{traceback.format_exc()}"
         print(error_detail)  # Log to console
-        raise HTTPException(status_code=500, detail=f"Seal failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=security.sanitize_error_message(str(e)))
 
 
 @app.get("/download/{bar_id}")
@@ -341,8 +406,7 @@ async def decrypt_bar(bar_id: str, request: DecryptRequest):
         
         # Return decrypted file
         original_filename = metadata.get("filename", "decrypted_file")
-        
-        return Response(
+        response = Response(
             content=decrypted_data,
             media_type="application/octet-stream",
             headers={
@@ -351,6 +415,7 @@ async def decrypt_bar(bar_id: str, request: DecryptRequest):
                 "X-BAR-Destroyed": str(should_destroy).lower()
             }
         )
+        return security.add_security_headers(response)
         
     except HTTPException:
         raise
@@ -359,11 +424,20 @@ async def decrypt_bar(bar_id: str, request: DecryptRequest):
 
 
 @app.post("/decrypt-upload")
-async def decrypt_uploaded_bar_file(file: UploadFile = File(...), password: str = Form("")):
+async def decrypt_uploaded_bar_file(req: Request, file: UploadFile = File(...), password: str = Form("")):
     """Decrypt a .bar file that was uploaded directly (tracks view count properly)"""
     try:
-        # Read uploaded .bar file
+        # Rate limit
+        security.check_rate_limit(req, limit=20)
+        
+        # Basic file validation
+        if not file.filename.lower().endswith('.bar'):
+            raise HTTPException(status_code=400, detail="Only .bar files are accepted")
+        
+        # Size guard (limit processed size)
         bar_data = await file.read()
+        if len(bar_data) > security.MAX_FILE_SIZE * 2:  # Allow larger for encrypted container
+            raise HTTPException(status_code=413, detail="File too large")
         
         # Unpack BAR file
         encrypted_data, metadata, key = crypto_utils.unpack_bar_file(bar_data)
