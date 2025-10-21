@@ -1,24 +1,29 @@
-[build]
-builder = "NIXPACKS"
-
 [[services]]
 name = "backend"
-source = "backend"
-
+root = "backend"
 [services.build]
-buildCommand = "pip install -r requirements.txt"
+builder = "NIXPACKS"
+
+[services.environment]
+PYTHON_VERSION = "3.11"
 
 [services.deploy]
 startCommand = "uvicorn app:app --host 0.0.0.0 --port $PORT"
 healthcheckPath = "/"
 healthcheckTimeout = 100
 
+[services.variables]
+FRONTEND_URL = ""
+
 [[services]]
-name = "frontend"
-source = "frontend"
+name = "frontend" 
+root = "frontend"
 
 [services.build]
-buildCommand = "npm install && npm run build"
+builder = "NIXPACKS"
 
 [services.deploy]
 startCommand = "npm run preview -- --host 0.0.0.0 --port $PORT"
+
+[services.variables]
+VITE_BACKEND_URL = ""
