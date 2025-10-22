@@ -18,8 +18,9 @@ const SharePage = ({ token }) => {
     setError(null);
 
     try {
-      // Call backend API with POST to avoid browser interception
-      const response = await axios.post(`/share/${token}`,
+      // Call backend API with POST (axios config will add base URL in production)
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+      const response = await axios.post(`${backendUrl}/share/${token}`,
         { password: password || null },
         { responseType: 'arraybuffer' }
       );
