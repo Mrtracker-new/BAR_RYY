@@ -66,11 +66,11 @@ class SealRequest(BaseModel):
 
     @validator('filename')
     def validate_filename(cls, v):
-        if not security.validate_filename(v):
+        if not v or len(v) > 255:
             raise ValueError('Invalid filename')
         if not security.validate_file_extension(v):
             raise ValueError('File type not allowed')
-        return security.sanitize_filename(v)
+        return v
 
     @validator('max_views')
     def validate_max_views(cls, v):
