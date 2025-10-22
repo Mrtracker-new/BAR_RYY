@@ -14,6 +14,7 @@ import crypto_utils
 import client_storage
 import server_storage
 import security
+import cleanup
 
 
 app = FastAPI(title="BAR Web API", version="1.0")
@@ -53,6 +54,14 @@ GENERATED_DIR = "generated"
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(GENERATED_DIR, exist_ok=True)
+
+# Start background cleanup task
+@app.on_event("startup")
+async def startup_event():
+    """Start background tasks on app startup"""
+    import asyncio
+    asyncio.create_task(cleanup.run_cleanup_loop())
+    print("🚀 BAR Web API started with cleanup task")
 
 
 class SealRequest(BaseModel):
