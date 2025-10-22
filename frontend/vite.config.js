@@ -13,6 +13,7 @@ export default defineConfig({
       '/download': backendUrl,
       '/decrypt': backendUrl,
       '/decrypt-upload': backendUrl,
+      '/share': backendUrl,
       '/info': backendUrl,
       '/api': backendUrl
     }
