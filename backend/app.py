@@ -15,6 +15,7 @@ import client_storage
 import server_storage
 import security
 import cleanup
+import database
 
 
 app = FastAPI(title="BAR Web API", version="1.0")
@@ -60,8 +61,18 @@ os.makedirs(GENERATED_DIR, exist_ok=True)
 async def startup_event():
     """Start background tasks on app startup"""
     import asyncio
+    # Initialize database
+    await database.init_database()
+    # Start cleanup task
     asyncio.create_task(cleanup.run_cleanup_loop())
-    print("🚀 BAR Web API started with cleanup task")
+    print("🚀 BAR Web API started with database and cleanup task")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Clean up on shutdown"""
+    await database.close_database()
+    print("👋 BAR Web API shutting down")
 
 
 class SealRequest(BaseModel):
@@ -280,14 +291,22 @@ async def seal_container(req: Request, request: SealRequest):
         
         # Generate response based on storage mode
         if request.storage_mode == 'server':
-            # Server-side: Generate access token and shareable link
+            # Server-side: Generate access token and save to database
             access_token = str(uuid.uuid4())
-            # Store mapping from token to bar_id (in production, use database)
-            # For now, we'll use the token as part of the filename
             token_bar_filename = f"{access_token}.bar"
             token_bar_path = os.path.join(GENERATED_DIR, token_bar_filename)
             # Rename the bar file to use token
             os.rename(bar_path, token_bar_path)
+            
+            # Save file record to database
+            await database.db.create_file_record(
+                token=access_token,
+                filename=request.filename,
+                bar_filename=token_bar_filename,
+                file_path=token_bar_path,
+                metadata=metadata
+            )
+            print(f"✅ Server-side file created: {access_token}")
             
         result = None
         if request.storage_mode == 'server':
@@ -525,10 +544,17 @@ async def share_file(token: str, request: DecryptRequest):
     """Server-side access endpoint - properly enforces view limits"""
     password = request.password or ""
     try:
-        # Find BAR file by token
-        bar_file = os.path.join(GENERATED_DIR, f"{token}.bar")
+        # Get file record from database
+        file_record = await database.db.get_file_record(token)
         
+        if not file_record:
+            raise HTTPException(status_code=404, detail="File not found or already destroyed")
+        
+        # Get file path and check if it exists
+        bar_file = file_record['file_path']
         if not os.path.exists(bar_file):
+            # File was deleted but record exists - clean up
+            await database.db.mark_as_destroyed(token)
             raise HTTPException(status_code=404, detail="File not found or already destroyed")
         
         # Read and unpack BAR file
@@ -537,12 +563,16 @@ async def share_file(token: str, request: DecryptRequest):
         
         encrypted_data, metadata, key = crypto_utils.unpack_bar_file(bar_data)
         
+        # Get current view count from database
+        current_views = file_record['current_views']
+        max_views = file_record['max_views']
+        
         print(f"\n=== SHARE ACCESS REQUEST ===")
         print(f"Token: {token}")
         print(f"Password provided: {bool(password and password.strip())}")
         print(f"Password protected: {metadata.get('password_protected')}")
         print(f"View only: {metadata.get('view_only')}")
-        print(f"Current views: {metadata.get('current_views')}/{metadata.get('max_views')}")
+        print(f"Current views (DB): {current_views}/{max_views}")
         
         # Validate password if protected
         if metadata.get("password_protected"):
@@ -569,12 +599,25 @@ async def share_file(token: str, request: DecryptRequest):
                 # For security, you should regenerate these files
                 print("⚠️ WARNING: File has password protection but no password_hash (old file format)")
         
-        # Validate access using SERVER storage module (full enforcement)
-        is_valid, errors = server_storage.validate_server_access(metadata, None, skip_password_check=True)
+        # Check if file has already reached max views (database is source of truth)
+        if current_views >= max_views:
+            raise HTTPException(status_code=403, detail=f"Maximum views reached ({current_views}/{max_views})")
         
-        if not is_valid:
-            print(f"❌ Access validation failed: {errors}")
-            raise HTTPException(status_code=403, detail="; ".join(errors))
+        # Check expiry from database record
+        if file_record.get('expires_at'):
+            from datetime import datetime
+            expires_at_str = file_record['expires_at']
+            if expires_at_str:
+                # Handle both SQLite (string) and PostgreSQL (datetime)
+                if isinstance(expires_at_str, str):
+                    if expires_at_str.endswith('Z'):
+                        expires_at_str = expires_at_str[:-1]
+                    expires_at = datetime.fromisoformat(expires_at_str)
+                else:
+                    expires_at = expires_at_str
+                
+                if datetime.utcnow() > expires_at:
+                    raise HTTPException(status_code=403, detail="File has expired")
         
         print("✅ Access validation passed")
         
@@ -589,19 +632,16 @@ async def share_file(token: str, request: DecryptRequest):
         if file_hash != metadata.get("file_hash"):
             raise HTTPException(status_code=500, detail="File integrity check failed")
         
-        # Update view count using server storage module
-        metadata = server_storage.increment_view_count(metadata)
-        should_destroy = server_storage.should_destroy_file(metadata)
-        views_remaining = server_storage.get_views_remaining(metadata)
+        # Update view count in database
+        success, views_remaining, should_destroy = await database.db.increment_view_count(token)
         
-        # CRITICAL: Update the .bar file on server with incremented view count
-        if not should_destroy:
-            updated_bar_data = crypto_utils.pack_bar_file(encrypted_data, metadata, key)
-            with open(bar_file, "wb") as f:
-                f.write(updated_bar_data)
-            print(f"✓ View count updated: {metadata['current_views']}/{metadata.get('max_views', 0)}")
-        else:
-            # Destroy the file (secure deletion)
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to update view count")
+        
+        print(f"✓ View count updated in database - {views_remaining} views remaining")
+        
+        # Destroy the file if view limit reached
+        if should_destroy:
             crypto_utils.secure_delete_file(bar_file)
             print(f"🔥 File destroyed after reaching max views")
         
