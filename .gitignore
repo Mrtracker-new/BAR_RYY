@@ -75,3 +75,8 @@ Desktop.ini
 
 # Local scripts
 restart-servers.bat
+
+# Database
+backend/bar_files.db
+bar_files.db
+*.db
