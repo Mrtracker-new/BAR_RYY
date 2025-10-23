@@ -2,7 +2,8 @@
 name = "backend"
 root = "backend"
 [services.build]
-builder = "NIXPACKS"
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
 
 [services.environment]
 PYTHON_VERSION = "3.11"
