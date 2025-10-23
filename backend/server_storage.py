@@ -5,12 +5,14 @@ This is the real deal for security! Files stay on OUR server, and users just
 get a link to access them. This means we can ACTUALLY enforce view limits!
 
 What we do here:
-- Track every single view 👀
+- Track every single view in the database 👀
 - Destroy files when the view limit is hit 💥
 - Check expiry times ⏰
 - Validate passwords 🔐
+- Persist across server restarts (Railway-safe!) 🚂
 
 This is way more secure than client-side because users can't just keep copies!
+Now with database backing, view limits survive server restarts!
 """
 
 from datetime import datetime, timedelta
@@ -127,11 +129,14 @@ def get_storage_info() -> dict:
         "view_limit_enforcement": True,
         "expiry_support": True,
         "password_support": True,
-        "description": "Server-side files with shareable links. View limits are properly enforced.",
+        "database_persistence": True,
+        "description": "Server-side files with shareable links. View limits are properly enforced and persist across restarts.",
         "features": [
             "View count limits properly enforced",
             "Files auto-destruct when limits reached",
             "Shareable links (no file downloads)",
-            "Cannot be copied by users"
+            "Cannot be copied by users",
+            "Database persistence (Railway-safe)",
+            "Survives server restarts"
         ]
     }
