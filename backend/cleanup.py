@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 import asyncio
 import json
 import crypto_utils
+import database
 
 # Directories
 UPLOAD_DIR = "uploads"
@@ -50,64 +51,59 @@ def cleanup_old_uploads():
         print(f"✅ Cleaned {cleaned} old upload(s)")
 
 
-def cleanup_expired_bar_files():
-    """Remove expired server-side .bar files"""
+async def cleanup_expired_bar_files():
+    """Remove expired server-side .bar files using database queries"""
     if not os.path.exists(GENERATED_DIR):
         return
     
-    now = datetime.now()
     cleaned = 0
     
     try:
-        for filename in os.listdir(GENERATED_DIR):
-            if not filename.endswith('.bar'):
-                continue
-            
-            filepath = os.path.join(GENERATED_DIR, filename)
+        # Get expired files from database
+        expired_files = await database.db.get_expired_files()
+        
+        for file_record in expired_files:
+            file_path = file_record['file_path']
+            token = file_record['token']
             
             try:
-                # Read BAR file metadata to check expiry
-                with open(filepath, 'rb') as f:
-                    bar_data = f.read()
+                if os.path.exists(file_path):
+                    crypto_utils.secure_delete_file(file_path)
+                    print(f"🧹 Deleted expired file: {file_record['filename']} (token: {token[:8]})")
                 
-                # Unpack to get metadata
-                encrypted_data, metadata, key = crypto_utils.unpack_bar_file(bar_data)
+                # Mark as destroyed in database
+                await database.db.mark_as_destroyed(token)
+                cleaned += 1
                 
-                # Check if expired
-                expires_at = metadata.get('expires_at')
-                if expires_at:
-                    expiry_time = datetime.fromisoformat(expires_at)
-                    if now > expiry_time:
-                        # File expired - delete it
-                        crypto_utils.secure_delete_file(filepath)
-                        cleaned += 1
-                        print(f"🧹 Deleted expired file: {filename}")
-                
-                # Also check if max views reached (shouldn't happen but safety check)
-                storage_mode = metadata.get('storage_mode', 'client')
-                if storage_mode == 'server':
-                    max_views = metadata.get('max_views', 0)
-                    current_views = metadata.get('current_views', 0)
-                    if max_views > 0 and current_views >= max_views:
-                        crypto_utils.secure_delete_file(filepath)
-                        cleaned += 1
-                        print(f"🧹 Deleted exhausted file: {filename}")
-                        
             except Exception as e:
-                # If we can't read the file, it might be corrupted
-                # Check if it's very old (>7 days) and delete
-                file_age = os.path.getmtime(filepath)
-                age_days = (time.time() - file_age) / 86400
-                if age_days > 7:
-                    try:
-                        os.remove(filepath)
-                        cleaned += 1
-                        print(f"🧹 Deleted corrupted/old file: {filename}")
-                    except:
-                        pass
+                print(f"⚠️ Failed to clean expired file {token[:8]}: {e}")
+        
+        # Get exhausted files (reached max views)
+        exhausted_files = await database.db.get_exhausted_files()
+        
+        for file_record in exhausted_files:
+            file_path = file_record['file_path']
+            token = file_record['token']
+            
+            try:
+                if os.path.exists(file_path):
+                    crypto_utils.secure_delete_file(file_path)
+                    print(f"🧹 Deleted exhausted file: {file_record['filename']} (token: {token[:8]})")
+                
+                # Mark as destroyed in database
+                await database.db.mark_as_destroyed(token)
+                cleaned += 1
+                
+            except Exception as e:
+                print(f"⚠️ Failed to clean exhausted file {token[:8]}: {e}")
+        
+        # Clean up old database records (destroyed files older than 7 days)
+        old_records_cleaned = await database.db.cleanup_old_records(days=7)
+        if old_records_cleaned > 0:
+            print(f"🧹 Cleaned {old_records_cleaned} old database record(s)")
     
     except Exception as e:
-        print(f"⚠️ BAR cleanup error: {e}")
+        print(f"⚠️ Database cleanup error: {e}")
     
     if cleaned > 0:
         print(f"✅ Cleaned {cleaned} expired/exhausted .bar file(s)")
@@ -124,8 +120,8 @@ async def run_cleanup_loop():
             # Clean old uploads
             cleanup_old_uploads()
             
-            # Clean expired BAR files
-            cleanup_expired_bar_files()
+            # Clean expired BAR files using database
+            await cleanup_expired_bar_files()
             
             print(f"✓ Cleanup complete\n")
             
