@@ -139,6 +139,10 @@ class Database:
             created_at = metadata.get("created_at", datetime.utcnow().isoformat())
             
             if self.is_postgres:
+                # Convert ISO strings to datetime objects for PostgreSQL
+                expires_at_dt = datetime.fromisoformat(expires_at.replace('Z', '+00:00')) if expires_at else None
+                created_at_dt = datetime.fromisoformat(created_at.replace('Z', '+00:00')) if isinstance(created_at, str) else created_at
+                
                 async with self.pool.acquire() as conn:
                     await conn.execute("""
                         INSERT INTO bar_files 
@@ -146,7 +150,7 @@ class Database:
                          current_views, max_views, expires_at, created_at)
                         VALUES ($1, $2, $3, $4, $5, 0, $6, $7, $8)
                     """, token, filename, bar_filename, file_path, 
-                       json.dumps(metadata), max_views, expires_at, created_at)
+                       json.dumps(metadata), max_views, expires_at_dt, created_at_dt)
             else:
                 async with aiosqlite.connect(self.db_path) as db:
                     await db.execute("""
