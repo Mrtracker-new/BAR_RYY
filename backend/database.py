@@ -11,7 +11,7 @@ Supports:
 import os
 import json
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any
 import aiosqlite
 from contextlib import asynccontextmanager
@@ -142,12 +142,22 @@ class Database:
         try:
             max_views = metadata.get("max_views", 1)
             expires_at = metadata.get("expires_at")
-            created_at = metadata.get("created_at", datetime.utcnow().isoformat())
+            created_at = metadata.get("created_at", datetime.now(timezone.utc).isoformat())
             
             if self.is_postgres:
-                # Convert ISO strings to datetime objects for PostgreSQL
-                expires_at_dt = datetime.fromisoformat(expires_at.replace('Z', '+00:00')) if expires_at else None
-                created_at_dt = datetime.fromisoformat(created_at.replace('Z', '+00:00')) if isinstance(created_at, str) else created_at
+                # Convert ISO strings to timezone-aware datetime objects for PostgreSQL
+                if expires_at:
+                    if isinstance(expires_at, str):
+                        expires_at_dt = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+                    else:
+                        expires_at_dt = expires_at
+                else:
+                    expires_at_dt = None
+                
+                if isinstance(created_at, str):
+                    created_at_dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                else:
+                    created_at_dt = created_at
                 
                 async with self.pool.acquire() as conn:
                     await conn.execute("""
@@ -228,7 +238,7 @@ class Database:
                         SET current_views = current_views + 1,
                             last_accessed_at = ?
                         WHERE token = ? AND destroyed = 0
-                    """, (datetime.utcnow().isoformat(), token))
+                    """, (datetime.now(timezone.utc).isoformat(), token))
                     await db.commit()
                     
                     async with db.execute(
@@ -277,7 +287,7 @@ class Database:
     async def get_expired_files(self) -> list[Dict[str, Any]]:
         """Get all files that have expired"""
         try:
-            now = datetime.utcnow().isoformat()
+            now = datetime.now(timezone.utc).isoformat()
             
             if self.is_postgres:
                 async with self.pool.acquire() as conn:
@@ -333,8 +343,8 @@ class Database:
     async def cleanup_old_records(self, days: int = 7) -> int:
         """Clean up old destroyed records from database"""
         try:
-            cutoff = datetime.utcnow().timestamp() - (days * 86400)
-            cutoff_dt = datetime.fromtimestamp(cutoff)
+            now = datetime.now(timezone.utc)
+            cutoff_dt = now - timedelta(days=days)
             cutoff_iso = cutoff_dt.isoformat()
             
             if self.is_postgres:

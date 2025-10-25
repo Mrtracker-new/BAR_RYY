@@ -15,7 +15,7 @@ This is way more secure than client-side because users can't just keep copies!
 Now with database backing, view limits survive server restarts!
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 
 
@@ -28,11 +28,12 @@ def create_server_metadata(
     view_only: bool = False
 ) -> dict:
     """Create metadata for a server-side file (we keep track of EVERYTHING here!)"""
-    created_at = datetime.utcnow().isoformat() + 'Z'
+    now = datetime.now(timezone.utc)
+    created_at = now.isoformat().replace('+00:00', 'Z')
     expires_at = None
     
     if expiry_minutes > 0:
-        expires_at = (datetime.utcnow() + timedelta(minutes=expiry_minutes)).isoformat() + 'Z'
+        expires_at = (now + timedelta(minutes=expiry_minutes)).isoformat().replace('+00:00', 'Z')
     
     metadata = {
         "filename": filename,
@@ -71,9 +72,9 @@ def validate_server_access(
     if metadata.get("expires_at"):
         expires_at_str = metadata["expires_at"]
         if expires_at_str.endswith('Z'):
-            expires_at_str = expires_at_str[:-1]  # Remove the Z
+            expires_at_str = expires_at_str[:-1] + '+00:00'  # Convert Z to +00:00
         expires_at = datetime.fromisoformat(expires_at_str)
-        if datetime.utcnow() > expires_at:
+        if datetime.now(timezone.utc) > expires_at:
             errors.append("File has expired")  # Time's up!
     
     # Now the big one - check if we've hit the view limit!
