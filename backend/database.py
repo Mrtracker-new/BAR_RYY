@@ -145,33 +145,32 @@ class Database:
             created_at = metadata.get("created_at", datetime.now(timezone.utc).isoformat())
             
             if self.is_postgres:
-                # Convert ISO strings to timezone-aware datetime objects for PostgreSQL
+                # Convert to naive UTC datetime for PostgreSQL TIMESTAMP columns
+                # (TIMESTAMP doesn't store timezone, so we use naive UTC)
                 if expires_at:
                     if isinstance(expires_at, str):
-                        # Handle both Z and +00:00 formats, ensure timezone-aware
                         expires_str = expires_at.replace('Z', '+00:00')
                         expires_at_dt = datetime.fromisoformat(expires_str)
-                        # Ensure it's timezone-aware
-                        if expires_at_dt.tzinfo is None:
-                            expires_at_dt = expires_at_dt.replace(tzinfo=timezone.utc)
+                        # Convert to naive UTC
+                        if expires_at_dt.tzinfo is not None:
+                            expires_at_dt = expires_at_dt.astimezone(timezone.utc).replace(tzinfo=None)
                     else:
                         expires_at_dt = expires_at
-                        if expires_at_dt.tzinfo is None:
-                            expires_at_dt = expires_at_dt.replace(tzinfo=timezone.utc)
+                        if expires_at_dt.tzinfo is not None:
+                            expires_at_dt = expires_at_dt.astimezone(timezone.utc).replace(tzinfo=None)
                 else:
                     expires_at_dt = None
                 
                 if isinstance(created_at, str):
-                    # Handle both Z and +00:00 formats, ensure timezone-aware
                     created_str = created_at.replace('Z', '+00:00')
                     created_at_dt = datetime.fromisoformat(created_str)
-                    # Ensure it's timezone-aware
-                    if created_at_dt.tzinfo is None:
-                        created_at_dt = created_at_dt.replace(tzinfo=timezone.utc)
+                    # Convert to naive UTC
+                    if created_at_dt.tzinfo is not None:
+                        created_at_dt = created_at_dt.astimezone(timezone.utc).replace(tzinfo=None)
                 else:
                     created_at_dt = created_at
-                    if created_at_dt.tzinfo is None:
-                        created_at_dt = created_at_dt.replace(tzinfo=timezone.utc)
+                    if created_at_dt.tzinfo is not None:
+                        created_at_dt = created_at_dt.astimezone(timezone.utc).replace(tzinfo=None)
                 
                 async with self.pool.acquire() as conn:
                     await conn.execute("""
@@ -359,6 +358,8 @@ class Database:
         try:
             now = datetime.now(timezone.utc)
             cutoff_dt = now - timedelta(days=days)
+            # Convert to naive UTC for PostgreSQL TIMESTAMP
+            cutoff_dt_naive = cutoff_dt.replace(tzinfo=None)
             cutoff_iso = cutoff_dt.isoformat()
             
             if self.is_postgres:
@@ -367,7 +368,7 @@ class Database:
                         DELETE FROM bar_files 
                         WHERE destroyed = TRUE 
                         AND created_at < $1
-                    """, cutoff_dt)
+                    """, cutoff_dt_naive)
                     # Extract count from result
                     return 0  # asyncpg doesn't easily return count
             else:
