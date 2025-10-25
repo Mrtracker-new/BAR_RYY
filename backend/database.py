@@ -328,7 +328,8 @@ class Database:
         """Clean up old destroyed records from database"""
         try:
             cutoff = datetime.utcnow().timestamp() - (days * 86400)
-            cutoff_iso = datetime.fromtimestamp(cutoff).isoformat()
+            cutoff_dt = datetime.fromtimestamp(cutoff)
+            cutoff_iso = cutoff_dt.isoformat()
             
             if self.is_postgres:
                 async with self.pool.acquire() as conn:
@@ -336,7 +337,7 @@ class Database:
                         DELETE FROM bar_files 
                         WHERE destroyed = TRUE 
                         AND created_at < $1
-                    """, cutoff_iso)
+                    """, cutoff_dt)
                     # Extract count from result
                     return 0  # asyncpg doesn't easily return count
             else:
