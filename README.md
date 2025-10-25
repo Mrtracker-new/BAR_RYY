@@ -221,6 +221,18 @@ This separation ensures we're **honest** about what can and can't be enforced!
 - **Server-Side Only**: Only works for files stored on the server (not client-downloaded files)
 - **Automatic**: All file deletions use secure deletion automatically
 
+## 🚀 Deploying to Production
+
+Want to deploy this app for free? Check out **[DEPLOYMENT.md](DEPLOYMENT.md)** for a complete guide!
+
+**Quick summary:**
+- **Frontend**: Vercel (free forever)
+- **Backend**: Render (free forever, sleeps after 15min)
+- **Database**: Supabase PostgreSQL (free forever, 500MB)
+- **Total cost**: $0/month! 🎉
+
+The deployment guide includes step-by-step instructions, troubleshooting tips, and environment variable setup.
+
 ## If You Run Into Issues
 
 **"Port already in use" error:**
