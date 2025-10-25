@@ -83,11 +83,17 @@ class Database:
     async def _init_postgres(self):
         """Initialize PostgreSQL database"""
         # Parse DATABASE_URL for asyncpg
-        # Railway format: postgresql://user:pass@host:port/db
+        # Supabase uses pgBouncer which requires statement_cache_size=0
         db_url = DATABASE_URL.replace("postgresql://", "")
         
         try:
-            self.pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=10)
+            # Disable statement cache for pgBouncer compatibility
+            self.pool = await asyncpg.create_pool(
+                DATABASE_URL, 
+                min_size=1, 
+                max_size=10,
+                statement_cache_size=0
+            )
             
             async with self.pool.acquire() as conn:
                 await conn.execute("""
