@@ -148,16 +148,30 @@ class Database:
                 # Convert ISO strings to timezone-aware datetime objects for PostgreSQL
                 if expires_at:
                     if isinstance(expires_at, str):
-                        expires_at_dt = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+                        # Handle both Z and +00:00 formats, ensure timezone-aware
+                        expires_str = expires_at.replace('Z', '+00:00')
+                        expires_at_dt = datetime.fromisoformat(expires_str)
+                        # Ensure it's timezone-aware
+                        if expires_at_dt.tzinfo is None:
+                            expires_at_dt = expires_at_dt.replace(tzinfo=timezone.utc)
                     else:
                         expires_at_dt = expires_at
+                        if expires_at_dt.tzinfo is None:
+                            expires_at_dt = expires_at_dt.replace(tzinfo=timezone.utc)
                 else:
                     expires_at_dt = None
                 
                 if isinstance(created_at, str):
-                    created_at_dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                    # Handle both Z and +00:00 formats, ensure timezone-aware
+                    created_str = created_at.replace('Z', '+00:00')
+                    created_at_dt = datetime.fromisoformat(created_str)
+                    # Ensure it's timezone-aware
+                    if created_at_dt.tzinfo is None:
+                        created_at_dt = created_at_dt.replace(tzinfo=timezone.utc)
                 else:
                     created_at_dt = created_at
+                    if created_at_dt.tzinfo is None:
+                        created_at_dt = created_at_dt.replace(tzinfo=timezone.utc)
                 
                 async with self.pool.acquire() as conn:
                     await conn.execute("""
