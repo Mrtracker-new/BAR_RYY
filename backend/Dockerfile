@@ -18,7 +18,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Expose port (Railway will override with $PORT)
+# Expose port (Render will override with $PORT)
 EXPOSE 8000
 
 # Start command
