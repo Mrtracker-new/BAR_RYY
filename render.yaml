@@ -19,7 +19,6 @@ services:
   - type: web
     name: bar-web-frontend
     env: static
-    region: oregon
     plan: free
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
