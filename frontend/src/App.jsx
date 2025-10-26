@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { Routes, Route, useParams } from 'react-router-dom';
 import axios from './config/axios';
-import { Download, PackageOpen, AlertCircle, Link2, Copy } from 'lucide-react';
+import { Download, PackageOpen, AlertCircle, Link2, Copy, BarChart3 } from 'lucide-react';
 import FileUpload from './components/FileUpload';
 import RulesPanel from './components/RulesPanel';
 import ContainerAnimation from './components/ContainerAnimation';
-import DecryptPage from './components/DecryptPage';
 import SharePage from './components/SharePage';
+import AnalyticsDashboard from './components/AnalyticsDashboard';
 import Toast from './components/Toast';
+import DecryptPage from './components/DecryptPage';
 
 // Wrapper component for share page route
 const SharePageWrapper = () => {
@@ -29,11 +30,12 @@ function MainApp() {
     webhookUrl: '',
     viewOnly: false
   });
-  const [isSealing, setIsSealing] = useState(false);
   const [barResult, setBarResult] = useState(null);
-  const [error, setError] = useState(null);
-  const [showDecrypt, setShowDecrypt] = useState(false);
+  const [isSealing, setIsSealing] = useState(false);
   const [toast, setToast] = useState(null);
+  const [showAnalytics, setShowAnalytics] = useState(false);
+  const [showDecrypt, setShowDecrypt] = useState(false);
+  const [error, setError] = useState(null);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -330,6 +332,16 @@ function MainApp() {
                         </button>
                       </div>
                     </div>
+                    
+                    {/* Analytics Button */}
+                    <button
+                      onClick={() => setShowAnalytics(true)}
+                      className="w-full py-3 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/50 text-purple-400 font-semibold rounded-lg transition-all duration-300 flex items-center justify-center space-x-2"
+                    >
+                      <BarChart3 size={20} />
+                      <span>View Analytics Dashboard</span>
+                    </button>
+                    
                     <p className="text-sm text-gray-400 text-center">
                       Share this link with anyone. View limits will be properly enforced! 🔐
                     </p>
@@ -377,6 +389,14 @@ function MainApp() {
           message={toast.message}
           type={toast.type}
           onClose={() => setToast(null)}
+        />
+      )}
+
+      {/* Analytics Dashboard */}
+      {showAnalytics && barResult && barResult.analytics_token && (
+        <AnalyticsDashboard
+          token={barResult.analytics_token}
+          onClose={() => setShowAnalytics(false)}
         />
       )}
 
