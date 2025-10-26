@@ -77,6 +77,26 @@ class Database:
                 ON bar_files(destroyed)
             """)
             
+            # Access logs table for analytics
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS access_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    token TEXT NOT NULL,
+                    accessed_at TEXT NOT NULL,
+                    ip_address TEXT,
+                    user_agent TEXT,
+                    country TEXT,
+                    city TEXT,
+                    device_type TEXT,
+                    FOREIGN KEY (token) REFERENCES bar_files(token) ON DELETE CASCADE
+                )
+            """)
+            
+            await db.execute("""
+                CREATE INDEX IF NOT EXISTS idx_access_token 
+                ON access_logs(token)
+            """)
+            
             await db.commit()
             print("✅ SQLite database initialized")
     
@@ -121,6 +141,26 @@ class Database:
                 await conn.execute("""
                     CREATE INDEX IF NOT EXISTS idx_destroyed 
                     ON bar_files(destroyed)
+                """)
+                
+                # Access logs table for analytics
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS access_logs (
+                        id SERIAL PRIMARY KEY,
+                        token TEXT NOT NULL,
+                        accessed_at TIMESTAMP NOT NULL,
+                        ip_address TEXT,
+                        user_agent TEXT,
+                        country TEXT,
+                        city TEXT,
+                        device_type TEXT,
+                        FOREIGN KEY (token) REFERENCES bar_files(token) ON DELETE CASCADE
+                    )
+                """)
+                
+                await conn.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_access_token 
+                    ON access_logs(token)
                 """)
                 
             print("✅ PostgreSQL database initialized")
@@ -384,6 +424,106 @@ class Database:
         except Exception as e:
             print(f"❌ Failed to cleanup old records: {e}")
             return 0
+    
+    async def log_access(
+        self,
+        token: str,
+        ip_address: str,
+        user_agent: str,
+        country: Optional[str] = None,
+        city: Optional[str] = None,
+        device_type: Optional[str] = None
+    ) -> bool:
+        """Log a file access for analytics"""
+        try:
+            accessed_at = datetime.now(timezone.utc)
+            
+            if self.is_postgres:
+                accessed_at_naive = accessed_at.replace(tzinfo=None)
+                async with self.pool.acquire() as conn:
+                    await conn.execute("""
+                        INSERT INTO access_logs 
+                        (token, accessed_at, ip_address, user_agent, country, city, device_type)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    """, token, accessed_at_naive, ip_address, user_agent, country, city, device_type)
+            else:
+                async with aiosqlite.connect(self.db_path) as db:
+                    await db.execute("""
+                        INSERT INTO access_logs 
+                        (token, accessed_at, ip_address, user_agent, country, city, device_type)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (token, accessed_at.isoformat(), ip_address, user_agent, country, city, device_type))
+                    await db.commit()
+            
+            return True
+        except Exception as e:
+            print(f"❌ Failed to log access: {e}")
+            return False
+    
+    async def get_analytics(self, token: str) -> Optional[Dict[str, Any]]:
+        """Get analytics data for a file"""
+        try:
+            if self.is_postgres:
+                async with self.pool.acquire() as conn:
+                    # Get file info
+                    file_row = await conn.fetchrow(
+                        "SELECT * FROM bar_files WHERE token = $1",
+                        token
+                    )
+                    if not file_row:
+                        return None
+                    
+                    # Get access logs
+                    log_rows = await conn.fetch("""
+                        SELECT * FROM access_logs 
+                        WHERE token = $1 
+                        ORDER BY accessed_at DESC
+                    """, token)
+                    
+                    logs = [dict(row) for row in log_rows]
+            else:
+                async with aiosqlite.connect(self.db_path) as db:
+                    db.row_factory = aiosqlite.Row
+                    
+                    # Get file info
+                    async with db.execute(
+                        "SELECT * FROM bar_files WHERE token = ?",
+                        (token,)
+                    ) as cursor:
+                        file_row = await cursor.fetchone()
+                        if not file_row:
+                            return None
+                    
+                    # Get access logs
+                    async with db.execute("""
+                        SELECT * FROM access_logs 
+                        WHERE token = ? 
+                        ORDER BY accessed_at DESC
+                    """, (token,)) as cursor:
+                        log_rows = await cursor.fetchall()
+                        logs = [dict(row) for row in log_rows]
+            
+            file_info = dict(file_row)
+            
+            # Parse metadata if it's a string
+            if isinstance(file_info.get('metadata'), str):
+                file_info['metadata'] = json.loads(file_info['metadata'])
+            
+            return {
+                "file": file_info,
+                "access_logs": logs,
+                "total_accesses": len(logs),
+                "unique_ips": len(set(log.get('ip_address') for log in logs if log.get('ip_address'))),
+                "countries": list(set(log.get('country') for log in logs if log.get('country'))),
+                "device_types": {
+                    device: sum(1 for log in logs if log.get('device_type') == device)
+                    for device in set(log.get('device_type') for log in logs if log.get('device_type'))
+                }
+            }
+            
+        except Exception as e:
+            print(f"❌ Failed to get analytics: {e}")
+            return None
     
     async def close(self):
         """Close database connections"""
