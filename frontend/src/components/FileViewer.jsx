@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Eye, Download, AlertTriangle } from 'lucide-react';
 import Toast from './Toast';
+import ContentProtection from './ContentProtection';
 
 const FileViewer = ({ fileData, fileName, fileType, onClose, allowDownload = true }) => {
   const [dataUrl, setDataUrl] = useState(null);
@@ -160,6 +161,12 @@ const FileViewer = ({ fileData, fileName, fileType, onClose, allowDownload = tru
               src={dataUrl} 
               alt={fileName}
               className="max-w-full max-h-[600px] object-contain rounded"
+              style={{
+                filter: 'none',
+                WebkitUserSelect: 'none',
+                pointerEvents: 'none'
+              }}
+              draggable={false}
             />
           </div>
         );
@@ -170,7 +177,14 @@ const FileViewer = ({ fileData, fileName, fileType, onClose, allowDownload = tru
             <video 
               src={dataUrl} 
               controls 
+              controlsList="nodownload"
+              disablePictureInPicture
               className="w-full max-h-[600px] rounded"
+              style={{
+                WebkitUserSelect: 'none',
+                pointerEvents: 'auto'
+              }}
+              onContextMenu={(e) => e.preventDefault()}
             >
               Your browser does not support video playback.
             </video>
@@ -278,6 +292,7 @@ const FileViewer = ({ fileData, fileName, fileType, onClose, allowDownload = tru
         onClose={() => setToast(null)}
       />
     )}
+    <ContentProtection enabled={true} watermarkText="View-Only • BAR-Web">
     <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-dark-800 border border-dark-700 rounded-xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
@@ -336,6 +351,7 @@ const FileViewer = ({ fileData, fileName, fileType, onClose, allowDownload = tru
         </div>
       </div>
     </div>
+    </ContentProtection>
     </>
   );
 };
