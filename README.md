@@ -26,6 +26,7 @@ Pretty neat, right?
 - **Password Protection**: Lock your files with a password using PBKDF2 key derivation
 - **Time Bombs**: Set files to expire after minutes, hours, or days
 - **View-Only Mode**: Let people preview files in-browser without downloading
+- **Screenshot Protection**: Watermarks and blur-on-unfocus to discourage sneaky screenshots
 - **AES-256 Encryption**: Industry-standard encryption
 - **File Integrity Checks**: SHA-256 hashes detect tampering
 - **Webhook Alerts**: Get notified when someone views your file (coming soon)
@@ -40,6 +41,7 @@ Pretty neat, right?
   - Data files (JSON, XML, CSV, SQL)
   - Web files (HTML renders in iframe!)
   - Text files (Markdown, YAML, logs, etc.)
+- **Smart Content Protection**: Watermarks show up in screenshots, content blurs when you switch windows
 - **Dark Theme**: Easy on the eyes
 - **Responsive Design**: Works on desktop and mobile
 - **Real-time Metadata Display**: See file info, expiry, and access controls
@@ -126,11 +128,12 @@ BAR-Web/
 │   ├── src/
 │   │   ├── App.jsx             # Main app component
 │   │   ├── components/
-│   │   │   ├── FileUpload.jsx  # Drag-n-drop upload
-│   │   │   ├── FileViewer.jsx  # Rich file preview (50+ formats)
-│   │   │   ├── RulesPanel.jsx  # Security rules configuration
-│   │   │   ├── SharePage.jsx   # Server-side file access
-│   │   │   └── DecryptPage.jsx # Client-side file decryption
+│   │   │   ├── FileUpload.jsx       # Drag-n-drop upload
+│   │   │   ├── FileViewer.jsx       # Rich file preview (50+ formats)
+│   │   │   ├── ContentProtection.jsx # Screenshot protection (watermark + blur)
+│   │   │   ├── RulesPanel.jsx       # Security rules configuration
+│   │   │   ├── SharePage.jsx        # Server-side file access
+│   │   │   └── DecryptPage.jsx      # Client-side file decryption
 │   │   ├── main.jsx            # React entry point
 │   │   └── index.css           # Global styles
 │   ├── package.json            # NPM dependencies
@@ -249,6 +252,22 @@ This separation ensures we're **honest** about what can and can't be enforced!
 - Client-side files DON'T enforce view limits (by design)
 - Switch to server-side mode if you need view count enforcement
 
+## Screenshot Protection 📸
+
+We know screenshots are tricky. While we can't completely prevent them (even Netflix with DRM can't), we've added layers of defense:
+
+### What Works
+✅ **Watermarks**: Always visible in screenshots - traces back to the viewer  
+✅ **Blur on focus loss**: Content automatically blurs when you switch apps (Alt+Tab)  
+✅ **Blur on mouse leave**: Content blurs when your cursor leaves the browser  
+✅ **Mobile support**: Works on iOS/Android with app-switch detection  
+
+### What Doesn't Work
+❌ **Win+Shift+S detection**: Windows Snipping Tool freezes the screen before JavaScript can react  
+❌ **100% prevention**: Determined users can still screenshot (physical cameras, OS tools, etc.)  
+
+**Bottom line**: The watermark is your best defense - it's always there, even in sneaky screenshots.
+
 ## Future Features (Ideas)
 
 Things I'm thinking about adding:
@@ -260,7 +279,6 @@ Things I'm thinking about adding:
 - ⏱️ Live countdown timers for expiring files
 - 🌐 Geolocation restrictions
 - 🛡️ Rate limiting and CAPTCHA
-- 💧 Watermarking for view-only files
 
 ## Contributing
 
