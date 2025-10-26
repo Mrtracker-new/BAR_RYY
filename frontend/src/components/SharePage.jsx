@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from '../config/axios';
 import { Lock, Download, AlertCircle, FileCheck } from 'lucide-react';
+import ContentProtection from './ContentProtection';
 
 const SharePage = ({ token }) => {
   const [password, setPassword] = useState('');
@@ -184,6 +185,7 @@ const SharePage = ({ token }) => {
 
             {/* File Viewer for View-Only Mode */}
             {fileData && isViewOnly && (
+              <ContentProtection enabled={true} watermarkText={`View-Only • ${token.substring(0, 8)}`}>
               <div className="mt-6 border-2 border-gold-500 rounded-lg overflow-hidden bg-dark-900">
                 <div className="bg-gold-500/20 p-3 border-b border-gold-500">
                   <p className="text-gold-500 font-semibold text-sm">
@@ -196,13 +198,30 @@ const SharePage = ({ token }) => {
                 <div className="p-4 max-h-96 overflow-auto">
                   {fileName && (
                     fileName.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i) ? (
-                      <img src={fileData} alt={fileName} className="max-w-full h-auto mx-auto" />
+                      <img 
+                        src={fileData} 
+                        alt={fileName} 
+                        className="max-w-full h-auto mx-auto"
+                        draggable={false}
+                        style={{ pointerEvents: 'none' }}
+                      />
                     ) : fileName.match(/\.(mp4|webm|ogg)$/i) ? (
-                      <video controls className="max-w-full h-auto mx-auto">
+                      <video 
+                        controls 
+                        controlsList="nodownload"
+                        disablePictureInPicture
+                        className="max-w-full h-auto mx-auto"
+                        onContextMenu={(e) => e.preventDefault()}
+                      >
                         <source src={fileData} />
                       </video>
                     ) : fileName.match(/\.(mp3|wav|ogg)$/i) ? (
-                      <audio controls className="w-full">
+                      <audio 
+                        controls 
+                        controlsList="nodownload"
+                        className="w-full"
+                        onContextMenu={(e) => e.preventDefault()}
+                      >
                         <source src={fileData} />
                       </audio>
                     ) : fileName.match(/\.pdf$/i) ? (
@@ -222,6 +241,7 @@ const SharePage = ({ token }) => {
                   )}
                 </div>
               </div>
+              </ContentProtection>
             )}
           </div>
         </div>
