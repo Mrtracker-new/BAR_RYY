@@ -16,6 +16,7 @@ import server_storage
 import security
 import cleanup
 import database
+import analytics
 
 
 app = FastAPI(title="BAR Web API", version="1.0")
@@ -315,6 +316,8 @@ async def seal_container(req: Request, request: SealRequest):
                 "storage_mode": "server",
                 "access_token": access_token,
                 "share_url": f"/share/{access_token}",
+                "analytics_url": f"/analytics/{access_token}",
+                "analytics_token": access_token,  # Same token for simplicity
                 "metadata": metadata,
                 "message": "Container sealed and stored on server"
             }
@@ -540,7 +543,7 @@ async def decrypt_uploaded_bar_file(req: Request, file: UploadFile = File(...), 
 
 
 @app.post("/share/{token}")
-async def share_file(token: str, request: DecryptRequest):
+async def share_file(token: str, req: Request, request: DecryptRequest):
     """Server-side access endpoint - properly enforces view limits"""
     password = request.password or ""
     try:
@@ -632,6 +635,26 @@ async def share_file(token: str, request: DecryptRequest):
         if file_hash != metadata.get("file_hash"):
             raise HTTPException(status_code=500, detail="File integrity check failed")
         
+        # Log access for analytics
+        ip_address = analytics.get_client_ip(req)
+        user_agent = req.headers.get("User-Agent", "Unknown")
+        device_type = analytics.get_device_type(user_agent)
+        
+        # Get geolocation (async, non-blocking)
+        geo_data = await analytics.get_geolocation(ip_address)
+        country = geo_data.get("country") if geo_data else None
+        city = geo_data.get("city") if geo_data else None
+        
+        # Log the access
+        await database.db.log_access(
+            token=token,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            country=country,
+            city=city,
+            device_type=device_type
+        )
+        
         # Update view count in database
         success, views_remaining, should_destroy = await database.db.increment_view_count(token)
         
@@ -716,6 +739,23 @@ async def get_bar_info(bar_id: str):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Info retrieval failed: {str(e)}")
+
+
+@app.get("/analytics/{token}")
+async def get_analytics(token: str):
+    """Get analytics data for a server-side file"""
+    try:
+        analytics_data = await database.db.get_analytics(token)
+        
+        if not analytics_data:
+            raise HTTPException(status_code=404, detail="File not found or no analytics data available")
+        
+        return analytics_data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve analytics: {str(e)}")
 
 
 if __name__ == "__main__":
