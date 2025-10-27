@@ -67,6 +67,7 @@ const SharePage = ({ token }) => {
   const handleDownload = async () => {
     setIsLoading(true);
     setError(null);
+    setSuccessMessage(null);
 
     try {
       // Call backend API with POST (axios config will add base URL in production)
@@ -140,7 +141,14 @@ const SharePage = ({ token }) => {
             detail = err.response.data.detail;
           }
         }
-        errorMsg = '🚫 Access denied: ' + detail;
+        
+        // Check if it's a 2FA error
+        if (detail.includes('2FA') || detail.includes('OTP')) {
+          setRequireOtp(true);
+          errorMsg = detail;
+        } else {
+          errorMsg = '🚫 Access denied: ' + detail;
+        }
       } else if (err.response?.data?.detail) {
         errorMsg += err.response.data.detail;
       } else {
@@ -187,8 +195,8 @@ const SharePage = ({ token }) => {
             )}
 
             <div className="space-y-4">
-              {/* Check if OTP error (indicates 2FA is required) */}
-              {error && error.includes('2FA') && !otpVerified ? (
+              {/* Check if OTP is required */}
+              {requireOtp && !otpVerified ? (
                 <>
                   {/* OTP Request Section */}
                   {!otpSent ? (
