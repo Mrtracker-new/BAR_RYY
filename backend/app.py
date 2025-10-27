@@ -4,6 +4,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, validator
 from typing import Optional
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 import uuid
 import shutil
 import json
@@ -570,6 +574,25 @@ async def decrypt_uploaded_bar_file(req: Request, file: UploadFile = File(...), 
         error_detail = f"Decryption failed: {str(e)}\n{traceback.format_exc()}"
         print(error_detail)
         raise HTTPException(status_code=500, detail=f"Decryption failed: {str(e)}")
+
+
+@app.get("/check-2fa/{token}")
+async def check_2fa(token: str):
+    """Check if a file requires 2FA"""
+    try:
+        file_record = await database.db.get_file_record(token)
+        
+        if not file_record:
+            raise HTTPException(status_code=404, detail="File not found")
+        
+        return {
+            "require_otp": file_record.get('require_otp', False),
+            "has_password": bool(file_record.get('metadata', {}).get('password_protected'))
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/request-otp/{token}")
