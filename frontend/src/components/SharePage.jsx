@@ -18,27 +18,9 @@ const SharePage = ({ token }) => {
   const [otpVerified, setOtpVerified] = useState(false);
   const [otpCode, setOtpCode] = useState('');
   const [otpInfo, setOtpInfo] = useState(null);
-  const [checking, setChecking] = useState(true);
+  const [checking, setChecking] = useState(false);
   const [hasPassword, setHasPassword] = useState(false);
-
-  // Check if file requires 2FA on page load
-  useEffect(() => {
-    const check2FA = async () => {
-      try {
-        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-        const response = await axios.get(`${backendUrl}/check-2fa/${token}`);
-        
-        setRequireOtp(response.data.require_otp);
-        setHasPassword(response.data.has_password);
-      } catch (err) {
-        console.error('Failed to check 2FA status:', err);
-      } finally {
-        setChecking(false);
-      }
-    };
-    
-    check2FA();
-  }, [token]);
+  const [showOtpUI, setShowOtpUI] = useState(false);
 
   const handleRequestOtp = async () => {
     setIsLoading(true);
@@ -190,6 +172,7 @@ const SharePage = ({ token }) => {
         // Check if it's a 2FA error
         if (detail.includes('2FA') || detail.includes('OTP')) {
           setRequireOtp(true);
+          setShowOtpUI(true);  // Show OTP UI when 2FA is required
           errorMsg = detail;
         } else {
           errorMsg = '🚫 Access denied: ' + detail;
@@ -239,30 +222,22 @@ const SharePage = ({ token }) => {
               </div>
             )}
 
-            {checking ? (
-              <div className="text-center py-4">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gold-500 mx-auto"></div>
-                <p className="text-gray-400 mt-2">Loading...</p>
+            <div className="space-y-4">
+              {/* Step 1: Always show password field first */}
+              <div>
+                <label className="block text-gray-300 mb-2 text-left">Password (if protected)</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && !showOtpUI && handleDownload()}
+                  placeholder="Enter password or leave empty"
+                  className="w-full px-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-white focus:border-gold-500 focus:outline-none"
+                />
               </div>
-            ) : (
-              <div className="space-y-4">
-                {/* Step 1: Always show password field first (if file has password) */}
-                {hasPassword && (
-                  <div>
-                    <label className="block text-gray-300 mb-2 text-left">Password Required</label>
-                    <input
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Enter password"
-                      className="w-full px-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-white focus:border-gold-500 focus:outline-none"
-                      disabled={requireOtp && !otpVerified}
-                    />
-                  </div>
-                )}
 
-                {/* Step 2: Show OTP UI if required */}
-                {requireOtp && !otpVerified ? (
+              {/* Step 2: Show OTP UI only after 2FA error */}
+              {showOtpUI && !otpVerified ? (
                 <>
                   {/* OTP Request Section */}
                   {!otpSent ? (
@@ -324,8 +299,8 @@ const SharePage = ({ token }) => {
                 </>
               ) : null}
 
-                {/* Step 3: Show download button (after OTP if required, or immediately if not) */}
-                {(!requireOtp || otpVerified) && !fileData && (
+              {/* Step 3: Show download button (if no OTP UI showing, or after OTP verified) */}
+              {(!showOtpUI || otpVerified) && !fileData && (
                     <button
                       onClick={handleDownload}
                       disabled={isLoading}
@@ -347,9 +322,8 @@ const SharePage = ({ token }) => {
                       </span>
                     )}
                     </button>
-                )}
-              </div>
-            )}
+              )}
+            </div>
 
             {!fileData && (
               <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
