@@ -134,13 +134,37 @@ const SharePage = ({ token }) => {
       } else if (err.response?.status === 403) {
         // Get the actual error message from backend
         let detail = 'Unknown error';
+        
+        console.log('403 Response data:', err.response?.data);
+        console.log('403 Response data type:', typeof err.response?.data);
+        
         if (err.response?.data) {
-          if (typeof err.response.data === 'string') {
+          // Response data is arraybuffer due to responseType setting
+          if (err.response.data instanceof ArrayBuffer) {
+            try {
+              const text = new TextDecoder().decode(err.response.data);
+              console.log('Decoded text:', text);
+              const json = JSON.parse(text);
+              detail = json.detail || text;
+            } catch (e) {
+              console.error('Failed to parse arraybuffer:', e);
+              // Try as plain text
+              try {
+                detail = new TextDecoder().decode(err.response.data);
+              } catch (e2) {
+                console.error('Failed to decode as text:', e2);
+              }
+            }
+          } else if (typeof err.response.data === 'string') {
             detail = err.response.data;
           } else if (err.response.data.detail) {
             detail = err.response.data.detail;
+          } else if (typeof err.response.data === 'object') {
+            detail = JSON.stringify(err.response.data);
           }
         }
+        
+        console.log('Extracted detail:', detail);
         
         // Check if it's a 2FA error
         if (detail.includes('2FA') || detail.includes('OTP')) {
