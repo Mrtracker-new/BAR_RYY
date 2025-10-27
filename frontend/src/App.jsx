@@ -28,7 +28,9 @@ function MainApp() {
     expiryUnit: 'minutes',
     password: '',
     webhookUrl: '',
-    viewOnly: false
+    viewOnly: false,
+    requireOtp: false,  // 2FA
+    otpEmail: ''  // Recipient's email for OTP
   });
   const [barResult, setBarResult] = useState(null);
   const [isSealing, setIsSealing] = useState(false);
@@ -85,7 +87,9 @@ function MainApp() {
         password: rules.password || null,
         webhook_url: rules.webhookUrl || null,
         view_only: rules.viewOnly || false,
-        storage_mode: rules.storageMode || 'client'
+        storage_mode: rules.storageMode || 'client',
+        require_otp: rules.requireOtp || false,
+        otp_email: rules.otpEmail || null
       };
 
       const response = await axios.post('/seal', sealData);
@@ -136,7 +140,9 @@ function MainApp() {
       expiryUnit: 'minutes',
       password: '',
       webhookUrl: '',
-      viewOnly: false
+      viewOnly: false,
+      requireOtp: false,
+      otpEmail: ''
     });
   };
 
@@ -237,6 +243,14 @@ function MainApp() {
                         {rules.viewOnly ? 'Enabled' : 'Disabled'}
                       </span>
                     </div>
+                    {rules.storageMode === 'server' && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">2FA (OTP):</span>
+                        <span className={rules.requireOtp ? 'text-green-500' : 'text-gray-500'}>
+                          {rules.requireOtp ? '✅ Enabled' : 'Disabled'}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

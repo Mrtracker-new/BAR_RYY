@@ -1,5 +1,5 @@
 import React from 'react';
-import { Eye, Clock, Lock, Webhook, ShieldAlert, Server, Download } from 'lucide-react';
+import { Eye, Clock, Lock, Webhook, ShieldAlert, Server, Download, Mail } from 'lucide-react';
 
 const RulesPanel = ({ rules, onRulesChange }) => {
   const handleMaxViewsChange = (value) => {
@@ -171,6 +171,54 @@ const RulesPanel = ({ rules, onRulesChange }) => {
           {rules.webhookUrl ? 'Webhook configured for tampering alerts' : 'No webhook configured'}
         </p>
       </div>
+
+      {/* Two-Factor Authentication (Email OTP) - Only for Server-Side */}
+      {rules.storageMode === 'server' && (
+        <div className="space-y-3 border-t border-dark-600 pt-6">
+          <div className="flex items-center space-x-2 sm:space-x-3">
+            <Mail className="text-gold-500" size={18} />
+            <label className="text-base sm:text-lg text-gray-300">Two-Factor Authentication (2FA)</label>
+          </div>
+          <label className="flex items-center space-x-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={rules.requireOtp || false}
+              onChange={(e) => onRulesChange({ ...rules, requireOtp: e.target.checked })}
+              className="w-5 h-5 rounded border-dark-600 bg-dark-700 text-gold-500 focus:ring-gold-500 focus:ring-2 cursor-pointer"
+            />
+            <span className="text-gray-300">
+              Require email verification (OTP) to access file
+            </span>
+          </label>
+          
+          {rules.requireOtp && (
+            <div className="mt-3 space-y-2">
+              <label className="text-sm text-gray-400">Recipient's Email Address</label>
+              <input
+                type="email"
+                value={rules.otpEmail || ''}
+                onChange={(e) => onRulesChange({ ...rules, otpEmail: e.target.value })}
+                className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white focus:border-gold-500 focus:outline-none"
+                placeholder="recipient@example.com"
+                required={rules.requireOtp}
+              />
+              <p className="text-xs text-gray-500">
+                A 6-digit code will be sent to this email. Only the recipient can access the file.
+              </p>
+            </div>
+          )}
+          
+          <p className="text-xs sm:text-sm text-gray-500">
+            {rules.requireOtp ? (
+              <span className="text-green-400">
+                ✅ Enabled: Recipient must verify via email OTP before accessing the file
+              </span>
+            ) : (
+              'Disabled: Anyone with the link can access (if password matches)'
+            )}
+          </p>
+        </div>
+      )}
 
       {/* View Only Mode */}
       <div className="space-y-3 border-t border-dark-600 pt-6">

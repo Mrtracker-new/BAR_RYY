@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from '../config/axios';
-import { Lock, Download, AlertCircle, FileCheck } from 'lucide-react';
+import { Lock, Download, AlertCircle, FileCheck, Mail, Shield } from 'lucide-react';
 import ContentProtection from './ContentProtection';
 
 const SharePage = ({ token }) => {
@@ -13,6 +13,56 @@ const SharePage = ({ token }) => {
   const [isViewOnly, setIsViewOnly] = useState(false);
   const [viewsRemaining, setViewsRemaining] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
+  const [requireOtp, setRequireOtp] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [otpInfo, setOtpInfo] = useState(null);
+
+  const handleRequestOtp = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+      const response = await axios.post(`${backendUrl}/request-otp/${token}`);
+      
+      setOtpSent(true);
+      setOtpInfo(response.data);
+      setSuccessMessage(response.data.message);
+    } catch (err) {
+      console.error('OTP request error:', err);
+      setError(err.response?.data?.detail || 'Failed to send OTP');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!otpCode || otpCode.length !== 6) {
+      setError('Please enter a valid 6-digit OTP code');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+      const formData = new FormData();
+      formData.append('otp_code', otpCode);
+      
+      const response = await axios.post(`${backendUrl}/verify-otp/${token}`, formData);
+      
+      setOtpVerified(true);
+      setSuccessMessage(response.data.message);
+    } catch (err) {
+      console.error('OTP verification error:', err);
+      setError(err.response?.data?.detail || 'OTP verification failed');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleDownload = async () => {
     setIsLoading(true);
@@ -137,41 +187,107 @@ const SharePage = ({ token }) => {
             )}
 
             <div className="space-y-4">
-              <div>
-                <label className="block text-gray-300 mb-2 text-left">Password (if protected)</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleDownload()}
-                  placeholder="Enter password or leave empty"
-                  className="w-full px-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-white focus:border-gold-500 focus:outline-none"
-                />
-              </div>
+              {/* Check if OTP error (indicates 2FA is required) */}
+              {error && error.includes('2FA') && !otpVerified ? (
+                <>
+                  {/* OTP Request Section */}
+                  {!otpSent ? (
+                    <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+                      <div className="flex items-center space-x-2 mb-3">
+                        <Shield className="text-blue-400" size={20} />
+                        <p className="text-blue-400 font-semibold">2FA Required</p>
+                      </div>
+                      <p className="text-gray-300 text-sm mb-4">
+                        This file requires email verification. Click below to receive a 6-digit code.
+                      </p>
+                      <button
+                        onClick={handleRequestOtp}
+                        disabled={isLoading}
+                        className="w-full py-3 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-lg transition-all"
+                      >
+                        {isLoading ? 'Sending...' : '📧 Send OTP to Email'}
+                      </button>
+                    </div>
+                  ) : (
+                    /* OTP Verification Section */
+                    <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
+                      <div className="flex items-center space-x-2 mb-3">
+                        <Mail className="text-green-400" size={20} />
+                        <p className="text-green-400 font-semibold">OTP Sent!</p>
+                      </div>
+                      <p className="text-gray-300 text-sm mb-4">
+                        Check your email for the 6-digit code. {otpInfo && `(${otpInfo.max_attempts} attempts)`}
+                      </p>
+                      <input
+                        type="text"
+                        value={otpCode}
+                        onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        onKeyPress={(e) => e.key === 'Enter' && handleVerifyOtp()}
+                        placeholder="Enter 6-digit code"
+                        maxLength={6}
+                        className="w-full px-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-white text-center text-2xl font-bold tracking-widest focus:border-gold-500 focus:outline-none mb-3"
+                      />
+                      <button
+                        onClick={handleVerifyOtp}
+                        disabled={isLoading || otpCode.length !== 6}
+                        className={`w-full py-3 rounded-lg font-bold transition-all ${
+                          otpCode.length === 6 && !isLoading
+                            ? 'bg-gold-500 hover:bg-gold-600 text-black'
+                            : 'bg-dark-600 text-gray-500 cursor-not-allowed'
+                        }`}
+                      >
+                        {isLoading ? 'Verifying...' : '✅ Verify OTP'}
+                      </button>
+                      <button
+                        onClick={handleRequestOtp}
+                        disabled={isLoading}
+                        className="w-full mt-2 py-2 text-sm text-gray-400 hover:text-gold-400 transition-colors"
+                      >
+                        Didn't receive? Resend OTP
+                      </button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                /* Password and Download Section (shown after OTP verification or if no OTP required) */
+                <>
+                  <div>
+                    <label className="block text-gray-300 mb-2 text-left">Password (if protected)</label>
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && handleDownload()}
+                      placeholder="Enter password or leave empty"
+                      className="w-full px-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-white focus:border-gold-500 focus:outline-none"
+                    />
+                  </div>
 
-              {/* Only show download button if not already viewing a file */}
-              {!fileData && (
-                <button
-                  onClick={handleDownload}
-                  disabled={isLoading}
-                  className={`w-full py-4 rounded-lg font-bold text-lg transition-all duration-300 ${
-                    isLoading
-                      ? 'bg-dark-600 text-gray-500 cursor-not-allowed'
-                      : 'bg-gold-500 hover:bg-gold-600 text-black hover:scale-105'
-                  }`}
-                >
-                {isLoading ? (
-                  <span className="flex items-center justify-center space-x-2">
-                    <Lock className="animate-spin" size={20} />
-                    <span>Downloading...</span>
-                  </span>
-                ) : (
-                  <span className="flex items-center justify-center space-x-2">
-                    <Download size={20} />
-                    <span>Download File</span>
-                  </span>
-                )}
-                </button>
+                  {/* Only show download button if not already viewing a file */}
+                  {!fileData && (
+                    <button
+                      onClick={handleDownload}
+                      disabled={isLoading}
+                      className={`w-full py-4 rounded-lg font-bold text-lg transition-all duration-300 ${
+                        isLoading
+                          ? 'bg-dark-600 text-gray-500 cursor-not-allowed'
+                          : 'bg-gold-500 hover:bg-gold-600 text-black hover:scale-105'
+                      }`}
+                    >
+                    {isLoading ? (
+                      <span className="flex items-center justify-center space-x-2">
+                        <Lock className="animate-spin" size={20} />
+                        <span>Downloading...</span>
+                      </span>
+                    ) : (
+                      <span className="flex items-center justify-center space-x-2">
+                        <Download size={20} />
+                        <span>Download File</span>
+                      </span>
+                    )}
+                    </button>
+                  )}
+                </>
               )}
             </div>
 
