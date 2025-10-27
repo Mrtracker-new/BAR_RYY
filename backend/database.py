@@ -62,7 +62,9 @@ class Database:
                     expires_at TEXT,
                     created_at TEXT NOT NULL,
                     last_accessed_at TEXT,
-                    destroyed BOOLEAN DEFAULT 0
+                    destroyed BOOLEAN DEFAULT 0,
+                    require_otp BOOLEAN DEFAULT 0,
+                    otp_email TEXT
                 )
             """)
             
@@ -128,7 +130,9 @@ class Database:
                         expires_at TIMESTAMP,
                         created_at TIMESTAMP NOT NULL,
                         last_accessed_at TIMESTAMP,
-                        destroyed BOOLEAN DEFAULT FALSE
+                        destroyed BOOLEAN DEFAULT FALSE,
+                        require_otp BOOLEAN DEFAULT FALSE,
+                        otp_email TEXT
                     )
                 """)
                 
@@ -176,7 +180,9 @@ class Database:
         filename: str,
         bar_filename: str,
         file_path: str,
-        metadata: Dict[str, Any]
+        metadata: Dict[str, Any],
+        require_otp: bool = False,
+        otp_email: Optional[str] = None
     ) -> bool:
         """Create a new file record in the database"""
         try:
@@ -216,19 +222,19 @@ class Database:
                     await conn.execute("""
                         INSERT INTO bar_files 
                         (token, filename, bar_filename, file_path, metadata, 
-                         current_views, max_views, expires_at, created_at)
-                        VALUES ($1, $2, $3, $4, $5, 0, $6, $7, $8)
+                         current_views, max_views, expires_at, created_at, require_otp, otp_email)
+                        VALUES ($1, $2, $3, $4, $5, 0, $6, $7, $8, $9, $10)
                     """, token, filename, bar_filename, file_path, 
-                       json.dumps(metadata), max_views, expires_at_dt, created_at_dt)
+                       json.dumps(metadata), max_views, expires_at_dt, created_at_dt, require_otp, otp_email)
             else:
                 async with aiosqlite.connect(self.db_path) as db:
                     await db.execute("""
                         INSERT INTO bar_files 
                         (token, filename, bar_filename, file_path, metadata, 
-                         current_views, max_views, expires_at, created_at)
-                        VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)
+                         current_views, max_views, expires_at, created_at, require_otp, otp_email)
+                        VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
                     """, (token, filename, bar_filename, file_path, 
-                          json.dumps(metadata), max_views, expires_at, created_at))
+                          json.dumps(metadata), max_views, expires_at, created_at, require_otp, otp_email))
                     await db.commit()
             
             return True
