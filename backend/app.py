@@ -17,6 +17,7 @@ import security
 import cleanup
 import database
 import analytics
+import otp_service
 
 
 app = FastAPI(title="BAR Web API", version="1.0")
@@ -84,6 +85,8 @@ class SealRequest(BaseModel):
     webhook_url: Optional[str] = None
     view_only: bool = False
     storage_mode: str = 'client'  # 'client' or 'server'
+    require_otp: bool = False  # Enable 2FA
+    otp_email: Optional[str] = None  # Email for OTP delivery
 
     @validator('filename')
     def validate_filename(cls, v):
@@ -121,9 +124,32 @@ class SealRequest(BaseModel):
         if v and not security.validate_webhook_url(v):
             raise ValueError('Invalid webhook URL')
         return v
+    
+    @validator('otp_email')
+    def validate_otp_email(cls, v, values):
+        # If OTP is required, email must be provided
+        if values.get('require_otp') and not v:
+            raise ValueError('Email address required when 2FA is enabled')
+        # Basic email validation
+        if v:
+            import re
+            email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+            if not re.match(email_pattern, v):
+                raise ValueError('Invalid email address')
+        return v
 
 
 class DecryptRequest(BaseModel):
+    password: Optional[str] = None
+
+
+class OTPRequest(BaseModel):
+    token: str
+
+
+class OTPVerifyRequest(BaseModel):
+    token: str
+    otp_code: str
     password: Optional[str] = None
 
 
@@ -299,15 +325,19 @@ async def seal_container(req: Request, request: SealRequest):
             # Rename the bar file to use token
             os.rename(bar_path, token_bar_path)
             
-            # Save file record to database
+            # Save file record to database with 2FA settings
             await database.db.create_file_record(
                 token=access_token,
                 filename=request.filename,
                 bar_filename=token_bar_filename,
                 file_path=token_bar_path,
-                metadata=metadata
+                metadata=metadata,
+                require_otp=request.require_otp,
+                otp_email=request.otp_email
             )
             print(f"✅ Server-side file created: {access_token}")
+            if request.require_otp:
+                print(f"🔐 2FA enabled - OTP will be sent to: {request.otp_email}")
             
         result = None
         if request.storage_mode == 'server':
@@ -542,9 +572,100 @@ async def decrypt_uploaded_bar_file(req: Request, file: UploadFile = File(...), 
         raise HTTPException(status_code=500, detail=f"Decryption failed: {str(e)}")
 
 
+@app.post("/request-otp/{token}")
+async def request_otp(token: str, req: Request):
+    """Request OTP code to be sent via email for 2FA-protected files"""
+    try:
+        # Rate limit
+        security.check_rate_limit(req, limit=5)
+        
+        # Get file record
+        file_record = await database.db.get_file_record(token)
+        
+        if not file_record:
+            raise HTTPException(status_code=404, detail="File not found or already destroyed")
+        
+        # Check if 2FA is required
+        if not file_record.get('require_otp'):
+            raise HTTPException(status_code=400, detail="This file does not require 2FA")
+        
+        # Get OTP email
+        otp_email = file_record.get('otp_email')
+        if not otp_email:
+            raise HTTPException(status_code=500, detail="2FA email not configured")
+        
+        # Generate and send OTP
+        otp_srv = otp_service.get_otp_service()
+        otp_code = otp_srv.create_otp_session(token, otp_email)
+        
+        success, error_msg = otp_srv.send_otp_email(
+            email=otp_email,
+            otp_code=otp_code,
+            filename=file_record['filename']
+        )
+        
+        if not success:
+            raise HTTPException(status_code=500, detail=error_msg)
+        
+        # Mask email for privacy (show only first 2 chars and domain)
+        email_parts = otp_email.split('@')
+        masked_email = f"{email_parts[0][:2]}***@{email_parts[1]}" if len(email_parts) == 2 else "***"
+        
+        return {
+            "success": True,
+            "message": f"OTP sent to {masked_email}",
+            "expires_in_minutes": otp_service.OTP_EXPIRY_MINUTES,
+            "max_attempts": otp_service.MAX_OTP_ATTEMPTS
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"❌ OTP request failed: {str(e)}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Failed to send OTP: {str(e)}")
+
+
+@app.post("/verify-otp/{token}")
+async def verify_otp(token: str, req: Request, otp_code: str = Form(...)):
+    """Verify OTP code for 2FA-protected files"""
+    try:
+        # Rate limit
+        security.check_rate_limit(req, limit=10)
+        
+        # Get file record
+        file_record = await database.db.get_file_record(token)
+        
+        if not file_record:
+            raise HTTPException(status_code=404, detail="File not found or already destroyed")
+        
+        # Check if 2FA is required
+        if not file_record.get('require_otp'):
+            raise HTTPException(status_code=400, detail="This file does not require 2FA")
+        
+        # Verify OTP
+        otp_srv = otp_service.get_otp_service()
+        is_valid, error_msg = otp_srv.verify_otp(token, otp_code)
+        
+        if not is_valid:
+            raise HTTPException(status_code=403, detail=error_msg)
+        
+        return {
+            "success": True,
+            "message": "OTP verified successfully. You can now access the file."
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"❌ OTP verification failed: {str(e)}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"OTP verification failed: {str(e)}")
+
+
 @app.post("/share/{token}")
 async def share_file(token: str, req: Request, request: DecryptRequest):
-    """Server-side access endpoint - properly enforces view limits"""
+    """Server-side access endpoint - properly enforces view limits and 2FA"""
     password = request.password or ""
     try:
         # Get file record from database
@@ -552,6 +673,15 @@ async def share_file(token: str, req: Request, request: DecryptRequest):
         
         if not file_record:
             raise HTTPException(status_code=404, detail="File not found or already destroyed")
+        
+        # Check if 2FA is required
+        if file_record.get('require_otp'):
+            otp_srv = otp_service.get_otp_service()
+            if not otp_srv.is_verified(token):
+                raise HTTPException(
+                    status_code=403, 
+                    detail="2FA verification required. Please request and verify OTP first."
+                )
         
         # Get file path and check if it exists
         bar_file = file_record['file_path']
