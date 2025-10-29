@@ -12,6 +12,7 @@ const DecryptPage = ({ onBack }) => {
   const [error, setError] = useState(null);
   const [showViewer, setShowViewer] = useState(false);
   const [decryptedData, setDecryptedData] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
   const fileInputRef = useRef(null);
   const [toast, setToast] = useState(null);
 
@@ -31,6 +32,7 @@ const DecryptPage = ({ onBack }) => {
     setBarFile(file);
     setError(null);
     setMetadata(null);
+    setPreviewUrl(null);
 
     // Try to read metadata without decrypting
     try {
@@ -46,6 +48,9 @@ const DecryptPage = ({ onBack }) => {
           const decodedJson = atob(obfuscatedData);
           const jsonData = JSON.parse(decodedJson);
           setMetadata(jsonData.metadata);
+          
+          // Generate preview icon based on file type
+          generateFileTypePreview(jsonData.metadata.filename);
         } catch (err) {
           console.error('Could not read metadata:', err);
         }
@@ -53,6 +58,29 @@ const DecryptPage = ({ onBack }) => {
       reader.readAsText(file);
     } catch (err) {
       console.error('Error reading file:', err);
+    }
+  };
+
+  const generateFileTypePreview = (filename) => {
+    const ext = filename.split('.').pop()?.toLowerCase();
+    const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'];
+    const videoExts = ['mp4', 'avi', 'mov', 'mkv', 'webm'];
+    const audioExts = ['mp3', 'wav', 'ogg', 'flac', 'm4a'];
+    const docExts = ['pdf', 'doc', 'docx', 'txt', 'md'];
+    const zipExts = ['zip', 'rar', '7z', 'tar', 'gz'];
+    
+    if (imageExts.includes(ext)) {
+      setPreviewUrl('🖼️');
+    } else if (videoExts.includes(ext)) {
+      setPreviewUrl('🎥');
+    } else if (audioExts.includes(ext)) {
+      setPreviewUrl('🎵');
+    } else if (docExts.includes(ext)) {
+      setPreviewUrl('📄');
+    } else if (zipExts.includes(ext)) {
+      setPreviewUrl('📦');
+    } else {
+      setPreviewUrl('📎');
     }
   };
 
@@ -218,6 +246,15 @@ const DecryptPage = ({ onBack }) => {
         {metadata && (
           <div className="mb-4 sm:mb-6 bg-dark-900 rounded-lg p-4 sm:p-6">
             <h3 className="text-base sm:text-lg font-semibold text-gold-500 mb-3 sm:mb-4">File Information</h3>
+            
+            {/* File Preview Icon */}
+            {previewUrl && (
+              <div className="text-center mb-4">
+                <div className="text-6xl mb-2">{previewUrl}</div>
+                <p className="text-xs text-gray-500">File Type Preview</p>
+              </div>
+            )}
+            
             <div className="space-y-2 text-xs sm:text-sm">
               <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
                 <span className="text-gray-400">Original Filename:</span>
