@@ -378,7 +378,10 @@ async def seal_container(req: Request, request: SealRequest):
             print(f"✅ Server-side file created: {access_token}")
 
             # Generate full shareable link (absolute URL)
-            share_link = f"http://localhost:8000/share/{access_token}"
+            # Use FRONTEND_URL for production, localhost for development
+            base_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+            share_link = f"{base_url}/share/{access_token}"
+            
             # Generate custom themed QR code with logo
             logo_path = os.path.join(os.path.dirname(__file__), "BAR_web.png")
             try:
