@@ -23,29 +23,27 @@ def generate_themed_qr(data: str, logo_path: str = None) -> str:
     Returns:
         Base64 encoded QR code image
     """
-    # Create QR code instance with higher error correction for logo
+    # Create QR code instance optimized for scanning
     qr = qrcode.QRCode(
         version=1,  # Auto-adjust size
         error_correction=qrcode.constants.ERROR_CORRECT_H,  # High error correction (30%)
-        box_size=10,
-        border=4,
+        box_size=15,  # Larger boxes for better scanning
+        border=6,  # Larger border for better detection
     )
     
     qr.add_data(data)
     qr.make(fit=True)
     
-    # Gold/brown theme colors matching BAR Web
-    gold_color = (212, 175, 55)  # Gold #D4AF37
-    dark_color = (30, 30, 30)    # Dark background
+    # High contrast colors for better scanning
+    # Use black instead of gold for maximum scanability
+    dark_color = (0, 0, 0)       # Pure black for maximum contrast
+    white_color = (255, 255, 255)  # Pure white background
     
-    # Create QR code image with styled appearance
+    # Create QR code image optimized for scanning
+    # Square modules (not rounded) scan better than styled ones
     img = qr.make_image(
-        image_factory=StyledPilImage,
-        module_drawer=RoundedModuleDrawer(),  # Rounded squares for modern look
-        color_mask=SolidFillColorMask(
-            back_color=(255, 255, 255),  # White background
-            front_color=gold_color       # Gold modules
-        )
+        fill_color=dark_color,
+        back_color=white_color
     )
     
     # Convert to PIL Image for further processing
@@ -56,9 +54,9 @@ def generate_themed_qr(data: str, logo_path: str = None) -> str:
         try:
             logo = Image.open(logo_path)
             
-            # Calculate logo size (about 20% of QR code)
+            # Calculate logo size (smaller for better scanning - 15% instead of 20%)
             qr_width, qr_height = img.size
-            logo_size = min(qr_width, qr_height) // 5
+            logo_size = min(qr_width, qr_height) // 7
             
             # Resize logo while maintaining aspect ratio
             logo.thumbnail((logo_size, logo_size), Image.Resampling.LANCZOS)
@@ -92,20 +90,11 @@ def generate_themed_qr(data: str, logo_path: str = None) -> str:
         except Exception as e:
             print(f"Failed to add logo to QR code: {e}")
     
-    # Add decorative border with gold theme
-    border_size = 20
+    # Add clean white border for better scanning
+    border_size = 30  # Larger border for better detection
     bordered_img = Image.new('RGB', 
                              (img.width + border_size * 2, img.height + border_size * 2),
-                             (20, 20, 20))  # Dark border
-    
-    # Draw gold inner border
-    draw = ImageDraw.Draw(bordered_img)
-    draw.rectangle(
-        [(border_size - 5, border_size - 5), 
-         (bordered_img.width - border_size + 5, bordered_img.height - border_size + 5)],
-        outline=gold_color,
-        width=3
-    )
+                             (255, 255, 255))  # Pure white border
     
     # Paste QR code in center
     bordered_img.paste(img, (border_size, border_size))
@@ -130,16 +119,16 @@ def generate_simple_qr(data: str) -> str:
     """
     qr = qrcode.QRCode(
         version=1,
-        error_correction=qrcode.constants.ERROR_CORRECT_M,
-        box_size=10,
-        border=4,
+        error_correction=qrcode.constants.ERROR_CORRECT_H,  # Higher error correction
+        box_size=15,  # Larger boxes
+        border=6,  # Larger border
     )
     
     qr.add_data(data)
     qr.make(fit=True)
     
-    # Create simple QR with gold theme
-    img = qr.make_image(fill_color=(212, 175, 55), back_color='white')
+    # Create simple QR with high contrast (black on white)
+    img = qr.make_image(fill_color='black', back_color='white')
     
     # Convert to base64
     buffered = BytesIO()
