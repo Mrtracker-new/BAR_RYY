@@ -127,6 +127,10 @@ class OTPService:
         if not SMTP_USER or not SMTP_PASSWORD:
             error_msg = "Email service not configured. Set SMTP_USER and SMTP_PASSWORD environment variables."
             print(f"⚠️ {error_msg}")
+            print(f"SMTP_USER: {'SET' if SMTP_USER else 'NOT SET'}")
+            print(f"SMTP_PASSWORD: {'SET' if SMTP_PASSWORD else 'NOT SET'}")
+            print(f"SMTP_HOST: {SMTP_HOST}")
+            print(f"SMTP_PORT: {SMTP_PORT}")
             return False, error_msg
         
         try:
@@ -212,12 +216,20 @@ class OTPService:
             msg.attach(MIMEText(html_body, 'html'))
             
             # Send email
-            with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-                server.starttls()
-                server.login(SMTP_USER, SMTP_PASSWORD)
-                server.send_message(msg)
+            print(f"📧 Attempting to send OTP email to {email}...")
+            print(f"SMTP: {SMTP_HOST}:{SMTP_PORT}")
             
-            print(f"📧 OTP email sent to {email}")
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
+                print("✅ Connected to SMTP server")
+                server.set_debuglevel(1)  # Enable debug output
+                server.starttls()
+                print("✅ TLS started")
+                server.login(SMTP_USER, SMTP_PASSWORD)
+                print("✅ Logged in successfully")
+                server.send_message(msg)
+                print("✅ Message sent")
+            
+            print(f"📧 OTP email sent successfully to {email}")
             return True, ""
             
         except smtplib.SMTPAuthenticationError:
@@ -229,8 +241,10 @@ class OTPService:
             print(f"❌ {error_msg}")
             return False, error_msg
         except Exception as e:
+            import traceback
             error_msg = f"Unexpected error sending email: {str(e)}"
             print(f"❌ {error_msg}")
+            print(f"Full traceback:\n{traceback.format_exc()}")
             return False, error_msg
 
 
