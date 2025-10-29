@@ -18,8 +18,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Expose port (Render will override with $PORT)
+# Expose port
 EXPOSE 8000
 
-# Start command
-CMD ["python", "run.py"]
+# Start command - file is now in /app/run.py
+CMD ["python", "-u", "run.py"]
