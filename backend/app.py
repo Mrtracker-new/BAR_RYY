@@ -1,13 +1,20 @@
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Response, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-import qrcode
 import base64
 from io import BytesIO
 from pydantic import BaseModel, validator
 from typing import Optional
 import os
 from dotenv import load_dotenv
+try:
+    from PIL import Image
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
+    print("⚠️ Pillow not installed - image previews will be disabled")
+
+import qr_generator
 
 
 # Load environment variables from .env file
@@ -224,12 +231,37 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
                     )
                 buffer.write(chunk)
         
+        # Generate preview for images and videos
+        preview_data = None
+        if PIL_AVAILABLE and file.content_type:
+            try:
+                if file.content_type.startswith('image/'):
+                    # Image preview
+                    img = Image.open(temp_path)
+                    # Create thumbnail (max 300x300)
+                    img.thumbnail((300, 300), Image.Resampling.LANCZOS)
+                    # Convert to base64
+                    buffer_io = BytesIO()
+                    img_format = img.format or 'PNG'
+                    img.save(buffer_io, format=img_format)
+                    preview_data = f"data:image/{img_format.lower()};base64," + base64.b64encode(buffer_io.getvalue()).decode()
+                elif file.content_type.startswith('video/'):
+                    # Video preview - attempt to extract first frame
+                    # Note: This requires additional dependencies like opencv-python or moviepy
+                    # For now, we'll skip video thumbnails to avoid heavy dependencies
+                    print(f"Video upload detected: {safe_filename} - thumbnail generation skipped")
+                    preview_data = None
+            except Exception as e:
+                print(f"Preview generation failed: {e}")
+                preview_data = None
+        
         response = {
             "success": True,
             "file_id": file_id,
             "filename": safe_filename,
             "temp_filename": temp_filename,
             "size": file_size,
+            "preview": preview_data,
             "message": "File uploaded successfully"
         }
         return JSONResponse(content=response)
@@ -347,11 +379,14 @@ async def seal_container(req: Request, request: SealRequest):
 
             # Generate full shareable link (absolute URL)
             share_link = f"http://localhost:8000/share/{access_token}"
-            # Generate QR code for the shareable link
-            qr_img = qrcode.make(share_link)
-            buffered = BytesIO()
-            qr_img.save(buffered, format="PNG")
-            qr_base64 = "data:image/png;base64," + base64.b64encode(buffered.getvalue()).decode()
+            # Generate custom themed QR code with logo
+            logo_path = os.path.join(os.path.dirname(__file__), "BAR_web.png")
+            try:
+                qr_base64 = qr_generator.generate_themed_qr(share_link, logo_path)
+            except Exception as e:
+                print(f"Failed to generate themed QR code: {e}")
+                # Fallback to simple themed QR
+                qr_base64 = qr_generator.generate_simple_qr(share_link)
 
             if request.require_otp:
                 print(f"🔐 2FA enabled - OTP will be sent to: {request.otp_email}")
