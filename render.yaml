@@ -15,4 +15,7 @@ services:
         sync: false
       - key: DATABASE_URL
         sync: false
+    # Increase health check timeout for slower free tier
     healthCheckPath: /
+    healthCheckInterval: 30
+    healthCheckTimeout: 30
