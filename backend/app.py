@@ -1,17 +1,21 @@
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Response, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+import qrcode
+import base64
+from io import BytesIO
 from pydantic import BaseModel, validator
 from typing import Optional
 import os
 from dotenv import load_dotenv
 
+
 # Load environment variables from .env file
 load_dotenv()
+
 import uuid
 import shutil
 import json
-import base64
 from datetime import datetime
 import mimetypes
 import crypto_utils
@@ -340,6 +344,15 @@ async def seal_container(req: Request, request: SealRequest):
                 otp_email=request.otp_email
             )
             print(f"✅ Server-side file created: {access_token}")
+
+            # Generate full shareable link (absolute URL)
+            share_link = f"http://localhost:8000/share/{access_token}"
+            # Generate QR code for the shareable link
+            qr_img = qrcode.make(share_link)
+            buffered = BytesIO()
+            qr_img.save(buffered, format="PNG")
+            qr_base64 = "data:image/png;base64," + base64.b64encode(buffered.getvalue()).decode()
+
             if request.require_otp:
                 print(f"🔐 2FA enabled - OTP will be sent to: {request.otp_email}")
             
@@ -349,7 +362,8 @@ async def seal_container(req: Request, request: SealRequest):
                 "success": True,
                 "storage_mode": "server",
                 "access_token": access_token,
-                "share_url": f"/share/{access_token}",
+                "share_url": share_link,
+                "qr_code": qr_base64,
                 "analytics_url": f"/analytics/{access_token}",
                 "analytics_token": access_token,  # Same token for simplicity
                 "metadata": metadata,
@@ -357,7 +371,6 @@ async def seal_container(req: Request, request: SealRequest):
             }
         else:
             # Client-side: Return .bar file data directly (Railway has ephemeral filesystem)
-            import base64
             bar_data_b64 = base64.b64encode(bar_data).decode('utf-8')
             if os.path.exists(bar_path):
                 os.remove(bar_path)
@@ -378,6 +391,7 @@ async def seal_container(req: Request, request: SealRequest):
         error_detail = f"Seal failed: {str(e)}\n{traceback.format_exc()}"
         print(error_detail)  # Log to console
         raise HTTPException(status_code=500, detail=security.sanitize_error_message(str(e)))
+    
 
 
 @app.get("/download/{bar_id}")
