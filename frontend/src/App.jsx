@@ -27,6 +27,7 @@ const SharePageWrapper = () => {
 function MainApp() {
   const [uploadedFile, setUploadedFile] = useState(null);
   const [fileInfo, setFileInfo] = useState(null);
+  const [filePreview, setFilePreview] = useState(null);
   const [rules, setRules] = useState({
     storageMode: "client", // 'client' or 'server'
     maxViews: 1,
@@ -62,6 +63,7 @@ function MainApp() {
 
       setUploadedFile(file);
       setFileInfo(response.data);
+      setFilePreview(response.data.preview || null);
     } catch (err) {
       setError(
         "Failed to upload file: " + (err.response?.data?.detail || err.message)
@@ -72,6 +74,7 @@ function MainApp() {
   const handleRemoveFile = () => {
     setUploadedFile(null);
     setFileInfo(null);
+    setFilePreview(null);
     setBarResult(null);
     setError(null);
   };
@@ -212,6 +215,7 @@ function MainApp() {
                       onFileSelect={handleFileSelect}
                       uploadedFile={uploadedFile}
                       onRemove={handleRemoveFile}
+                      filePreview={filePreview}
                     />
                   </div>
 
