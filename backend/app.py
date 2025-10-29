@@ -78,11 +78,23 @@ os.makedirs(GENERATED_DIR, exist_ok=True)
 async def startup_event():
     """Start background tasks on app startup"""
     import asyncio
-    # Initialize database
-    await database.init_database()
-    # Start cleanup task
-    asyncio.create_task(cleanup.run_cleanup_loop())
-    print("🚀 BAR Web API started with database and cleanup task")
+    print("🚀 BAR Web API starting...")
+    
+    # Initialize database in background to not block health checks
+    async def init_background():
+        try:
+            await database.init_database()
+            print("✅ Database initialized")
+            # Start cleanup task
+            asyncio.create_task(cleanup.run_cleanup_loop())
+            print("✅ Cleanup task started")
+        except Exception as e:
+            print(f"⚠️ Database init failed: {e}")
+            print("Continuing with limited functionality...")
+    
+    # Run in background
+    asyncio.create_task(init_background())
+    print("🚀 BAR Web API started (database initializing in background)")
 
 
 @app.on_event("shutdown")
@@ -173,6 +185,7 @@ async def root():
     resp = JSONResponse(content={
         "message": "BAR Web API - Burn After Reading",
         "version": "1.0",
+        "status": "healthy",
         "endpoints": [
             "/upload - Upload file",
             "/seal - Seal and generate .bar file",
@@ -181,6 +194,12 @@ async def root():
         ]
     })
     return security.add_security_headers(resp)
+
+
+@app.get("/health")
+async def health_check():
+    """Simple health check endpoint for Railway"""
+    return {"status": "healthy", "service": "BAR Web API"}
 
 
 @app.get("/storage-info")
