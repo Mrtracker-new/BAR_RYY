@@ -107,33 +107,51 @@ const RulesPanel = ({ rules, onRulesChange }) => {
       )}
 
       {/* Expiry Time */}
-      <div className="space-y-3">
+      <div className="space-y-3 bg-dark-700/50 border border-dark-600 rounded-xl p-4">
         <div className="flex items-center space-x-2 sm:space-x-3">
-          <Clock className="text-gold-500" size={18} />
-          <label className="text-base sm:text-lg text-gray-300">Auto-Expire After</label>
+          <div className="p-2 bg-blue-500/20 rounded-lg">
+            <Clock className="text-blue-400" size={18} />
+          </div>
+          <label className="text-base sm:text-lg text-gray-200 font-semibold">⏰ Auto-Expire Timer</label>
         </div>
-        <div className="flex items-center space-x-3">
-          <input
-            type="number"
-            min="0"
-            value={rules.expiryValue || 0}
-            onChange={(e) => handleExpiryChange(e.target.value, rules.expiryUnit || 'minutes')}
-            className="flex-1 px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white focus:border-gold-500 focus:outline-none"
-            placeholder="0 = Never"
-          />
-          <select
-            value={rules.expiryUnit || 'minutes'}
-            onChange={(e) => handleExpiryChange(rules.expiryValue || 0, e.target.value)}
-            className="px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white focus:border-gold-500 focus:outline-none"
-          >
-            <option value="minutes">Minutes</option>
-            <option value="hours">Hours</option>
-            <option value="days">Days</option>
-          </select>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <label className="text-xs text-gray-400 font-medium uppercase tracking-wide">Duration</label>
+            <input
+              type="number"
+              min="0"
+              value={rules.expiryValue || 0}
+              onChange={(e) => handleExpiryChange(e.target.value, rules.expiryUnit || 'minutes')}
+              className="w-full px-4 py-2.5 bg-dark-800 border border-dark-600 rounded-lg text-white text-lg font-semibold focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 focus:outline-none transition-all"
+              placeholder="0"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs text-gray-400 font-medium uppercase tracking-wide">Unit</label>
+            <select
+              value={rules.expiryUnit || 'minutes'}
+              onChange={(e) => handleExpiryChange(rules.expiryValue || 0, e.target.value)}
+              className="w-full px-4 py-2.5 bg-dark-800 border border-dark-600 rounded-lg text-white font-semibold focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 focus:outline-none cursor-pointer transition-all"
+            >
+              <option value="minutes">⏱️ Minutes</option>
+              <option value="hours">🕐 Hours</option>
+              <option value="days">📅 Days</option>
+            </select>
+          </div>
         </div>
-          <p className="text-xs sm:text-sm text-gray-500">
-          {rules.expiryMinutes > 0 ? `Expires in ${rules.expiryValue} ${rules.expiryUnit}` : 'No expiration set'}
-        </p>
+        <div className={`mt-2 px-3 py-2 rounded-lg border ${
+          rules.expiryMinutes > 0 
+            ? 'bg-blue-500/10 border-blue-500/30' 
+            : 'bg-gray-500/10 border-gray-500/30'
+        }`}>
+          <p className={`text-xs sm:text-sm font-medium ${
+            rules.expiryMinutes > 0 ? 'text-blue-300' : 'text-gray-400'
+          }`}>
+            {rules.expiryMinutes > 0 
+              ? `⏳ File expires in ${rules.expiryValue} ${rules.expiryUnit}` 
+              : '♾️ No expiration - lasts forever'}
+          </p>
+        </div>
       </div>
 
       {/* Password Protection */}

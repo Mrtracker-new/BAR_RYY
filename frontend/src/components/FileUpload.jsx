@@ -82,39 +82,51 @@ const FileUpload = ({ onFileSelect, uploadedFile, onRemove, filePreview }) => {
     <div className="w-full">
       {!uploadedFile ? (
         <div
-          className={`border-2 border-dashed rounded-lg p-8 sm:p-12 text-center cursor-pointer transition-all duration-300 ${
+          className={`border-3 border-dashed rounded-2xl p-10 sm:p-16 text-center cursor-pointer transition-all duration-300 relative overflow-hidden group ${
             isDragging
-              ? 'border-gold-500 bg-gold-500/10 scale-105'
-              : 'border-dark-600 hover:border-gold-500/50 hover:bg-dark-800'
+              ? 'border-gold-500 bg-gradient-to-br from-gold-500/20 to-gold-600/10 scale-105 shadow-2xl shadow-gold-500/30'
+              : 'border-dark-600 hover:border-gold-500/60 bg-gradient-to-br from-dark-700/50 to-dark-800/50 hover:shadow-xl'
           }`}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           onClick={handleClick}
         >
+          <div className="absolute inset-0 bg-gradient-to-br from-gold-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
           <input
             ref={fileInputRef}
             type="file"
             className="hidden"
             onChange={handleFileInput}
           />
-          <Upload className={`mx-auto mb-3 sm:mb-4 ${isDragging ? 'text-gold-500 animate-bounce' : 'text-gray-400'}`} size={40} />
-          <p className="text-base sm:text-lg mb-2 text-gray-300">
-            {isDragging ? 'Drop your file here' : 'Drag & drop your file here'}
+          <div className={`inline-block p-4 rounded-2xl mb-4 ${
+            isDragging ? 'bg-gold-500/30 animate-bounce' : 'bg-gold-500/10 group-hover:bg-gold-500/20'
+          } transition-all duration-300`}>
+            <Upload className={`${isDragging ? 'text-gold-400' : 'text-gold-500'}`} size={48} />
+          </div>
+          <p className="text-lg sm:text-xl mb-2 text-gray-200 font-semibold relative z-10">
+            {isDragging ? '📥 Drop your file here' : '📁 Drag & drop your file here'}
           </p>
-          <p className="text-sm text-gray-500">or click to browse</p>
-          <p className="text-xs text-gray-600 mt-3 sm:mt-4">Supports: Images, Videos, PDF, DOCX, ZIP, and more</p>
+          <p className="text-sm text-gray-400 mb-4 relative z-10">or click to browse from your device</p>
+          <div className="inline-block px-4 py-2 bg-dark-700/50 rounded-lg border border-dark-600 relative z-10">
+            <p className="text-xs text-gray-400">Supports: 🖼️ Images, 🎥 Videos, 📄 PDF, 📝 DOCX, 🗄️ ZIP & more</p>
+          </div>
         </div>
       ) : (
-        <div className="border border-gold-500/30 rounded-lg p-4 sm:p-6 bg-dark-800 terminal-glow">
-          <div className="flex items-center justify-between gap-3">
+        <div className="bg-gradient-to-br from-green-500/10 to-emerald-500/5 border-2 border-green-500/40 rounded-2xl p-5 sm:p-6 shadow-xl shadow-green-500/10 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-green-500/10 rounded-full blur-3xl"></div>
+          <div className="flex items-center justify-between gap-3 relative z-10">
             <div className="flex items-center space-x-3 sm:space-x-4 min-w-0 flex-1">
-              <div className="p-2 sm:p-3 bg-gold-500/20 rounded-lg shrink-0">
-                <File className="text-gold-500" size={28} />
+              <div className="p-3 bg-gradient-to-br from-green-500/30 to-emerald-500/20 rounded-xl shadow-lg shadow-green-500/20 shrink-0">
+                <File className="text-green-400" size={28} />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-base sm:text-lg font-semibold text-gold-500 truncate">{uploadedFile.name}</p>
-                <p className="text-xs sm:text-sm text-gray-400">{formatFileSize(uploadedFile.size)}</p>
+                <div className="flex items-center space-x-2 mb-1">
+                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                  <p className="text-xs text-green-400 font-semibold">READY TO SEAL</p>
+                </div>
+                <p className="text-base sm:text-lg font-bold text-white truncate">{uploadedFile.name}</p>
+                <p className="text-xs sm:text-sm text-gray-400">📂 {formatFileSize(uploadedFile.size)}</p>
               </div>
             </div>
             <button
@@ -122,7 +134,8 @@ const FileUpload = ({ onFileSelect, uploadedFile, onRemove, filePreview }) => {
                 onRemove();
                 setPreviewUrl(null);
               }}
-              className="p-2 hover:bg-red-500/20 rounded-lg transition-colors shrink-0"
+              className="p-2.5 hover:bg-red-500/20 bg-red-500/10 rounded-xl transition-all duration-300 hover:scale-110 border border-red-500/30 hover:border-red-500 shrink-0"
+              title="Remove file"
             >
               <X className="text-red-400" size={20} />
             </button>

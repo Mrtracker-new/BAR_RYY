@@ -8,6 +8,7 @@ import {
   Link2,
   Copy,
   BarChart3,
+  Upload,
 } from "lucide-react";
 import FileUpload from "./components/FileUpload";
 import RulesPanel from "./components/RulesPanel";
@@ -166,23 +167,25 @@ function MainApp() {
       <ContainerAnimation isSealing={isSealing} />
 
       {/* Header */}
-      <header className="border-b border-dark-700 bg-dark-800/50 backdrop-blur">
-        <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-6">
+      <header className="border-b border-dark-700 bg-gradient-to-r from-dark-800 via-dark-900 to-dark-800 backdrop-blur sticky top-0 z-50 shadow-xl">
+        <div className="container mx-auto px-4 sm:px-6 py-5 sm:py-6">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center space-x-3 sm:space-x-4">
-              <PackageOpen className="text-gold-500" size={32} />
+              <div className="p-2 bg-gradient-to-br from-gold-500 to-gold-600 rounded-xl shadow-lg shadow-gold-500/30">
+                <PackageOpen className="text-black" size={28} />
+              </div>
               <div>
-                <h1 className="text-2xl sm:text-3xl font-bold text-gold-500 text-shadow-gold">
+                <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-gold-400 via-gold-500 to-gold-600 bg-clip-text text-transparent">
                   BAR Web
                 </h1>
-                <p className="text-gray-400 text-xs sm:text-sm hidden sm:block">
-                  Burn After Reading - Secure File Encryption
+                <p className="text-gray-400 text-xs sm:text-sm hidden sm:block font-medium">
+                  🔒 Burn After Reading - Military-Grade Encryption
                 </p>
               </div>
             </div>
             <button
               onClick={() => setShowDecrypt(!showDecrypt)}
-              className="px-4 sm:px-6 py-2 text-sm sm:text-base bg-gold-500/20 hover:bg-gold-500/30 text-gold-500 rounded-lg transition-all duration-300 border border-gold-500/30 hover:border-gold-500 whitespace-nowrap"
+              className="px-4 sm:px-6 py-2.5 text-sm sm:text-base bg-gradient-to-r from-gold-500/20 to-gold-600/20 hover:from-gold-500/30 hover:to-gold-600/30 text-gold-400 rounded-xl transition-all duration-300 border border-gold-500/40 hover:border-gold-400 whitespace-nowrap font-semibold hover:scale-105 shadow-lg hover:shadow-gold-500/20"
             >
               {showDecrypt ? "📦 Create" : "🔓 Decrypt"}
             </button>
@@ -191,7 +194,7 @@ function MainApp() {
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 sm:px-6 py-6 sm:py-12">
+      <main className="container mx-auto px-4 sm:px-6 py-8 sm:py-12">
         {showDecrypt ? (
           <DecryptPage onBack={() => setShowDecrypt(false)} />
         ) : (
@@ -204,13 +207,18 @@ function MainApp() {
             )}
 
             {!barResult ? (
-              <div className="grid lg:grid-cols-2 gap-6 sm:gap-8">
+              <div className="grid lg:grid-cols-2 gap-6 sm:gap-8 max-w-7xl mx-auto">
                 {/* Left Column - File Upload */}
                 <div className="space-y-6">
-                  <div>
-                    <h2 className="text-xl sm:text-2xl font-bold text-gold-500 text-shadow-gold mb-4">
-                      Upload File
-                    </h2>
+                  <div className="bg-gradient-to-br from-dark-800 to-dark-900 rounded-2xl p-6 border border-dark-700 shadow-2xl">
+                    <div className="flex items-center space-x-3 mb-5">
+                      <div className="p-2 bg-gold-500/20 rounded-lg">
+                        <Upload className="text-gold-500" size={24} />
+                      </div>
+                      <h2 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-gold-400 to-gold-600 bg-clip-text text-transparent">
+                        Upload Your File
+                      </h2>
+                    </div>
                     <FileUpload
                       onFileSelect={handleFileSelect}
                       uploadedFile={uploadedFile}
@@ -220,10 +228,13 @@ function MainApp() {
                   </div>
 
                   {uploadedFile && (
-                    <div className="border border-dark-700 rounded-lg p-4 sm:p-6 bg-dark-800">
-                      <h3 className="text-base sm:text-lg font-semibold text-gold-500 mb-4">
-                        Container Preview
-                      </h3>
+                    <div className="bg-gradient-to-br from-dark-800 to-dark-900 rounded-2xl p-6 border border-gold-500/30 shadow-2xl shadow-gold-500/10">
+                      <div className="flex items-center space-x-2 mb-5">
+                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                        <h3 className="text-base sm:text-lg font-bold bg-gradient-to-r from-gold-400 to-gold-600 bg-clip-text text-transparent">
+                          📦 Container Preview
+                        </h3>
+                      </div>
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
                           <span className="text-gray-400">Status:</span>
@@ -297,19 +308,37 @@ function MainApp() {
                 </div>
 
                 {/* Right Column - Rules Panel */}
-                <div className="border border-dark-700 rounded-lg p-4 sm:p-6 bg-dark-800">
+                <div className="bg-gradient-to-br from-dark-800 to-dark-900 rounded-2xl p-6 border border-dark-700 shadow-2xl">
+                  <div className="flex items-center space-x-3 mb-5">
+                    <div className="p-2 bg-purple-500/20 rounded-lg">
+                      <AlertCircle className="text-purple-400" size={24} />
+                    </div>
+                    <h2 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-purple-400 to-purple-600 bg-clip-text text-transparent">
+                      Security Rules
+                    </h2>
+                  </div>
                   <RulesPanel rules={rules} onRulesChange={setRules} />
 
                   <button
                     onClick={handleSealContainer}
                     disabled={!uploadedFile || isSealing}
-                    className={`w-full mt-6 sm:mt-8 py-3 sm:py-4 rounded-lg font-bold text-base sm:text-lg transition-all duration-300 ${
+                    className={`w-full mt-6 sm:mt-8 py-4 sm:py-5 rounded-xl font-bold text-base sm:text-lg transition-all duration-300 shadow-xl ${
                       uploadedFile && !isSealing
-                        ? "bg-gold-500 hover:bg-gold-600 text-black hover:scale-105 animate-glow"
-                        : "bg-dark-600 text-gray-500 cursor-not-allowed"
+                        ? "bg-gradient-to-r from-gold-500 to-gold-600 hover:from-gold-600 hover:to-gold-700 text-black hover:scale-105 hover:shadow-2xl hover:shadow-gold-500/50 animate-glow"
+                        : "bg-dark-700 text-gray-600 cursor-not-allowed"
                     }`}
                   >
-                    {isSealing ? "Sealing..." : "🔒 Seal & Generate .BAR"}
+                    {isSealing ? (
+                      <span className="flex items-center justify-center space-x-2">
+                        <span className="animate-spin">⚙️</span>
+                        <span>Sealing Container...</span>
+                      </span>
+                    ) : (
+                      <span className="flex items-center justify-center space-x-2">
+                        <span>🔒</span>
+                        <span>Seal & Generate .BAR</span>
+                      </span>
+                    )}
                   </button>
                 </div>
               </div>
