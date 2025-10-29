@@ -5,9 +5,8 @@ Supports email-based OTP verification
 import os
 import random
 import string
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import sib_api_v3_sdk
+from sib_api_v3_sdk.rest import ApiException
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 import hashlib
@@ -18,12 +17,17 @@ OTP_EXPIRY_MINUTES = 10
 MAX_OTP_ATTEMPTS = 3
 
 # Email Configuration (from environment variables)
-SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER = os.getenv("SMTP_USER", "")  # Your email
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")  # App password for Gmail
-FROM_EMAIL = os.getenv("FROM_EMAIL", SMTP_USER)
+BREVO_API_KEY = os.getenv("BREVO_API_KEY", "")
+FROM_EMAIL = os.getenv("FROM_EMAIL", "")
 FROM_NAME = os.getenv("FROM_NAME", "BAR Web - Secure File Sharing")
+
+# Configure Brevo API
+if BREVO_API_KEY:
+    configuration = sib_api_v3_sdk.Configuration()
+    configuration.api_key['api-key'] = BREVO_API_KEY
+    api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
+else:
+    api_instance = None
 
 
 class OTPService:
@@ -120,25 +124,23 @@ class OTPService:
     
     def send_otp_email(self, email: str, otp_code: str, filename: str) -> tuple[bool, str]:
         """
-        Send OTP code via email
+        Send OTP code via email using Brevo
         Returns: (success, error_message)
         """
-        # Check if SMTP is configured
-        if not SMTP_USER or not SMTP_PASSWORD:
-            error_msg = "Email service not configured. Set SMTP_USER and SMTP_PASSWORD environment variables."
+        # Check if Brevo is configured
+        if not BREVO_API_KEY or not FROM_EMAIL:
+            error_msg = "Email service not configured. Set BREVO_API_KEY and FROM_EMAIL environment variables."
             print(f"⚠️ {error_msg}")
-            print(f"SMTP_USER: {'SET' if SMTP_USER else 'NOT SET'}")
-            print(f"SMTP_PASSWORD: {'SET' if SMTP_PASSWORD else 'NOT SET'}")
-            print(f"SMTP_HOST: {SMTP_HOST}")
-            print(f"SMTP_PORT: {SMTP_PORT}")
+            print(f"BREVO_API_KEY: {'SET' if BREVO_API_KEY else 'NOT SET'}")
+            print(f"FROM_EMAIL: {'SET' if FROM_EMAIL else 'NOT SET'}")
+            return False, error_msg
+        
+        if not api_instance:
+            error_msg = "Brevo API not initialized"
+            print(f"⚠️ {error_msg}")
             return False, error_msg
         
         try:
-            # Create email message
-            msg = MIMEMultipart('alternative')
-            msg['From'] = f"{FROM_NAME} <{FROM_EMAIL}>"
-            msg['To'] = email
-            msg['Subject'] = f"Your OTP Code - {otp_code}"
             
             # Create HTML email body
             html_body = f"""
@@ -191,58 +193,32 @@ class OTPService:
             </html>
             """
             
-            # Plain text version
-            text_body = f"""
-            Two-Factor Authentication - BAR Web
+            # Send email using Brevo
+            print(f"📧 Attempting to send OTP email to {email} via Brevo...")
             
-            Access Verification Required
+            # Create email using Brevo API
+            send_smtp_email = sib_api_v3_sdk.SendSmtpEmail(
+                to=[{"email": email}],
+                sender={"name": FROM_NAME, "email": FROM_EMAIL},
+                subject=f"Your OTP Code - {otp_code}",
+                html_content=html_body
+            )
             
-            Someone is attempting to access the file: {filename}
+            # Send the email
+            api_response = api_instance.send_transac_email(send_smtp_email)
             
-            Your One-Time Password (OTP):
-            {otp_code}
-            
-            Important:
-            - This code expires in {OTP_EXPIRY_MINUTES} minutes
-            - You have {MAX_OTP_ATTEMPTS} attempts to enter it correctly
-            - Do not share this code with anyone
-            
-            If you didn't request this access, you can safely ignore this email.
-            
-            BAR Web - Burn After Reading File Sharing
-            """
-            
-            msg.attach(MIMEText(text_body, 'plain'))
-            msg.attach(MIMEText(html_body, 'html'))
-            
-            # Send email
-            print(f"📧 Attempting to send OTP email to {email}...")
-            print(f"SMTP: {SMTP_HOST}:{SMTP_PORT}")
-            
-            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
-                print("✅ Connected to SMTP server")
-                server.set_debuglevel(1)  # Enable debug output
-                server.starttls()
-                print("✅ TLS started")
-                server.login(SMTP_USER, SMTP_PASSWORD)
-                print("✅ Logged in successfully")
-                server.send_message(msg)
-                print("✅ Message sent")
-            
-            print(f"📧 OTP email sent successfully to {email}")
+            print(f"✅ OTP email sent successfully to {email}")
+            print(f"Brevo Message ID: {api_response.message_id}")
             return True, ""
             
-        except smtplib.SMTPAuthenticationError:
-            error_msg = "Email authentication failed. Check SMTP credentials."
+        except ApiException as e:
+            error_msg = f"Brevo API error: {e.status} - {e.reason}"
             print(f"❌ {error_msg}")
-            return False, error_msg
-        except smtplib.SMTPException as e:
-            error_msg = f"Failed to send email: {str(e)}"
-            print(f"❌ {error_msg}")
+            print(f"Response body: {e.body}")
             return False, error_msg
         except Exception as e:
             import traceback
-            error_msg = f"Unexpected error sending email: {str(e)}"
+            error_msg = f"Failed to send email: {str(e)}"
             print(f"❌ {error_msg}")
             print(f"Full traceback:\n{traceback.format_exc()}")
             return False, error_msg
