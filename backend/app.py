@@ -43,7 +43,7 @@ allowed_origins = [
     "http://localhost:3000",
 ]
 
-# Add Railway frontend URL from environment variable
+# Add frontend URL from environment variable (Render/production)
 if frontend_url := os.getenv("FRONTEND_URL"):
     allowed_origins.append(frontend_url)
     # Also allow without trailing slash
@@ -405,7 +405,7 @@ async def seal_container(req: Request, request: SealRequest):
                 "message": "Container sealed and stored on server"
             }
         else:
-            # Client-side: Return .bar file data directly (Railway has ephemeral filesystem)
+            # Client-side: Return .bar file data directly (ephemeral filesystem on Render/cloud)
             bar_data_b64 = base64.b64encode(bar_data).decode('utf-8')
             if os.path.exists(bar_path):
                 os.remove(bar_path)

@@ -9,7 +9,7 @@ What we do here:
 - Destroy files when the view limit is hit 💥
 - Check expiry times ⏰
 - Validate passwords 🔐
-- Persist across server restarts (Railway-safe!) 🚂
+- Persist across server restarts (cloud-safe!) ☁️
 
 This is way more secure than client-side because users can't just keep copies!
 Now with database backing, view limits survive server restarts!
@@ -137,7 +137,7 @@ def get_storage_info() -> dict:
             "Files auto-destruct when limits reached",
             "Shareable links (no file downloads)",
             "Cannot be copied by users",
-            "Database persistence (Railway-safe)",
+            "Database persistence (cloud-safe)",
             "Survives server restarts"
         ]
     }

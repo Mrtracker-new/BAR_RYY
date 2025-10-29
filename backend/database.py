@@ -1,12 +1,12 @@
 """
 Database module for BAR Web - Persistent file metadata tracking
 
-This solves the Railway ephemeral filesystem problem by storing metadata
-in a database instead of in the .bar files themselves.
+This solves the ephemeral filesystem problem on cloud platforms (Render, etc.)
+by storing metadata in a database instead of in the .bar files themselves.
 
 Supports:
 - SQLite for local development
-- PostgreSQL for Railway production (persistent)
+- PostgreSQL for production (persistent)
 """
 import os
 import json
@@ -20,7 +20,7 @@ from contextlib import asynccontextmanager
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///bar_files.db")
 IS_POSTGRES = DATABASE_URL.startswith("postgresql://")
 
-# For Railway PostgreSQL, we'll need asyncpg
+# For production PostgreSQL (Render/cloud), we'll need asyncpg
 if IS_POSTGRES:
     try:
         import asyncpg

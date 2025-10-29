@@ -139,7 +139,7 @@ def add_security_headers(response: Response) -> Response:
     )
     
     # Strict Transport Security (HTTPS only)
-    if os.getenv("RAILWAY_ENVIRONMENT"):  # In production
+    if os.getenv("RENDER") or os.getenv("IS_PRODUCTION"):  # In production
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     
     # Permissions Policy
@@ -194,7 +194,7 @@ def validate_webhook_url(url: str) -> bool:
         return False
     
     # Block localhost/private IPs in production (SSRF protection)
-    if os.getenv("RAILWAY_ENVIRONMENT"):
+    if os.getenv("RENDER") or os.getenv("IS_PRODUCTION"):
         if any(x in url.lower() for x in ['localhost', '127.0.0.1', '0.0.0.0', '192.168.', '10.', '172.16.']):
             return False
     
@@ -204,7 +204,7 @@ def validate_webhook_url(url: str) -> bool:
 def sanitize_error_message(error: str) -> str:
     """Sanitize error messages to avoid information disclosure"""
     # In production, return generic messages
-    if os.getenv("RAILWAY_ENVIRONMENT"):
+    if os.getenv("RENDER") or os.getenv("IS_PRODUCTION"):
         if "file not found" in error.lower():
             return "Resource not found"
         if "permission" in error.lower():
