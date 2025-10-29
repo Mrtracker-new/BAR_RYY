@@ -52,8 +52,8 @@ def validate_filename(filename: str) -> bool:
     if '\x00' in filename:
         return False
     
-    # Check for valid characters (alphanumeric, spaces, dots, dashes, underscores)
-    if not re.match(r'^[\w\s\-\.]+$', filename):
+    # Check for valid characters (alphanumeric, spaces, dots, dashes, underscores, parentheses, brackets)
+    if not re.match(r'^[\w\s\-\.\(\)\[\]]+$', filename):
         return False
     
     return True
