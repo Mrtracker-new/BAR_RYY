@@ -16,8 +16,8 @@ async def decrypt_uploaded_bar(file: UploadFile, password: str = None):
         # Read uploaded .bar file
         bar_data = await file.read()
         
-        # Unpack BAR file
-        encrypted_data, metadata, key = crypto_utils.unpack_bar_file(bar_data)
+        # Unpack BAR file with password for password-derived encryption
+        encrypted_data, metadata, key = crypto_utils.unpack_bar_file(bar_data, password=password)
         
         # Validate access
         is_valid, errors = crypto_utils.validate_bar_access(metadata, password)

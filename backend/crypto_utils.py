@@ -95,14 +95,81 @@ def secure_delete_file(file_path: str, passes: int = 3) -> None:
         raise e
 
 
-def pack_bar_file(encrypted_data: bytes, metadata: dict, key: bytes) -> bytes:
-    """Pack encrypted file and metadata into BAR format"""
+def encrypt_and_pack_with_password(file_data: bytes, metadata: dict, password: str) -> tuple:
+    """
+    High-level function to encrypt and pack a file with password-derived encryption.
+    This is the recommended way to create password-protected .BAR files.
+    
+    Args:
+        file_data: Original file data (unencrypted)
+        metadata: File metadata dictionary
+        password: Password for encryption
+        
+    Returns:
+        Tuple of (bar_data, salt, key) where:
+        - bar_data: Complete .BAR file data ready to save
+        - salt: The salt used (for reference)
+        - key: The derived encryption key (for reference)
+    """
+    # Generate random salt
+    salt = os.urandom(32)
+    
+    # Derive key from password and salt
+    key = derive_key_from_password(password, salt)
+    
+    # Encrypt file data
+    encrypted_data = encrypt_file(file_data, key)
+    
+    # Pack into .BAR file with password-derived method
+    bar_data = pack_bar_file(encrypted_data, metadata, key, password=password, salt=salt)
+    
+    return bar_data, salt, key
+
+
+def pack_bar_file(encrypted_data: bytes, metadata: dict, key: bytes, password: str = None, salt: bytes = None) -> bytes:
+    """
+    Pack encrypted file and metadata into BAR format.
+    
+    Args:
+        encrypted_data: The encrypted file data (must be encrypted with the provided key)
+        metadata: File metadata dictionary
+        key: Encryption key (used for encryption)
+        password: Optional password for password-derived encryption
+        salt: Optional salt (required if password is provided)
+        
+    Returns:
+        BAR file data as bytes
+        
+    Security:
+        - If password is provided: Uses password-derived encryption (zero-knowledge)
+          Only salt is stored, key must be derived from password each time
+        - If password is None: Stores key in file (backward compatible, less secure)
+        
+    Note:
+        For password-protected files, use encrypt_and_pack_with_password() instead.
+        This function is lower-level and requires you to manage salt/key derivation yourself.
+    """
     # Create BAR file structure
     bar_structure = {
         "metadata": metadata,
-        "encryption_key": base64.b64encode(key).decode('utf-8'),
         "encrypted_data": base64.b64encode(encrypted_data).decode('utf-8')
     }
+    
+    # Determine encryption method based on password
+    if password:
+        # Password-derived encryption: Store only salt, NOT the key!
+        # This is true zero-knowledge encryption
+        
+        if salt is None:
+            raise ValueError("Salt is required when password is provided")
+        
+        bar_structure["encryption_method"] = "password_derived"
+        bar_structure["salt"] = base64.b64encode(salt).decode('utf-8')
+        # ⚠️ Key is NOT stored! Must be derived from password each time
+    else:
+        # Legacy mode: Store key in file (less secure, backward compatible)
+        bar_structure["encryption_method"] = "key_stored"
+        bar_structure["encryption_key"] = base64.b64encode(key).decode('utf-8')
     
     # Convert to JSON and encode
     bar_json = json.dumps(bar_structure, indent=2)
@@ -116,8 +183,26 @@ def pack_bar_file(encrypted_data: bytes, metadata: dict, key: bytes) -> bytes:
     return header + obfuscated_data
 
 
-def unpack_bar_file(bar_data: bytes) -> tuple:
-    """Unpack BAR file into components"""
+def unpack_bar_file(bar_data: bytes, password: str = None) -> tuple:
+    """
+    Unpack BAR file into components.
+    
+    Args:
+        bar_data: Raw BAR file data
+        password: Optional password for password-derived encryption
+        
+    Returns:
+        Tuple of (encrypted_data, metadata, key)
+        
+    Security:
+        - For password_derived files: Derives key from password and salt
+        - For key_stored files: Extracts key from file (backward compatible)
+        
+    Raises:
+        ValueError: If file format is invalid
+        ValueError: If password is required but not provided
+        ValueError: If password-derived encryption is used but no password given
+    """
     # Remove header
     if not bar_data.startswith(b"BAR_FILE_V1\n"):
         raise ValueError("Invalid BAR file format")
@@ -129,8 +214,25 @@ def unpack_bar_file(bar_data: bytes) -> tuple:
     bar_structure = json.loads(bar_json.decode('utf-8'))
     
     metadata = bar_structure["metadata"]
-    key = base64.b64decode(bar_structure["encryption_key"])
     encrypted_data = base64.b64decode(bar_structure["encrypted_data"])
+    
+    # Determine encryption method
+    encryption_method = bar_structure.get("encryption_method", "key_stored")  # Default to legacy
+    
+    if encryption_method == "password_derived":
+        # Password-derived encryption: Must derive key from password
+        if not password:
+            raise ValueError("Password required for decryption")
+        
+        # Get salt from file
+        salt = base64.b64decode(bar_structure["salt"])
+        
+        # Derive key from password and salt
+        key = derive_key_from_password(password, salt)
+        
+    else:
+        # Legacy mode: Key is stored in file
+        key = base64.b64decode(bar_structure["encryption_key"])
     
     return encrypted_data, metadata, key
 

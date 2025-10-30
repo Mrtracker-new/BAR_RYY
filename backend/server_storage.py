@@ -46,7 +46,8 @@ def create_server_metadata(
         "view_only": view_only,
         "storage_mode": "server",
         "file_hash": "",
-        "version": "1.0"
+        "version": "1.0",
+        "encryption_method": "password_derived" if password_protected else "key_stored"
     }
     
     return metadata

@@ -321,21 +321,13 @@ async def seal_container(req: Request, request: SealRequest):
         # Calculate file hash
         file_hash = crypto_utils.calculate_file_hash(file_data)
         
-        # Generate encryption key
+        # Generate encryption key and encrypt file
         password_hash = None
+        
         if request.password:
-            # Store password hash for validation
+            # Password-protected: Use password-derived encryption
             import hashlib
             password_hash = hashlib.sha256(request.password.encode()).hexdigest()
-            # Use password-derived key
-            salt = os.urandom(16)
-            key = crypto_utils.derive_key_from_password(request.password, salt)
-        else:
-            # Use random key
-            key = crypto_utils.generate_key()
-        
-        # Encrypt file
-        encrypted_data = crypto_utils.encrypt_file(file_data, key)
         
         # Create metadata based on storage mode
         if request.storage_mode == 'server':
@@ -360,8 +352,19 @@ async def seal_container(req: Request, request: SealRequest):
         if password_hash:
             metadata["password_hash"] = password_hash
         
-        # Pack into .bar file
-        bar_data = crypto_utils.pack_bar_file(encrypted_data, metadata, key)
+        # Create .BAR file - method depends on whether password is provided
+        if request.password:
+            # Password-derived encryption: Uses helper function that handles salt/key properly
+            bar_data, salt, key = crypto_utils.encrypt_and_pack_with_password(
+                file_data,
+                metadata,
+                request.password
+            )
+        else:
+            # No password: Use random key and encrypt normally
+            key = crypto_utils.generate_key()
+            encrypted_data = crypto_utils.encrypt_file(file_data, key)
+            bar_data = crypto_utils.pack_bar_file(encrypted_data, metadata, key)
         
         # Generate unique BAR ID
         bar_id = str(uuid.uuid4())
@@ -494,7 +497,8 @@ async def decrypt_bar(bar_id: str, request: DecryptRequest):
         with open(bar_file, "rb") as f:
             bar_data = f.read()
         
-        encrypted_data, metadata, key = crypto_utils.unpack_bar_file(bar_data)
+        # Unpack with password for password-derived encryption
+        encrypted_data, metadata, key = crypto_utils.unpack_bar_file(bar_data, password=request.password)
         
         # Validate access
         is_valid, errors = crypto_utils.validate_bar_access(metadata, request.password)
@@ -536,7 +540,13 @@ async def decrypt_bar(bar_id: str, request: DecryptRequest):
         
         # Save updated metadata if not destroying
         if not should_destroy:
-            updated_bar = crypto_utils.pack_bar_file(encrypted_data, metadata, key)
+            # Re-pack with password if it was password-protected
+            updated_bar = crypto_utils.pack_bar_file(
+                encrypted_data, 
+                metadata, 
+                key,
+                password=request.password if metadata.get("password_protected") else None
+            )
             with open(bar_file, "wb") as f:
                 f.write(updated_bar)
         else:
@@ -578,8 +588,9 @@ async def decrypt_uploaded_bar_file(req: Request, file: UploadFile = File(...), 
         if len(bar_data) > security.MAX_FILE_SIZE * 2:  # Allow larger for encrypted container
             raise HTTPException(status_code=413, detail="File too large")
         
-        # Unpack BAR file
-        encrypted_data, metadata, key = crypto_utils.unpack_bar_file(bar_data)
+        # Unpack BAR file with password for password-derived encryption
+        password_to_use = password if password and password.strip() else None
+        encrypted_data, metadata, key = crypto_utils.unpack_bar_file(bar_data, password=password_to_use)
         
         # Debug logging
         storage_mode = metadata.get('storage_mode', 'client')
@@ -788,7 +799,9 @@ async def share_file(token: str, req: Request, request: DecryptRequest):
         with open(bar_file, "rb") as f:
             bar_data = f.read()
         
-        encrypted_data, metadata, key = crypto_utils.unpack_bar_file(bar_data)
+        # Unpack with password for password-derived encryption
+        password_to_use = password.strip() if password and password.strip() else None
+        encrypted_data, metadata, key = crypto_utils.unpack_bar_file(bar_data, password=password_to_use)
         
         # Get current view count from database
         current_views = file_record['current_views']

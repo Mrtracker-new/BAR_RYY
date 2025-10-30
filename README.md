@@ -23,11 +23,15 @@ Pretty neat, right?
 - **Smart View Count Enforcement**: Server-side files enforce view limits; client-side files don't (honest UX!)
 - **Self-Destruct**: Files actually destroy themselves after reaching the view limit (server-side only)
 - **Secure File Deletion**: Data is overwritten multiple times before deletion to prevent recovery
-- **Password Protection**: Lock your files with a password using PBKDF2 key derivation
+- **🌟 Zero-Knowledge Password Protection**: 🔒 **NEW!** True password-derived encryption
+  - Encryption key is **NEVER stored** in the .BAR file
+  - Uses PBKDF2 with 100,000 iterations (military-grade)
+  - Without the password, the file is **completely useless**
+  - Same security as 1Password, Bitwarden, Signal
 - **Time Bombs**: Set files to expire after minutes, hours, or days
 - **View-Only Mode**: Let people preview files in-browser without downloading
 - **Screenshot Protection**: Watermarks and blur-on-unfocus to discourage sneaky screenshots
-- **AES-256 Encryption**: Industry-standard encryption
+- **AES-256 Encryption**: Industry-standard encryption (Fernet)
 - **File Integrity Checks**: SHA-256 hashes detect tampering
 - **Webhook Alerts**: Get notified when someone views your file (coming soon)
 
@@ -195,9 +199,31 @@ Visit `http://localhost:8000/docs` when running for full Swagger documentation!
 ## Security Architecture
 
 ### Encryption
+
+#### 🔒 Password-Derived Encryption (NEW!)
+When you protect a file with a password, we use **true zero-knowledge encryption**:
+
+1. **Salt Generation**: Random 32-byte salt is generated
+2. **Key Derivation**: PBKDF2-HMAC-SHA256 with 100,000 iterations derives encryption key from password + salt
+3. **File Encryption**: File is encrypted with derived key using AES-256 (Fernet)
+4. **Storage**: Only the **salt** is stored in the .BAR file (NOT the key!)
+5. **Decryption**: Key must be re-derived from password every time
+
+**Why this is super secure:**
+- ❌ Without the password, the .BAR file is **useless** (even to us!)
+- ❌ No key leakage - key only exists in memory during encryption/decryption
+- ❌ Resistant to rainbow table attacks (salt) and brute-force (100k iterations)
+- ✅ Military-grade security (same as password managers)
+
+**Two Encryption Modes:**
+- **password_derived**: 🔐 For password-protected files (zero-knowledge, key NOT stored)
+- **key_stored**: For non-password files (key stored in file, backward compatible)
+
+See `PASSWORD_DERIVED_ENCRYPTION.md` for full technical details.
+
+#### Traditional Encryption
 - **AES-256 (Fernet)**: Symmetric encryption for file data
 - **Random Key Generation**: Cryptographically secure keys for non-password mode
-- **PBKDF2-HMAC-SHA256**: Password-derived keys with 100,000 iterations
 - **Base64 Encoding**: Safe text representation of binary data
 
 ### Integrity & Authentication

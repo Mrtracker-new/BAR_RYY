@@ -40,6 +40,7 @@ def create_client_metadata(
         "storage_mode": "client",
         "file_hash": "",
         "version": "1.0",
+        "encryption_method": "password_derived" if password_protected else "key_stored",
         # 👀 Notice: No max_views or current_views here!
         # Why? Because users can keep copies of the file, so we can't track views anyway
     }
