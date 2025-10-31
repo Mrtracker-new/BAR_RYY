@@ -23,16 +23,21 @@ Pretty neat, right?
 - **Smart View Count Enforcement**: Server-side files enforce view limits; client-side files don't (honest UX!)
 - **Self-Destruct**: Files actually destroy themselves after reaching the view limit (server-side only)
 - **Secure File Deletion**: Data is overwritten multiple times before deletion to prevent recovery
-- **🌟 Zero-Knowledge Password Protection**: 🔒 **NEW!** True password-derived encryption
+- **🌟 Zero-Knowledge Password Protection**: 🔒 True password-derived encryption
   - Encryption key is **NEVER stored** in the .BAR file
   - Uses PBKDF2 with 100,000 iterations (military-grade)
   - Without the password, the file is **completely useless**
   - Same security as 1Password, Bitwarden, Signal
+- **🛡️ HMAC Integrity Verification**: 🆕 **NEW!** Tamper-proof files
+  - HMAC-SHA256 signatures detect ANY modifications
+  - Protects encrypted data, metadata, and file structure
+  - Cryptographic proof of authenticity
+  - Constant-time verification prevents timing attacks
 - **Time Bombs**: Set files to expire after minutes, hours, or days
 - **View-Only Mode**: Let people preview files in-browser without downloading
 - **Screenshot Protection**: Watermarks and blur-on-unfocus to discourage sneaky screenshots
 - **AES-256 Encryption**: Industry-standard encryption (Fernet)
-- **File Integrity Checks**: SHA-256 hashes detect tampering
+- **Dual Integrity Checks**: SHA-256 for file content + HMAC-SHA256 for container
 - **Webhook Alerts**: Get notified when someone views your file (coming soon)
 
 ### 🎨 UI/UX Features

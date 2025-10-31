@@ -1,12 +1,18 @@
 import os
 import json
 import base64
+import hmac
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.backends import default_backend
 from datetime import datetime, timedelta
 import hashlib
+
+
+class TamperDetectedException(Exception):
+    """Exception raised when BAR file tampering is detected"""
+    pass
 
 
 def generate_key():
@@ -47,6 +53,51 @@ def decrypt_file(encrypted_data: bytes, key: bytes) -> bytes:
 def calculate_file_hash(file_data: bytes) -> str:
     """Calculate SHA256 hash of file for integrity checking"""
     return hashlib.sha256(file_data).hexdigest()
+
+
+def generate_hmac_signature(data: bytes, key: bytes) -> str:
+    """
+    Generate HMAC-SHA256 signature for data integrity verification.
+    
+    Args:
+        data: The data to sign (should be the entire BAR structure minus signature)
+        key: The encryption key used as HMAC key
+        
+    Returns:
+        Hex-encoded HMAC signature string
+        
+    Security:
+        HMAC provides cryptographic proof that data hasn't been modified.
+        Any changes to the data will result in signature mismatch.
+    """
+    return hmac.new(key, data, hashlib.sha256).hexdigest()
+
+
+def verify_hmac_signature(data: bytes, key: bytes, signature: str) -> bool:
+    """
+    Verify HMAC-SHA256 signature to detect tampering.
+    
+    Args:
+        data: The data to verify
+        key: The encryption key used as HMAC key
+        signature: The expected signature (hex string)
+        
+    Returns:
+        True if signature is valid, raises TamperDetectedException if invalid
+        
+    Raises:
+        TamperDetectedException: If signature doesn't match (file was tampered with)
+    """
+    expected_signature = hmac.new(key, data, hashlib.sha256).hexdigest()
+    
+    # Use constant-time comparison to prevent timing attacks
+    if not hmac.compare_digest(expected_signature, signature):
+        raise TamperDetectedException(
+            "BAR file integrity check failed! File has been modified or corrupted. "
+            "This could indicate tampering or data corruption."
+        )
+    
+    return True
 
 
 def secure_delete_file(file_path: str, passes: int = 3) -> None:
@@ -171,7 +222,13 @@ def pack_bar_file(encrypted_data: bytes, metadata: dict, key: bytes, password: s
         bar_structure["encryption_method"] = "key_stored"
         bar_structure["encryption_key"] = base64.b64encode(key).decode('utf-8')
     
-    # Convert to JSON and encode
+    # Generate HMAC signature for integrity verification
+    # Sign the entire structure (metadata + encrypted_data + salt/key)
+    bar_json_for_signing = json.dumps(bar_structure, sort_keys=True)
+    signature = generate_hmac_signature(bar_json_for_signing.encode('utf-8'), key)
+    bar_structure["hmac_signature"] = signature
+    
+    # Convert to JSON and encode (now includes signature)
     bar_json = json.dumps(bar_structure, indent=2)
     bar_bytes = bar_json.encode('utf-8')
     
@@ -233,6 +290,26 @@ def unpack_bar_file(bar_data: bytes, password: str = None) -> tuple:
     else:
         # Legacy mode: Key is stored in file
         key = base64.b64decode(bar_structure["encryption_key"])
+    
+    # Verify HMAC signature for integrity (if present)
+    if "hmac_signature" in bar_structure:
+        stored_signature = bar_structure["hmac_signature"]
+        
+        # Reconstruct the structure without signature for verification
+        structure_for_verification = {k: v for k, v in bar_structure.items() if k != "hmac_signature"}
+        verification_json = json.dumps(structure_for_verification, sort_keys=True)
+        
+        # Verify signature - will raise TamperDetectedException if invalid
+        verify_hmac_signature(verification_json.encode('utf-8'), key, stored_signature)
+    else:
+        # No signature present - old file format (pre-HMAC)
+        # Issue warning but allow it for backward compatibility
+        import warnings
+        warnings.warn(
+            "BAR file does not contain HMAC signature (old format). "
+            "Tampering cannot be detected. Consider re-encrypting with current version.",
+            UserWarning
+        )
     
     return encrypted_data, metadata, key
 
