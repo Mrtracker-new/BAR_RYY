@@ -612,24 +612,31 @@ async def decrypt_uploaded_bar_file(req: Request, file: UploadFile = File(...), 
         try:
             encrypted_data, metadata, key = crypto_utils.unpack_bar_file(bar_data, password=password_to_use)
         except ValueError as e:
+            error_msg = str(e)
             # Password required or wrong password
-            if "Password required" in str(e):
+            if "Password required" in error_msg:
                 # Record failed attempt
                 security.record_password_attempt(client_ip, False, file_token)
                 print(f"❌ Password required but not provided - failed attempts incremented")
                 raise HTTPException(status_code=403, detail="Password required")
+            elif "Invalid password" in error_msg:
+                # Wrong password provided - record failed attempt
+                security.record_password_attempt(client_ip, False, file_token)
+                print(f"❌ Invalid password - failed attempts incremented")
+                raise HTTPException(status_code=403, detail="Invalid password")
             else:
-                raise
+                # Other ValueError - re-raise as 403
+                security.record_password_attempt(client_ip, False, file_token)
+                print(f"❌ Decryption error: {error_msg}")
+                raise HTTPException(status_code=403, detail="Decryption failed")
         except crypto_utils.TamperDetectedException as e:
             # Tampering detected - don't track as password attempt
             print(f"🚨 Tampering detected: {str(e)}")
             raise HTTPException(status_code=403, detail="File integrity check failed - possible tampering")
         except Exception as e:
-            # Likely wrong password (decryption failed)
-            if "Password required" in str(e) or "Decryption failed" in str(e):
-                security.record_password_attempt(client_ip, False, file_token)
-                print(f"❌ Decryption failed (wrong password?) - failed attempts incremented")
-            raise HTTPException(status_code=403, detail="Invalid password or corrupted file")
+            # Unexpected error
+            print(f"❌ Unexpected error during unpacking: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Decryption failed: {str(e)}")
         
         # Debug logging
         storage_mode = metadata.get('storage_mode', 'client')
