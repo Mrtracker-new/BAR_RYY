@@ -33,6 +33,11 @@ Pretty neat, right?
   - Protects encrypted data, metadata, and file structure
   - Cryptographic proof of authenticity
   - Constant-time verification prevents timing attacks
+- **🚫 Brute Force Protection**: 🆕 **NEW!** Password attack prevention
+  - Progressive delays (1s, 2s, 4s, 8s, 16s) after failed attempts
+  - Automatic lockout after 5 failed attempts (60 minute cooldown)
+  - Per-IP and per-resource tracking
+  - Successful login clears failed attempts
 - **Time Bombs**: Set files to expire after minutes, hours, or days
 - **View-Only Mode**: Let people preview files in-browser without downloading
 - **Screenshot Protection**: Watermarks and blur-on-unfocus to discourage sneaky screenshots

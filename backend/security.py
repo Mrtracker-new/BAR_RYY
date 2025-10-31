@@ -12,6 +12,15 @@ import os
 # Rate limiting storage (in production, use Redis)
 rate_limit_storage: Dict[str, list] = defaultdict(list)
 
+# Password brute force protection storage
+# Format: {"ip:token": [{"timestamp": datetime, "success": bool}, ...]}
+password_attempts: Dict[str, list] = defaultdict(list)
+
+# Brute force protection constants
+MAX_PASSWORD_ATTEMPTS = 5  # Max failed attempts before lockout
+LOCKOUT_DURATION_MINUTES = 60  # Lockout duration in minutes
+PROGRESSIVE_DELAY_ENABLED = True  # Enable progressive delays
+
 # Security constants
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
 MAX_FILENAME_LENGTH = 255
@@ -111,6 +120,132 @@ def check_rate_limit(request: Request, limit: int = 60) -> None:
     
     # Add current request
     rate_limit_storage[client_ip].append(current_time)
+
+
+def check_password_brute_force(client_ip: str, resource_id: str = None) -> tuple[bool, int, str]:
+    """
+    Check if IP is locked out due to too many failed password attempts.
+    
+    Args:
+        client_ip: Client's IP address
+        resource_id: Optional resource identifier (token/bar_id)
+        
+    Returns:
+        Tuple of (is_locked_out, failed_attempts_count, lockout_message)
+        
+    Raises:
+        HTTPException: If client is locked out (429 Too Many Requests)
+    """
+    key = f"{client_ip}:{resource_id}" if resource_id else client_ip
+    current_time = datetime.now()
+    lockout_cutoff = current_time - timedelta(minutes=LOCKOUT_DURATION_MINUTES)
+    
+    # Clean up old attempts (older than lockout duration)
+    password_attempts[key] = [
+        attempt for attempt in password_attempts[key]
+        if attempt["timestamp"] > lockout_cutoff
+    ]
+    
+    # Count recent failed attempts
+    failed_attempts = [
+        attempt for attempt in password_attempts[key]
+        if not attempt.get("success", False)
+    ]
+    
+    # Check if locked out
+    if len(failed_attempts) >= MAX_PASSWORD_ATTEMPTS:
+        # Calculate time remaining in lockout
+        oldest_failed = min(failed_attempts, key=lambda x: x["timestamp"])
+        lockout_expires = oldest_failed["timestamp"] + timedelta(minutes=LOCKOUT_DURATION_MINUTES)
+        time_remaining = lockout_expires - current_time
+        
+        minutes_remaining = int(time_remaining.total_seconds() / 60)
+        
+        message = (
+            f"Too many failed password attempts. "
+            f"Account locked for {minutes_remaining} minutes. "
+            f"Please try again later."
+        )
+        
+        raise HTTPException(
+            status_code=429,
+            detail=message
+        )
+    
+    return False, len(failed_attempts), ""
+
+
+def record_password_attempt(client_ip: str, success: bool, resource_id: str = None) -> None:
+    """
+    Record a password attempt (success or failure).
+    
+    Args:
+        client_ip: Client's IP address
+        success: Whether the password was correct
+        resource_id: Optional resource identifier (token/bar_id)
+    """
+    key = f"{client_ip}:{resource_id}" if resource_id else client_ip
+    
+    password_attempts[key].append({
+        "timestamp": datetime.now(),
+        "success": success
+    })
+    
+    # If successful, clear failed attempts for this IP+resource
+    if success:
+        password_attempts[key] = [
+            attempt for attempt in password_attempts[key]
+            if attempt.get("success", False)
+        ]
+
+
+def get_progressive_delay(failed_attempts: int) -> float:
+    """
+    Calculate progressive delay based on number of failed attempts.
+    Makes brute force attacks exponentially slower.
+    
+    Args:
+        failed_attempts: Number of failed attempts
+        
+    Returns:
+        Delay in seconds to apply before next attempt
+    """
+    if not PROGRESSIVE_DELAY_ENABLED or failed_attempts < 1:
+        return 0.0
+    
+    # Progressive delay formula: 2^(attempts-1) seconds
+    # 1st fail: 1s, 2nd: 2s, 3rd: 4s, 4th: 8s, 5th: 16s
+    delay = min(2 ** (failed_attempts - 1), 30)  # Cap at 30 seconds
+    
+    return delay
+
+
+def check_and_delay_password_attempt(client_ip: str, resource_id: str = None) -> int:
+    """
+    Check brute force status and apply progressive delay if needed.
+    
+    Args:
+        client_ip: Client's IP address
+        resource_id: Optional resource identifier
+        
+    Returns:
+        Number of failed attempts so far
+        
+    Raises:
+        HTTPException: If client is locked out
+    """
+    import time
+    
+    # Check if locked out
+    _, failed_count, _ = check_password_brute_force(client_ip, resource_id)
+    
+    # Apply progressive delay
+    if failed_count > 0:
+        delay = get_progressive_delay(failed_count)
+        if delay > 0:
+            time.sleep(delay)
+    
+    return failed_count
 
 
 def add_security_headers(response: Response) -> Response:

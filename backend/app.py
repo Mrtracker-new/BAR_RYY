@@ -588,9 +588,35 @@ async def decrypt_uploaded_bar_file(req: Request, file: UploadFile = File(...), 
         if len(bar_data) > security.MAX_FILE_SIZE * 2:  # Allow larger for encrypted container
             raise HTTPException(status_code=413, detail="File too large")
         
+        # Get client IP for brute force tracking
+        client_ip = analytics.get_client_ip(req)
+        
+        # Generate a pseudo-token from file hash for tracking attempts per file
+        import hashlib
+        file_token = hashlib.sha256(bar_data[:100]).hexdigest()[:16]  # Use first 100 bytes
+        
         # Unpack BAR file with password for password-derived encryption
         password_to_use = password if password and password.strip() else None
-        encrypted_data, metadata, key = crypto_utils.unpack_bar_file(bar_data, password=password_to_use)
+        
+        try:
+            encrypted_data, metadata, key = crypto_utils.unpack_bar_file(bar_data, password=password_to_use)
+        except ValueError as e:
+            # Password required or wrong password
+            if "Password required" in str(e):
+                # Check brute force protection
+                try:
+                    security.check_and_delay_password_attempt(client_ip, file_token)
+                except HTTPException:
+                    raise
+                
+                # Record failed attempt
+                security.record_password_attempt(client_ip, False, file_token)
+                raise HTTPException(status_code=403, detail="Password required")
+            else:
+                raise
+        except crypto_utils.TamperDetectedException:
+            # Tampering detected - don't track as password attempt
+            raise HTTPException(status_code=403, detail="File integrity check failed - possible tampering")
         
         # Debug logging
         storage_mode = metadata.get('storage_mode', 'client')
@@ -600,6 +626,15 @@ async def decrypt_uploaded_bar_file(req: Request, file: UploadFile = File(...), 
         print(f"Expires At: {metadata.get('expires_at')}")
         print(f"Password Provided: {bool(password and password.strip())}")
         
+        # If password protected, check brute force protection
+        if metadata.get('password_protected'):
+            try:
+                failed_count = security.check_and_delay_password_attempt(client_ip, file_token)
+                if failed_count > 0:
+                    print(f"⚠️ Previous failed attempts: {failed_count}")
+            except HTTPException:
+                raise
+        
         # Validate access using CLIENT storage module (no view count enforcement)
         password_to_check = password if password and password.strip() else None
         is_valid, errors = client_storage.validate_client_access(metadata, password_to_check)
@@ -608,7 +643,16 @@ async def decrypt_uploaded_bar_file(req: Request, file: UploadFile = File(...), 
             error_msg = "; ".join(errors)
             print(f"\n!!! ACCESS DENIED !!!")
             print(f"Errors: {error_msg}")
+            
+            # Record failed password attempt if password was the issue
+            if "Password required" in error_msg and metadata.get('password_protected'):
+                security.record_password_attempt(client_ip, False, file_token)
+            
             raise HTTPException(status_code=403, detail=error_msg)
+        
+        # If password protected, record successful attempt
+        if metadata.get('password_protected'):
+            security.record_password_attempt(client_ip, True, file_token)
         
         print(f"✓ Access granted! (Client-side - view limits NOT enforced)")
         
@@ -816,12 +860,27 @@ async def share_file(token: str, req: Request, request: DecryptRequest):
         
         # Validate password if protected
         if metadata.get("password_protected"):
+            client_ip = analytics.get_client_ip(req)
+            
+            # Check brute force protection and apply progressive delay
+            try:
+                failed_count = security.check_and_delay_password_attempt(client_ip, token)
+                if failed_count > 0:
+                    print(f"⚠️ Previous failed attempts: {failed_count}")
+            except HTTPException:
+                # Locked out - re-raise
+                raise
+            
             if not password or not password.strip():
                 print("❌ Password required but not provided")
+                # Record failed attempt
+                security.record_password_attempt(client_ip, False, token)
                 raise HTTPException(status_code=403, detail="Password required")
             
             # Check password hash (only for new files that have it)
             stored_hash = metadata.get("password_hash")
+            password_valid = False
+            
             if stored_hash:
                 import hashlib
                 provided_hash = hashlib.sha256(password.strip().encode()).hexdigest()
@@ -830,14 +889,22 @@ async def share_file(token: str, req: Request, request: DecryptRequest):
                 print(f"  Provided hash: {provided_hash[:16]}...")
                 print(f"  Match: {provided_hash == stored_hash}")
                 
-                if provided_hash != stored_hash:
+                password_valid = (provided_hash == stored_hash)
+                
+                if not password_valid:
                     print("❌ Password hash mismatch!")
+                    # Record failed attempt
+                    security.record_password_attempt(client_ip, False, token)
                     raise HTTPException(status_code=403, detail="Invalid password")
                 print("✅ Password validated successfully")
+                # Record successful attempt
+                security.record_password_attempt(client_ip, True, token)
             else:
                 # Old file without password_hash - can't validate password
                 # For security, you should regenerate these files
                 print("⚠️ WARNING: File has password protection but no password_hash (old file format)")
+                # Assume valid for backward compatibility
+                password_valid = True
         
         # Check if file has already reached max views (database is source of truth)
         if current_views >= max_views:
