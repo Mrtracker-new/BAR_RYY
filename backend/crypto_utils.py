@@ -283,6 +283,15 @@ def unpack_bar_file(bar_data: bytes, password: str = None) -> tuple:
         if not password:
             raise ValueError("Password required for decryption")
         
+        # Verify password FIRST if password_hash exists (before key derivation)
+        # This prevents false "tampering detected" errors when password is wrong
+        if "password_hash" in metadata:
+            import hashlib
+            provided_hash = hashlib.sha256(password.encode()).hexdigest()
+            stored_hash = metadata["password_hash"]
+            if provided_hash != stored_hash:
+                raise ValueError("Invalid password")
+        
         # Get salt from file
         salt = base64.b64decode(bar_structure["salt"])
         
