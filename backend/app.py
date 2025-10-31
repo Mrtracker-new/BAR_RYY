@@ -595,6 +595,17 @@ async def decrypt_uploaded_bar_file(req: Request, file: UploadFile = File(...), 
         import hashlib
         file_token = hashlib.sha256(bar_data[:100]).hexdigest()[:16]  # Use first 100 bytes
         
+        # Check brute force protection BEFORE attempting to unpack
+        # This prevents the check from being bypassed
+        try:
+            failed_count = security.check_and_delay_password_attempt(client_ip, file_token)
+            if failed_count > 0:
+                print(f"⚠️ Previous failed attempts: {failed_count} - applying delay")
+        except HTTPException as e:
+            # User is locked out - show clear message
+            print(f"🚫 IP {client_ip} is locked out for file {file_token}")
+            raise
+        
         # Unpack BAR file with password for password-derived encryption
         password_to_use = password if password and password.strip() else None
         
@@ -603,20 +614,22 @@ async def decrypt_uploaded_bar_file(req: Request, file: UploadFile = File(...), 
         except ValueError as e:
             # Password required or wrong password
             if "Password required" in str(e):
-                # Check brute force protection
-                try:
-                    security.check_and_delay_password_attempt(client_ip, file_token)
-                except HTTPException:
-                    raise
-                
                 # Record failed attempt
                 security.record_password_attempt(client_ip, False, file_token)
+                print(f"❌ Password required but not provided - failed attempts incremented")
                 raise HTTPException(status_code=403, detail="Password required")
             else:
                 raise
-        except crypto_utils.TamperDetectedException:
+        except crypto_utils.TamperDetectedException as e:
             # Tampering detected - don't track as password attempt
+            print(f"🚨 Tampering detected: {str(e)}")
             raise HTTPException(status_code=403, detail="File integrity check failed - possible tampering")
+        except Exception as e:
+            # Likely wrong password (decryption failed)
+            if "Password required" in str(e) or "Decryption failed" in str(e):
+                security.record_password_attempt(client_ip, False, file_token)
+                print(f"❌ Decryption failed (wrong password?) - failed attempts incremented")
+            raise HTTPException(status_code=403, detail="Invalid password or corrupted file")
         
         # Debug logging
         storage_mode = metadata.get('storage_mode', 'client')
@@ -625,15 +638,6 @@ async def decrypt_uploaded_bar_file(req: Request, file: UploadFile = File(...), 
         print(f"Password Protected: {metadata.get('password_protected')}")
         print(f"Expires At: {metadata.get('expires_at')}")
         print(f"Password Provided: {bool(password and password.strip())}")
-        
-        # If password protected, check brute force protection
-        if metadata.get('password_protected'):
-            try:
-                failed_count = security.check_and_delay_password_attempt(client_ip, file_token)
-                if failed_count > 0:
-                    print(f"⚠️ Previous failed attempts: {failed_count}")
-            except HTTPException:
-                raise
         
         # Validate access using CLIENT storage module (no view count enforcement)
         password_to_check = password if password and password.strip() else None

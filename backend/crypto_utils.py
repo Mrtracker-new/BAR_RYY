@@ -224,11 +224,13 @@ def pack_bar_file(encrypted_data: bytes, metadata: dict, key: bytes, password: s
     
     # Generate HMAC signature for integrity verification
     # Sign the entire structure (metadata + encrypted_data + salt/key)
-    bar_json_for_signing = json.dumps(bar_structure, sort_keys=True)
+    # Use consistent JSON formatting for signing and verification
+    bar_json_for_signing = json.dumps(bar_structure, sort_keys=True, separators=(',', ':'))
     signature = generate_hmac_signature(bar_json_for_signing.encode('utf-8'), key)
     bar_structure["hmac_signature"] = signature
     
     # Convert to JSON and encode (now includes signature)
+    # Use pretty printing for human readability, but signature is already computed
     bar_json = json.dumps(bar_structure, indent=2)
     bar_bytes = bar_json.encode('utf-8')
     
@@ -296,8 +298,9 @@ def unpack_bar_file(bar_data: bytes, password: str = None) -> tuple:
         stored_signature = bar_structure["hmac_signature"]
         
         # Reconstruct the structure without signature for verification
+        # MUST use same JSON formatting as during signing
         structure_for_verification = {k: v for k, v in bar_structure.items() if k != "hmac_signature"}
-        verification_json = json.dumps(structure_for_verification, sort_keys=True)
+        verification_json = json.dumps(structure_for_verification, sort_keys=True, separators=(',', ':'))
         
         # Verify signature - will raise TamperDetectedException if invalid
         verify_hmac_signature(verification_json.encode('utf-8'), key, stored_signature)
