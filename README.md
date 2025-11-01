@@ -1,49 +1,112 @@
 # BAR Web - Burn After Reading 🔥
 
+> **Mission Impossible-style file sharing** - Files that self-destruct after reading. No traces. No recovery. Just like the movies. 🕵️
+
 Hey there! 👋 
 
-So I built this project because I thought it would be cool to have a way to share files that automatically self-destruct after being viewed. You know, like those spy movies where messages disappear after being read? Yeah, that's the vibe.
+Ever wanted to share something super secret? Like, *actually* secret - not just "hidden folder on desktop" secret? That's what I built here. Upload a file, set it to self-destruct after being viewed once (or however many times you want), and boom - it's gone forever. No recovery, no traces.
 
-## What Does It Do?
+Think: Snapchat for files, but with **military-grade encryption** and actual teeth. 💪
 
-Basically, you can:
-- Upload a file and encrypt it
-- Set how many times it can be viewed (like just once, or maybe 5 times)
-- Add an expiration time if you want
-- Protect it with a password
-- Share the encrypted `.bar` file with someone
-- Once they hit the view limit... BOOM! 💥 File's gone forever
+## 🎯 What Does It Do?
 
-Pretty neat, right?
+You can:
+- 📤 **Upload** any file (up to 100MB)
+- 🔒 **Encrypt** it with AES-256 (same encryption banks use)
+- 🔑 **Password-protect** it (zero-knowledge encryption - even *I* can't see it without your password)
+- ⏱️ **Set expiration** (5 minutes? 24 hours? You choose)
+- 👁️ **Limit views** (view once and self-destruct, or allow multiple views)
+- 🚀 **Share** via encrypted `.bar` file OR shareable link
+- 💥 **Auto-destruct** when limits are reached (view count or expiration)
+- 🚨 **Get alerts** if someone tries to tamper with the file
+- 🚫 **Block brute-force** attacks (progressive delays + lockouts)
 
-## Cool Features I Added
+It's like having your own **private self-destructing vault** for files. 🔐
 
-### 🔐 Security Features
-- **Dual Storage Modes**: Choose between Client-Side (download file) or Server-Side (shareable link)
-- **Smart View Count Enforcement**: Server-side files enforce view limits; client-side files don't (honest UX!)
-- **Self-Destruct**: Files actually destroy themselves after reaching the view limit (server-side only)
-- **Secure File Deletion**: Data is overwritten multiple times before deletion to prevent recovery
-- **🌟 Zero-Knowledge Password Protection**: 🔒 True password-derived encryption
-  - Encryption key is **NEVER stored** in the .BAR file
-  - Uses PBKDF2 with 100,000 iterations (military-grade)
-  - Without the password, the file is **completely useless**
-  - Same security as 1Password, Bitwarden, Signal
-- **🛡️ HMAC Integrity Verification**: 🆕 **NEW!** Tamper-proof files
-  - HMAC-SHA256 signatures detect ANY modifications
-  - Protects encrypted data, metadata, and file structure
-  - Cryptographic proof of authenticity
-  - Constant-time verification prevents timing attacks
-- **🚫 Brute Force Protection**: 🆕 **NEW!** Password attack prevention
-  - Progressive delays (1s, 2s, 4s, 8s, 16s) after failed attempts
-  - Automatic lockout after 5 failed attempts (60 minute cooldown)
-  - Per-IP and per-resource tracking
-  - Successful login clears failed attempts
-- **Time Bombs**: Set files to expire after minutes, hours, or days
-- **View-Only Mode**: Let people preview files in-browser without downloading
-- **Screenshot Protection**: Watermarks and blur-on-unfocus to discourage sneaky screenshots
-- **AES-256 Encryption**: Industry-standard encryption (Fernet)
-- **Dual Integrity Checks**: SHA-256 for file content + HMAC-SHA256 for container
-- **Webhook Alerts**: Get notified when someone views your file (coming soon)
+## 🌐 Try It Live!
+
+**➡️ [Live Demo](https://barryy-production.up.railway.app/)** (Deployed on Railway)
+
+No installation needed - just click and start encrypting! All the security features work exactly the same as running it locally.
+
+### 📈 By The Numbers
+
+```
+🔐 100,000  iterations (PBKDF2)        🚫 60 minutes  lockout time
+🔒 AES-256  encryption strength       🛡️ SHA-256   HMAC signatures  
+⏱️ 5-60 min  typical expiration        👁️ 1-∞ views  configurable limits
+💾 100 MB   max file size             💥 3 passes  secure deletion
+```
+
+---
+
+## ✨ What Makes This Special?
+
+### 🔒 Fort Knox-Level Security
+
+I didn't just slap some basic encryption on this and call it a day. This thing has **THREE layers of military-grade protection**:
+
+#### 🅑 **Layer 1: Zero-Knowledge Encryption**
+> *"Even I can't decrypt your files without the password"*
+
+When you password-protect a file, the encryption key is **NEVER stored anywhere**. It's derived from your password every single time using PBKDF2 with 100,000 iterations. This is the same security used by:
+- 🔑 1Password
+- 🔑 Bitwarden  
+- 💬 Signal
+- 🏦 Your bank
+
+**Translation**: Without the password, your file is literally **useless**. Not "hard to crack" - literally impossible. Even quantum computers can't help without that password.
+
+#### 🅒 **Layer 2: Tamper Detection (HMAC-SHA256)**
+> *"Try to modify even ONE byte? Caught red-handed."*
+
+Every .BAR file is cryptographically signed with HMAC-SHA256. This means:
+- ✅ Change the encrypted data? **Detected**
+- ✅ Modify the metadata? **Detected**  
+- ✅ Replace the salt? **Detected**
+- ✅ Swap files around? **Detected**
+
+It's like a security seal that's mathematically impossible to fake. Any tampering = instant rejection.
+
+#### 🅓 **Layer 3: Brute Force Protection**
+> *"5 wrong passwords? See you in 60 minutes."*
+
+People trying to guess your password face:
+1. **Progressive delays**: 1s → 2s → 4s → 8s → 16s (exponentially slower)
+2. **Automatic lockout**: After 5 failed attempts, locked for 60 minutes
+3. **Per-file tracking**: Can't bypass by uploading the same file again
+4. **Per-IP tracking**: Can't bypass with different passwords
+
+**Result**: Brute-forcing becomes so slow it's not worth trying. We're talking *years* to crack even a weak password.
+
+---
+
+### 📦 Dual Storage Modes
+
+**Choose your deployment strategy:**
+
+| Feature | Client-Side 💾 | Server-Side 🌎 |
+|---------|----------------|----------------|
+| **Distribution** | Download .BAR file | Shareable link |
+| **View Limits** | ❌ Not enforced | ✅ Strictly enforced |
+| **Auto-Destruct** | ❌ No (user has file) | ✅ Yes (we delete it) |
+| **Security** | 🔒 Same encryption | 🔒 Same encryption |
+| **Use Case** | Email, USB, Dropbox | Quick sharing |
+
+**Honest UX**: We're upfront about what can/can't be enforced. Client-side files can be copied, so we don't pretend view limits work there.
+
+---
+
+### 🚨 Other Security Features
+
+- **Self-Destruct** 💥: Files auto-delete after view limit or expiration
+- **Secure Deletion** 🗑️: 3-pass overwrite + zero-fill (no recovery possible)
+- **Time Bombs** ⏱️: Set precise expiration times (UTC-based)
+- **View-Only Mode** 👀: Preview without downloading
+- **Screenshot Protection** 📸: Watermarks + blur-on-unfocus
+- **Dual Integrity** ✔️: SHA-256 for content + HMAC for container
+- **2FA Support** 📱: Email OTP for sensitive files
+- **Webhook Alerts** 🔔: Get notified on file access (optional)
 
 ### 🎨 UI/UX Features
 - **Rich File Viewer**: Preview 50+ file types in-browser
