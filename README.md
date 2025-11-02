@@ -13,7 +13,7 @@ Think: Snapchat for files, but with **military-grade encryption** and actual tee
 You can:
 - 📤 **Upload** any file (up to 100MB)
 - 🔒 **Encrypt** it with AES-256 (same encryption banks use)
-- 🔑 **Password-protect** it (zero-knowledge encryption - even *I* can't see it without your password)
+- 🔑 **Password-protect** it (password-derived encryption - secure zero-knowledge)
 - ⏱️ **Set expiration** (5 minutes? 24 hours? You choose)
 - 👁️ **Limit views** (view once and self-destruct, or allow multiple views)
 - 🚀 **Share** via encrypted `.bar` file OR shareable link
@@ -372,8 +372,8 @@ We know screenshots are tricky. While we can't completely prevent them (even Net
 Things I'm thinking about adding:
 - 📧 Email/SMS notifications on file access
 - 📊 Analytics dashboard for server-side files
-- 🔐 Two-factor authentication for sensitive files
-- 📱 QR code generation for easy mobile sharing
+- ✅ ~~Two-factor authentication for sensitive files~~ (DONE!)
+- ✅ ~~QR code generation for easy mobile sharing~~ (DONE!)
 - 🎨 Toast notifications (instead of alerts)
 - ⏱️ Live countdown timers for expiring files
 - 🌐 Geolocation restrictions
