@@ -31,6 +31,26 @@ code {
   .animate-slide-in {
     animation: slideIn 0.3s ease-out;
   }
+
+  .text-shadow-fire {
+    text-shadow: 0 0 20px rgba(239, 68, 68, 0.8),
+                 0 0 40px rgba(249, 115, 22, 0.6),
+                 0 0 60px rgba(234, 88, 12, 0.4);
+  }
+
+  .animate-shake-burn {
+    animation: shakeBurn 4s ease-in-out forwards;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 1.5s ease-out 2.5s forwards;
+    opacity: 0;
+  }
+
+  .animate-fade-in-delayed {
+    animation: fadeIn 1.5s ease-out 3.5s forwards;
+    opacity: 0;
+  }
 }
 
 @keyframes slideIn {
@@ -41,5 +61,169 @@ code {
   to {
     transform: translateX(0);
     opacity: 1;
+  }
+}
+
+@keyframes shakeBurn {
+  0% { 
+    opacity: 1; 
+    transform: scale(1) rotate(0deg); 
+    filter: brightness(1) blur(0);
+  }
+  5%, 10%, 15%, 20%, 25%, 30% {
+    transform: scale(1) rotate(-3deg);
+  }
+  7.5%, 12.5%, 17.5%, 22.5%, 27.5%, 32.5% {
+    transform: scale(1) rotate(3deg);
+  }
+  40% { 
+    opacity: 0.9; 
+    transform: scale(1.05) rotate(0deg); 
+    filter: brightness(1.3) saturate(0.7);
+  }
+  60% { 
+    opacity: 0.6; 
+    transform: scale(0.9) rotate(8deg); 
+    filter: brightness(2) saturate(0.3) blur(1px);
+  }
+  80% {
+    opacity: 0.3;
+    transform: scale(0.5) rotate(15deg);
+    filter: brightness(3) saturate(0.1) blur(2px);
+  }
+  100% { 
+    opacity: 0; 
+    transform: scale(0.2) rotate(25deg); 
+    filter: brightness(4) saturate(0) blur(3px);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Flame animation */
+.flame {
+  background: linear-gradient(to top, 
+    #ff6b00 0%, 
+    #ff8c00 20%,
+    #ff4500 50%,
+    #ff0000 80%,
+    #ff6600 100%);
+  border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+  animation: flicker 0.4s ease-in-out infinite alternate, rise 3.5s ease-in-out forwards;
+  transform-origin: bottom center;
+  filter: blur(3px);
+  box-shadow: 0 0 20px rgba(255, 107, 0, 0.6),
+              0 0 40px rgba(255, 69, 0, 0.4),
+              0 0 60px rgba(255, 0, 0, 0.2);
+}
+
+@keyframes flicker {
+  0% { 
+    transform: scaleY(1) scaleX(1); 
+    opacity: 0.95;
+  }
+  33% { 
+    transform: scaleY(1.15) scaleX(0.92); 
+    opacity: 1;
+  }
+  66% { 
+    transform: scaleY(0.95) scaleX(1.08); 
+    opacity: 0.9;
+  }
+  100% { 
+    transform: scaleY(1.05) scaleX(0.98); 
+    opacity: 0.95;
+  }
+}
+
+@keyframes rise {
+  0% {
+    transform: translateY(0) scaleY(1);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(-150px) scaleY(0.3);
+    opacity: 0;
+  }
+}
+
+/* Smoke animation */
+.smoke {
+  background: radial-gradient(ellipse at center, 
+    rgba(120, 120, 120, 0.7) 0%,
+    rgba(90, 90, 90, 0.5) 25%,
+    rgba(70, 70, 70, 0.3) 50%,
+    rgba(50, 50, 50, 0.15) 75%,
+    transparent 100%);
+  border-radius: 50%;
+  animation: smoke 4.5s ease-out forwards;
+  filter: blur(30px);
+}
+
+@keyframes smoke {
+  0% {
+    transform: translate(-50%, 0) scale(0.3);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.6;
+  }
+  40% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate(-50%, -250px) scale(2.5) rotate(20deg);
+    opacity: 0;
+  }
+}
+
+/* Embers animation */
+.ember {
+  background: radial-gradient(circle, #ff6b00 0%, #ff4500 50%, #ff0000 100%);
+  border-radius: 50%;
+  box-shadow: 0 0 10px #ff6b00,
+              0 0 20px #ff4500,
+              0 0 30px rgba(255, 69, 0, 0.5);
+  animation: float 5s ease-out forwards, glow 1s ease-in-out infinite alternate;
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(0) translateX(0) scale(1);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(-200px) translateX(calc(-80px + 160px * (var(--i, 0.5) / 30))) scale(0.3);
+    opacity: 0;
+  }
+}
+
+@keyframes glow {
+  0% {
+    filter: brightness(1);
+  }
+  100% {
+    filter: brightness(1.5);
   }
 }
