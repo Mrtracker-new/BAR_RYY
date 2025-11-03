@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from '../config/axios';
 import { Lock, Download, AlertCircle, FileCheck, Mail, Shield } from 'lucide-react';
 import ContentProtection from './ContentProtection';
+import BurningAnimation from './BurningAnimation';
 
 const SharePage = ({ token }) => {
   const [password, setPassword] = useState('');
@@ -21,6 +22,7 @@ const SharePage = ({ token }) => {
   const [checking, setChecking] = useState(false);
   const [hasPassword, setHasPassword] = useState(false);
   const [showOtpUI, setShowOtpUI] = useState(false);
+  const [showBurning, setShowBurning] = useState(false);
 
   const handleRequestOtp = async () => {
     setIsLoading(true);
@@ -120,7 +122,7 @@ const SharePage = ({ token }) => {
 
         // Show success message
         if (shouldDestroy) {
-          setSuccessMessage('✅ File downloaded! ⚠️ This was the last view. The file has been destroyed.');
+          setShowBurning(true);
         } else {
           setSuccessMessage(`✅ File downloaded! ${retrievedViewsRemaining} view(s) remaining.`);
         }
@@ -191,6 +193,17 @@ const SharePage = ({ token }) => {
   };
 
   return (
+    <>
+    {/* Burning Animation */}
+    {showBurning && (
+      <BurningAnimation 
+        onComplete={() => {
+          setShowBurning(false);
+          setSuccessMessage('⚠️ File destroyed! This link is no longer valid.');
+        }}
+      />
+    )}
+
     <div className="min-h-screen bg-dark-900 text-white flex items-center justify-center p-6">
       <div className="max-w-md w-full">
         <div className="border-2 border-gold-500 rounded-xl p-8 bg-dark-800 terminal-glow">
@@ -403,6 +416,7 @@ const SharePage = ({ token }) => {
         </div>
       </div>
     </div>
+    </>
   );
 };
 
