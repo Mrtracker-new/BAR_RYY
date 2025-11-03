@@ -3,6 +3,7 @@ import axios from '../config/axios';
 import { Lock, Unlock, FileDown, AlertCircle, Upload } from 'lucide-react';
 import FileViewer from './FileViewer';
 import Toast from './Toast';
+import BurningAnimation from './BurningAnimation';
 
 const DecryptPage = ({ onBack }) => {
   const [barFile, setBarFile] = useState(null);
@@ -15,6 +16,7 @@ const DecryptPage = ({ onBack }) => {
   const [previewUrl, setPreviewUrl] = useState(null);
   const fileInputRef = useRef(null);
   const [toast, setToast] = useState(null);
+  const [showBurning, setShowBurning] = useState(false);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -120,9 +122,6 @@ const DecryptPage = ({ onBack }) => {
       if (viewsRemaining > 0) {
         console.log(`Views remaining: ${viewsRemaining}`);
       }
-      if (shouldDestroy) {
-        showToast('⚠️ This was the last view! File destroyed. Do NOT use this .bar file again.', 'error');
-      }
 
       // Check if view-only mode is enabled
       if (viewOnly) {
@@ -142,10 +141,9 @@ const DecryptPage = ({ onBack }) => {
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
         
-        const msg = shouldDestroy 
-          ? '✅ File decrypted! This was the last view. ⚠️ DO NOT use this .bar file again!' 
-          : `✅ File decrypted! ${viewsRemaining} view(s) remaining.`;
-        showToast(msg, shouldDestroy ? 'error' : 'success');
+        // Note: Client-side files don't enforce view limits, so shouldDestroy is unreliable
+        // Burning animation is only used for server-side files (SharePage)
+        showToast(`✅ File decrypted successfully!`, 'success');
       }
 
     } catch (err) {
@@ -168,6 +166,16 @@ const DecryptPage = ({ onBack }) => {
 
   return (
     <>
+    {/* Burning Animation */}
+    {showBurning && (
+      <BurningAnimation 
+        onComplete={() => {
+          setShowBurning(false);
+          showToast('⚠️ File destroyed! Do NOT use this .bar file again.', 'error');
+        }}
+      />
+    )}
+
     {/* Toast Notifications */}
     {toast && (
       <Toast
