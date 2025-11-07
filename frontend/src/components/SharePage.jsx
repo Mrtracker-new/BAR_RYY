@@ -3,6 +3,7 @@ import axios from '../config/axios';
 import { Lock, Download, AlertCircle, FileCheck, Mail, Shield } from 'lucide-react';
 import ContentProtection from './ContentProtection';
 import BurningAnimation from './BurningAnimation';
+import SEO from './SEO';
 
 const SharePage = ({ token }) => {
   const [password, setPassword] = useState('');
@@ -194,6 +195,11 @@ const SharePage = ({ token }) => {
 
   return (
     <>
+    <SEO 
+      title="Secure File Access - BAR Web"
+      description="Access your encrypted file securely. Military-grade AES-256 encryption with self-destruct capabilities."
+      url={`https://bar-dusky.vercel.app/share/${token}`}
+    />
     {/* Burning Animation */}
     {showBurning && (
       <BurningAnimation 
