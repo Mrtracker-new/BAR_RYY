@@ -17,6 +17,7 @@ import SharePage from "./components/SharePage";
 import AnalyticsDashboard from "./components/AnalyticsDashboard";
 import Toast from "./components/Toast";
 import DecryptPage from "./components/DecryptPage";
+import SEO from "./components/SEO";
 
 // Wrapper component for share page route
 const SharePageWrapper = () => {
@@ -164,6 +165,7 @@ function MainApp() {
 
   return (
     <div className="min-h-screen bg-dark-900 text-white">
+      <SEO />
       <ContainerAnimation isSealing={isSealing} />
 
       {/* Header */}
