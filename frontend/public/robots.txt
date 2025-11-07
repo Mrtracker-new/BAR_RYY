@@ -1,0 +1,11 @@
+# robots.txt for BAR Web
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /share/
+
+# Sitemap location
+Sitemap: https://bar-dusky.vercel.app/sitemap.xml
+
+# Crawl-delay for polite crawling
+Crawl-delay: 1
