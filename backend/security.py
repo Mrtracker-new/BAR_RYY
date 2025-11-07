@@ -249,36 +249,54 @@ def check_and_delay_password_attempt(client_ip: str, resource_id: str = None) ->
 
 
 def add_security_headers(response: Response) -> Response:
-    """Add security headers to response"""
-    # Prevent clickjacking
+    """Add comprehensive security headers to response"""
+    # Prevent clickjacking - DENY means no framing at all
     response.headers["X-Frame-Options"] = "DENY"
     
     # Prevent MIME sniffing
     response.headers["X-Content-Type-Options"] = "nosniff"
     
-    # Enable XSS protection
+    # Enable XSS protection (legacy but doesn't hurt)
     response.headers["X-XSS-Protection"] = "1; mode=block"
     
-    # Referrer policy
-    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    # Referrer policy - don't leak URLs to external sites
+    response.headers["Referrer-Policy"] = "no-referrer"
     
-    # Content Security Policy
+    # Content Security Policy - strict defaults
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline'; "
+        "script-src 'self'; "
         "style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data: blob:; "
-        "font-src 'self' data:; "
-        "connect-src 'self'; "
-        "frame-ancestors 'none';"
+        "img-src 'self' data: blob: https:; "
+        "font-src 'self' data: https:; "
+        f"connect-src 'self' {frontend_url}; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'; "
+        "upgrade-insecure-requests;"
     )
     
-    # Strict Transport Security (HTTPS only)
-    if os.getenv("RENDER") or os.getenv("IS_PRODUCTION"):  # In production
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    # Strict Transport Security - force HTTPS for 1 year
+    if os.getenv("RENDER") or os.getenv("IS_PRODUCTION"):
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
     
-    # Permissions Policy
-    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    # Permissions Policy - disable dangerous features
+    response.headers["Permissions-Policy"] = (
+        "camera=(), "
+        "microphone=(), "
+        "geolocation=(), "
+        "payment=(), "
+        "usb=(), "
+        "magnetometer=(), "
+        "gyroscope=(), "
+        "accelerometer=()"
+    )
+    
+    # Cross-Origin policies for isolation
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+    response.headers["Cross-Origin-Embedder-Policy"] = "require-corp"
+    response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
     
     return response
 

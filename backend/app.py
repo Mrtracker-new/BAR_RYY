@@ -37,10 +37,11 @@ import otp_service
 
 app = FastAPI(title="BAR Web API", version="1.0")
 
-# Enable CORS for frontend
+# Enable CORS for frontend - strict origins only
 allowed_origins = [
     "http://localhost:5173",
     "http://localhost:3000",
+    "https://bar-dusky.vercel.app",  # Production frontend
 ]
 
 # Add frontend URL from environment variable (Render/production)
@@ -49,12 +50,14 @@ if frontend_url := os.getenv("FRONTEND_URL"):
     # Also allow without trailing slash
     allowed_origins.append(frontend_url.rstrip("/"))
 
+print(f"🔒 CORS allowed origins: {allowed_origins}")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],  # Restrict to only needed methods
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],  # Restrict headers
     expose_headers=[
         "X-BAR-Views-Remaining",
         "X-BAR-Should-Destroy",
@@ -65,6 +68,13 @@ app.add_middleware(
         "X-BAR-Metadata"
     ],
 )
+
+# Add security headers middleware - applies to ALL responses
+@app.middleware("http")
+async def add_security_headers_middleware(request: Request, call_next):
+    """Apply security headers to all responses"""
+    response = await call_next(request)
+    return security.add_security_headers(response)
 
 # Directories
 UPLOAD_DIR = "uploads"
