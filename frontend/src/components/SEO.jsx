@@ -2,9 +2,9 @@ import React from "react";
 import { Helmet } from "react-helmet-async";
 
 const SEO = ({
-  title = "BAR Web - Burn After Reading | Military-Grade File Encryption & Self-Destruct",
-  description = "Secure file encryption with AES-256 military-grade protection. Share files that self-destruct after viewing. Zero-knowledge encryption, password protection, and automatic file deletion for maximum security.",
-  keywords = "secure file sharing, file encryption, AES-256, self-destruct files, burn after reading, zero-knowledge encryption, password protected files, secure file transfer, encrypted file sharing, temporary file sharing, mission impossible files",
+  title = "BAR - Burn After Reading | Secure Self-Destructing File Sharing & Encryption",
+  description = "BAR (Burn After Reading) - Send files that self-destruct after viewing. Military-grade AES-256 encryption, password protection, and automatic deletion. Secure, private, and zero-knowledge file sharing for sensitive documents.",
+  keywords = "BAR, burn after reading, BAR rnr, self-destruct files, secure file sharing, encrypted file sharing, AES-256 encryption, zero-knowledge encryption, password protected files, temporary file sharing, self-destructing messages, mission impossible files, secure file transfer, confidential file sharing, auto-delete files, burn after reading app",
   author = "Rolan (RNR)",
   authorUrl = "https://rolan-rnr.netlify.app/",
   ogImage = "https://bar-dusky.vercel.app/og-image.png",
