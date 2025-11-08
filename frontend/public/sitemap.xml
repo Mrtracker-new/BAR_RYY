@@ -1,17 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"
         xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9
         http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
   
-  <!-- Homepage -->
+  <!-- Homepage - BAR Burn After Reading -->
   <url>
     <loc>https://bar-dusky.vercel.app/</loc>
-    <lastmod>2025-11-07</lastmod>
-    <changefreq>daily</changefreq>
+    <lastmod>2025-11-08</lastmod>
+    <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   
-  <!-- Note: Dynamic share URLs are not included as they are temporary and user-specific -->
+  <!-- Note: Dynamic share URLs are temporary and user-specific, not included for privacy -->
   
 </urlset>
