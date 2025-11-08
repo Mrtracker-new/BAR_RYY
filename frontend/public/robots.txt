@@ -1,11 +1,20 @@
-# robots.txt for BAR Web
+# robots.txt for BAR Web - Burn After Reading
 User-agent: *
 Allow: /
 Disallow: /api/
-Disallow: /share/
 
 # Sitemap location
 Sitemap: https://bar-dusky.vercel.app/sitemap.xml
 
 # Crawl-delay for polite crawling
 Crawl-delay: 1
+
+# Allow major search engines
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: Slurp
+Allow: /
