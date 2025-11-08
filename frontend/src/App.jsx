@@ -18,6 +18,7 @@ import AnalyticsDashboard from "./components/AnalyticsDashboard";
 import Toast from "./components/Toast";
 import DecryptPage from "./components/DecryptPage";
 import SEO from "./components/SEO";
+import SEOContent from "./components/SEOContent";
 
 // Wrapper component for share page route
 const SharePageWrapper = () => {
@@ -512,6 +513,11 @@ function MainApp() {
                   </div>
                 </div>
               </div>
+            )}
+            
+            {/* SEO Content Section */}
+            {!barResult && !showDecrypt && (
+              <SEOContent />
             )}
           </>
         )}
