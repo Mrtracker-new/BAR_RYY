@@ -887,7 +887,26 @@ async def share_file(token: str, req: Request, request: DecryptRequest):
         
         # Unpack with password for password-derived encryption
         password_to_use = password.strip() if password and password.strip() else None
-        encrypted_data, metadata, key = crypto_utils.unpack_bar_file(bar_data, password=password_to_use)
+        try:
+            encrypted_data, metadata, key = crypto_utils.unpack_bar_file(bar_data, password=password_to_use)
+        except ValueError as e:
+            # Wrong password during unpacking - send webhook before raising error
+            error_msg = str(e)
+            if "Invalid password" in error_msg or "Password required" in error_msg:
+                # Try to get metadata from file record to send webhook
+                if file_record.get('metadata'):
+                    metadata_from_db = file_record['metadata']
+                    webhook_url = metadata_from_db.get("webhook_url")
+                    if webhook_url:
+                        client_ip = analytics.get_client_ip(req)
+                        webhook_srv = webhook_service.get_webhook_service()
+                        asyncio.create_task(webhook_srv.send_access_denied_alert(
+                            webhook_url=webhook_url,
+                            filename=metadata_from_db.get("filename", "unknown"),
+                            reason=error_msg,
+                            ip_address=client_ip
+                        ))
+            raise HTTPException(status_code=403, detail=error_msg)
         
         # Get current view count from database
         current_views = file_record['current_views']
