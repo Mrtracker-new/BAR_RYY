@@ -18,16 +18,22 @@ You can:
 - 👁️ **Limit views** (view once and self-destruct, or allow multiple views)
 - 🚀 **Share** via encrypted `.bar` file OR shareable link
 - 💥 **Auto-destruct** when limits are reached (view count or expiration)
-- 🚨 **Get alerts** if someone tries to tamper with the file
+- 🔔 **Webhook Alerts** - Get instant Discord/Slack notifications for:
+  - 🚨 Tamper attempts (file integrity failures)
+  - 🔥 File destructions (max views reached)
+  - 🚫 Access denials (wrong passwords, expired files)
+  - 👁️ Successful file access (optional monitoring)
 - 🚫 **Block brute-force** attacks (progressive delays + lockouts)
 
 It's like having your own **private self-destructing vault** for files. 🔐
 
 ## 🌐 Try It Live!
 
-**➡️ [Live Demo](https://barryy-production.up.railway.app/)** (Deployed on Railway)
+**➡️ [BAR Web](https://bar-rnr.vercel.app/)** - Frontend (Vercel)
 
-No installation needed - just click and start encrypting! All the security features work exactly the same as running it locally.
+**➡️ [API Docs](https://barryy-production.up.railway.app/docs)** - Backend (Railway)
+
+No installation needed - just click and start encrypting! All security features (encryption, 2FA, webhooks) work in production.
 
 ### 📈 By The Numbers
 
@@ -106,7 +112,11 @@ People trying to guess your password face:
 - **Screenshot Protection** 📸: Watermarks + blur-on-unfocus
 - **Dual Integrity** ✔️: SHA-256 for content + HMAC for container
 - **2FA Support** 📱: Email OTP for sensitive files
-- **Webhook Alerts** 🔔: Get notified on file access (optional)
+- **Webhook Alerts** 🔔: Real-time Discord/Slack notifications
+  - Automatically detects Discord (`discord.com` / `discordapp.com`)
+  - Formatted embeds with color-coded events
+  - Partial IP addresses for privacy
+  - Background async delivery (non-blocking)
 
 ### 🎨 UI/UX Features
 - **Rich File Viewer**: Preview 50+ file types in-browser
@@ -367,17 +377,30 @@ We know screenshots are tricky. While we can't completely prevent them (even Net
 
 **Bottom line**: The watermark is your best defense - it's always there, even in sneaky screenshots.
 
+## Recent Updates 🆕
+
+**v2.1 - Webhook Notification System** (Nov 2025)
+- ✅ Discord webhook support (both `discord.com` and `discordapp.com`)
+- ✅ Slack webhook support
+- ✅ Notifications for tamper alerts, access denials, file destruction
+- ✅ Optional monitoring webhooks for successful access
+- ✅ Beautiful formatted embeds with color coding
+
+**v2.0 - Major Security Overhaul** (Nov 2025)
+- ✅ Two-factor authentication (Email OTP via Brevo)
+- ✅ QR code generation for mobile sharing
+- ✅ Analytics dashboard for server-side files
+- ✅ PostgreSQL database support for production
+- ✅ Automatic file cleanup with background tasks
+
 ## Future Features (Ideas)
 
 Things I'm thinking about adding:
-- 📧 Email/SMS notifications on file access
-- 📊 Analytics dashboard for server-side files
-- ✅ ~~Two-factor authentication for sensitive files~~ (DONE!)
-- ✅ ~~QR code generation for easy mobile sharing~~ (DONE!)
 - 🎨 Toast notifications (instead of alerts)
 - ⏱️ Live countdown timers for expiring files
 - 🌐 Geolocation restrictions
-- 🛡️ Rate limiting and CAPTCHA
+- 🔐 Custom webhook payloads for advanced integrations
+- 📱 Mobile app (React Native?)
 
 ## Contributing
 
