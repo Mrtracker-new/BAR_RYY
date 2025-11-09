@@ -110,7 +110,6 @@ class WebhookService:
                 })
         
         return {
-            "content": None,
             "embeds": [{
                 "title": f"{emoji} BAR Web Alert: {event_type.replace('_', ' ').title()}",
                 "color": color,
@@ -118,7 +117,7 @@ class WebhookService:
                 "footer": {
                     "text": "BAR Web Security Alert System"
                 },
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.utcnow().isoformat() + "Z"
             }]
         }
     
