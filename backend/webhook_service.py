@@ -49,10 +49,16 @@ class WebhookService:
             }
             
             # Detect webhook type and format accordingly
+            print(f"🔍 Webhook URL: {webhook_url[:60]}...")
+            print(f"🔍 Contains 'discord.com': {'discord.com' in webhook_url.lower()}")
             if "discord.com" in webhook_url.lower():
+                print("✅ Using Discord format")
                 payload = self._format_discord_webhook(event_type, data)
             elif "slack.com" in webhook_url.lower():
+                print("✅ Using Slack format")
                 payload = self._format_slack_webhook(event_type, data)
+            else:
+                print("ℹ️ Using generic format")
             
             # Send the webhook asynchronously with timeout
             async with httpx.AsyncClient(timeout=self.timeout) as client:
