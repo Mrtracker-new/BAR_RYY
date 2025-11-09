@@ -1,9 +1,15 @@
-import React from "react";
-import { Shield, Lock, Eye, Clock, Zap, FileCheck } from "lucide-react";
+import React, { useState } from "react";
+import { Shield, Lock, Eye, Clock, Zap, FileCheck, ChevronDown, ChevronUp } from "lucide-react";
 
 const SEOContent = () => {
+  const [openSection, setOpenSection] = useState(null);
+
+  const toggleSection = (section) => {
+    setOpenSection(openSection === section ? null : section);
+  };
+
   return (
-    <div className="max-w-7xl mx-auto mt-16 space-y-12">
+    <div className="max-w-7xl mx-auto mt-16 space-y-8">
       {/* Main SEO Content Section */}
       <section className="bg-gradient-to-br from-dark-800 to-dark-900 rounded-2xl p-8 border border-dark-700 shadow-2xl">
         <h1 className="text-4xl sm:text-5xl font-bold bg-gradient-to-r from-gold-400 via-gold-500 to-gold-600 bg-clip-text text-transparent mb-6">
@@ -21,12 +27,23 @@ const SEOContent = () => {
         </p>
       </section>
 
-      {/* Features Grid */}
-      <section>
-        <h2 className="text-3xl sm:text-4xl font-bold text-center bg-gradient-to-r from-purple-400 to-purple-600 bg-clip-text text-transparent mb-8">
-          Why Choose BAR for Secure File Sharing?
-        </h2>
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* Features Grid - Collapsible */}
+      <section className="bg-gradient-to-br from-dark-800 to-dark-900 rounded-2xl border border-dark-700 shadow-2xl overflow-hidden">
+        <button
+          onClick={() => toggleSection('features')}
+          className="w-full p-6 flex items-center justify-between hover:bg-dark-700/50 transition-all"
+        >
+          <h2 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-purple-400 to-purple-600 bg-clip-text text-transparent text-left">
+            Why Choose BAR for Secure File Sharing?
+          </h2>
+          {openSection === 'features' ? (
+            <ChevronUp className="text-purple-400 flex-shrink-0" size={28} />
+          ) : (
+            <ChevronDown className="text-purple-400 flex-shrink-0" size={28} />
+          )}
+        </button>
+        {openSection === 'features' && (
+        <div className="p-6 pt-0 grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           <div className="bg-gradient-to-br from-dark-800 to-dark-900 rounded-xl p-6 border border-gold-500/30 hover:border-gold-500/60 transition-all">
             <div className="p-3 bg-gold-500/20 rounded-lg w-fit mb-4">
               <Lock className="text-gold-500" size={28} />
@@ -93,14 +110,26 @@ const SEOContent = () => {
             </p>
           </div>
         </div>
+        )}
       </section>
 
-      {/* Use Cases Section */}
-      <section className="bg-gradient-to-br from-dark-800 to-dark-900 rounded-2xl p-8 border border-dark-700 shadow-2xl">
-        <h2 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-gold-400 to-gold-600 bg-clip-text text-transparent mb-6">
-          Perfect Use Cases for BAR
-        </h2>
-        <div className="grid md:grid-cols-2 gap-6">
+      {/* Use Cases Section - Collapsible */}
+      <section className="bg-gradient-to-br from-dark-800 to-dark-900 rounded-2xl border border-dark-700 shadow-2xl overflow-hidden">
+        <button
+          onClick={() => toggleSection('usecases')}
+          className="w-full p-6 flex items-center justify-between hover:bg-dark-700/50 transition-all"
+        >
+          <h2 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-gold-400 to-gold-600 bg-clip-text text-transparent text-left">
+            Perfect Use Cases for BAR
+          </h2>
+          {openSection === 'usecases' ? (
+            <ChevronUp className="text-gold-400 flex-shrink-0" size={28} />
+          ) : (
+            <ChevronDown className="text-gold-400 flex-shrink-0" size={28} />
+          )}
+        </button>
+        {openSection === 'usecases' && (
+        <div className="p-6 pt-0 grid md:grid-cols-2 gap-6">
           <div>
             <h3 className="text-xl font-semibold text-gold-400 mb-3">🏢 Business & Enterprise</h3>
             <ul className="space-y-2 text-gray-300">
@@ -138,14 +167,26 @@ const SEOContent = () => {
             </ul>
           </div>
         </div>
+        )}
       </section>
 
-      {/* How It Works Section */}
-      <section className="bg-gradient-to-br from-dark-800 to-dark-900 rounded-2xl p-8 border border-dark-700 shadow-2xl">
-        <h2 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-purple-400 to-purple-600 bg-clip-text text-transparent mb-6">
-          How BAR's Self-Destructing File Sharing Works
-        </h2>
-        <div className="space-y-4 text-gray-300">
+      {/* How It Works Section - Collapsible */}
+      <section className="bg-gradient-to-br from-dark-800 to-dark-900 rounded-2xl border border-dark-700 shadow-2xl overflow-hidden">
+        <button
+          onClick={() => toggleSection('howto')}
+          className="w-full p-6 flex items-center justify-between hover:bg-dark-700/50 transition-all"
+        >
+          <h2 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-purple-400 to-purple-600 bg-clip-text text-transparent text-left">
+            How BAR's Self-Destructing File Sharing Works
+          </h2>
+          {openSection === 'howto' ? (
+            <ChevronUp className="text-purple-400 flex-shrink-0" size={28} />
+          ) : (
+            <ChevronDown className="text-purple-400 flex-shrink-0" size={28} />
+          )}
+        </button>
+        {openSection === 'howto' && (
+        <div className="p-6 pt-0 space-y-4 text-gray-300">
           <div className="flex items-start space-x-4">
             <div className="flex-shrink-0 w-8 h-8 bg-gold-500 text-black rounded-full flex items-center justify-center font-bold">1</div>
             <div>
@@ -175,14 +216,26 @@ const SEOContent = () => {
             </div>
           </div>
         </div>
+        )}
       </section>
 
-      {/* FAQ Section for SEO */}
-      <section className="bg-gradient-to-br from-dark-800 to-dark-900 rounded-2xl p-8 border border-dark-700 shadow-2xl">
-        <h2 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-gold-400 to-gold-600 bg-clip-text text-transparent mb-6">
-          Frequently Asked Questions About BAR
-        </h2>
-        <div className="space-y-6">
+      {/* FAQ Section - Collapsible */}
+      <section className="bg-gradient-to-br from-dark-800 to-dark-900 rounded-2xl border border-dark-700 shadow-2xl overflow-hidden">
+        <button
+          onClick={() => toggleSection('faq')}
+          className="w-full p-6 flex items-center justify-between hover:bg-dark-700/50 transition-all"
+        >
+          <h2 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-gold-400 to-gold-600 bg-clip-text text-transparent text-left">
+            Frequently Asked Questions About BAR
+          </h2>
+          {openSection === 'faq' ? (
+            <ChevronUp className="text-gold-400 flex-shrink-0" size={28} />
+          ) : (
+            <ChevronDown className="text-gold-400 flex-shrink-0" size={28} />
+          )}
+        </button>
+        {openSection === 'faq' && (
+        <div className="p-6 pt-0 space-y-6">
           <div>
             <h3 className="text-xl font-semibold text-gold-400 mb-2">What does BAR stand for?</h3>
             <p className="text-gray-300">
@@ -219,12 +272,13 @@ const SEOContent = () => {
             </p>
           </div>
         </div>
+        )}
       </section>
 
-      {/* Keywords Footer for SEO */}
-      <section className="text-center text-sm text-gray-500 py-6">
+      {/* Keywords Footer for SEO - Hidden from view but readable by search engines */}
+      <section className="sr-only" aria-hidden="true">
         <p>
-          <strong>Keywords:</strong> burn after reading, self-destruct files, secure file sharing, encrypted file transfer, 
+          Keywords: burn after reading, self-destruct files, secure file sharing, encrypted file transfer, 
           temporary file sharing, confidential file sharing, auto-delete files, BAR encryption, mission impossible files, 
           zero-knowledge encryption, password protected files, AES-256 encryption, self-destructing messages
         </p>
