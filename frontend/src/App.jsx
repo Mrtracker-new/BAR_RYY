@@ -9,6 +9,10 @@ import {
   Copy,
   BarChart3,
   Upload,
+  Shield,
+  Lock,
+  Clock,
+  Zap,
 } from "lucide-react";
 import FileUpload from "./components/FileUpload";
 import RulesPanel from "./components/RulesPanel";
@@ -210,9 +214,9 @@ function MainApp() {
             )}
 
             {!barResult ? (
-              <div className="grid lg:grid-cols-2 gap-6 sm:gap-8 max-w-7xl mx-auto">
-                {/* Left Column - File Upload */}
-                <div className="space-y-6">
+              <div className="grid lg:grid-cols-5 gap-6 sm:gap-8 max-w-7xl mx-auto">
+                {/* Left Column - File Upload (3/5 width) */}
+                <div className="lg:col-span-3 space-y-6">
                   <div className="bg-gradient-to-br from-dark-800 to-dark-900 rounded-2xl p-6 border border-dark-700 shadow-2xl">
                     <div className="flex items-center space-x-3 mb-5">
                       <div className="p-2 bg-gold-500/20 rounded-lg">
@@ -229,6 +233,49 @@ function MainApp() {
                       filePreview={filePreview}
                     />
                   </div>
+
+                  {!uploadedFile && (
+                    <div className="bg-gradient-to-br from-dark-800 to-dark-900 rounded-2xl p-6 border border-dark-700 shadow-2xl">
+                      <h3 className="text-lg sm:text-xl font-bold bg-gradient-to-r from-gold-400 to-gold-600 bg-clip-text text-transparent mb-4">
+                        ✨ Key Features
+                      </h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="flex items-start space-x-3 p-3 bg-dark-700/50 rounded-lg border border-dark-600">
+                          <Shield className="text-green-400 flex-shrink-0 mt-0.5" size={20} />
+                          <div>
+                            <h4 className="font-semibold text-green-400 text-sm">AES-256 Encryption</h4>
+                            <p className="text-gray-400 text-xs mt-1">Military-grade security for your files</p>
+                          </div>
+                        </div>
+                        <div className="flex items-start space-x-3 p-3 bg-dark-700/50 rounded-lg border border-dark-600">
+                          <Zap className="text-yellow-400 flex-shrink-0 mt-0.5" size={20} />
+                          <div>
+                            <h4 className="font-semibold text-yellow-400 text-sm">Self-Destruct</h4>
+                            <p className="text-gray-400 text-xs mt-1">Files auto-delete after viewing</p>
+                          </div>
+                        </div>
+                        <div className="flex items-start space-x-3 p-3 bg-dark-700/50 rounded-lg border border-dark-600">
+                          <Lock className="text-purple-400 flex-shrink-0 mt-0.5" size={20} />
+                          <div>
+                            <h4 className="font-semibold text-purple-400 text-sm">Password Protection</h4>
+                            <p className="text-gray-400 text-xs mt-1">Zero-knowledge encryption</p>
+                          </div>
+                        </div>
+                        <div className="flex items-start space-x-3 p-3 bg-dark-700/50 rounded-lg border border-dark-600">
+                          <Clock className="text-blue-400 flex-shrink-0 mt-0.5" size={20} />
+                          <div>
+                            <h4 className="font-semibold text-blue-400 text-sm">Time-Based Expiry</h4>
+                            <p className="text-gray-400 text-xs mt-1">Set custom expiration times</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-4 p-4 bg-gold-500/10 border border-gold-500/30 rounded-lg">
+                        <p className="text-sm text-gray-300">
+                          💡 <strong>Pro Tip:</strong> Use <span className="text-gold-400 font-semibold">Server-Side</span> storage mode for strictly enforced view limits and automatic file deletion!
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   {uploadedFile && (
                     <div className="bg-gradient-to-br from-dark-800 to-dark-900 rounded-2xl p-6 border border-gold-500/30 shadow-2xl shadow-gold-500/10">
@@ -310,8 +357,8 @@ function MainApp() {
                   )}
                 </div>
 
-                {/* Right Column - Rules Panel */}
-                <div className="bg-gradient-to-br from-dark-800 to-dark-900 rounded-2xl p-6 border border-dark-700 shadow-2xl">
+                {/* Right Column - Rules Panel (2/5 width) */}
+                <div className="lg:col-span-2 bg-gradient-to-br from-dark-800 to-dark-900 rounded-2xl p-6 border border-dark-700 shadow-2xl">
                   <div className="flex items-center space-x-3 mb-5">
                     <div className="p-2 bg-purple-500/20 rounded-lg">
                       <AlertCircle className="text-purple-400" size={24} />
