@@ -33,6 +33,7 @@ import cleanup
 import database
 import analytics
 import otp_service
+import webhook_service
 
 
 app = FastAPI(title="BAR Web API", version="1.0")
@@ -534,10 +535,6 @@ async def decrypt_bar(bar_id: str, request: DecryptRequest):
         # Verify file integrity
         file_hash = crypto_utils.calculate_file_hash(decrypted_data)
         if file_hash != metadata.get("file_hash"):
-            # Send tamper alert webhook if configured
-            if metadata.get("webhook_url"):
-                # In production, send async webhook notification
-                pass
             raise HTTPException(status_code=500, detail="File integrity check failed - possible tampering")
         
         # Update view count
@@ -642,6 +639,18 @@ async def decrypt_uploaded_bar_file(req: Request, file: UploadFile = File(...), 
         except crypto_utils.TamperDetectedException as e:
             # Tampering detected - don't track as password attempt
             print(f"🚨 Tampering detected: {str(e)}")
+            
+            # Send tamper alert webhook if configured
+            webhook_url = metadata.get("webhook_url")
+            if webhook_url:
+                webhook_srv = webhook_service.get_webhook_service()
+                filename = metadata.get("filename", "unknown")
+                asyncio.create_task(webhook_srv.send_tamper_alert(
+                    webhook_url=webhook_url,
+                    filename=filename,
+                    token=file_token
+                ))
+            
             raise HTTPException(status_code=403, detail="File integrity check failed - possible tampering")
         except Exception as e:
             # Unexpected error
@@ -686,6 +695,18 @@ async def decrypt_uploaded_bar_file(req: Request, file: UploadFile = File(...), 
         # Verify integrity
         file_hash = crypto_utils.calculate_file_hash(decrypted_data)
         if file_hash != metadata.get("file_hash"):
+            # Send tamper alert webhook if configured
+            webhook_url = metadata.get("webhook_url")
+            if webhook_url:
+                webhook_srv = webhook_service.get_webhook_service()
+                asyncio.create_task(webhook_srv.send_tamper_alert(
+                    webhook_url=webhook_url,
+                    filename=metadata.get("filename", "unknown"),
+                    token=file_token,
+                    original_hash=metadata.get("file_hash"),
+                    computed_hash=file_hash
+                ))
+            
             raise HTTPException(
                 status_code=500, 
                 detail="File integrity check failed - possible tampering"
@@ -958,6 +979,18 @@ async def share_file(token: str, req: Request, request: DecryptRequest):
         # Verify integrity
         file_hash = crypto_utils.calculate_file_hash(decrypted_data)
         if file_hash != metadata.get("file_hash"):
+            # Send tamper alert webhook if configured
+            webhook_url = metadata.get("webhook_url")
+            if webhook_url:
+                webhook_srv = webhook_service.get_webhook_service()
+                asyncio.create_task(webhook_srv.send_tamper_alert(
+                    webhook_url=webhook_url,
+                    filename=metadata.get("filename", "unknown"),
+                    token=token,
+                    original_hash=metadata.get("file_hash"),
+                    computed_hash=file_hash
+                ))
+            
             raise HTTPException(status_code=500, detail="File integrity check failed")
         
         # Log access for analytics
@@ -992,6 +1025,18 @@ async def share_file(token: str, req: Request, request: DecryptRequest):
         if should_destroy:
             crypto_utils.secure_delete_file(bar_file)
             print(f"🔥 File destroyed after reaching max views")
+            
+            # Send destruction webhook if configured
+            webhook_url = metadata.get("webhook_url")
+            if webhook_url:
+                webhook_srv = webhook_service.get_webhook_service()
+                asyncio.create_task(webhook_srv.send_destruction_alert(
+                    webhook_url=webhook_url,
+                    filename=filename,
+                    reason="Maximum views reached",
+                    views_used=max_views,
+                    max_views=max_views
+                ))
         
         # Return decrypted file
         # For view-only, use 'inline' with proper MIME type to let browser display it
