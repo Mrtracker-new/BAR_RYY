@@ -896,6 +896,9 @@ async def share_file(token: str, req: Request, request: DecryptRequest):
                 # Try to get metadata from file record to send webhook
                 if file_record.get('metadata'):
                     metadata_from_db = file_record['metadata']
+                    # Parse JSON if it's a string
+                    if isinstance(metadata_from_db, str):
+                        metadata_from_db = json.loads(metadata_from_db)
                     webhook_url = metadata_from_db.get("webhook_url")
                     if webhook_url:
                         client_ip = analytics.get_client_ip(req)
