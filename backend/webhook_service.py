@@ -68,6 +68,8 @@ class WebhookService:
                 else:
                     error_msg = f"Webhook returned status {response.status_code}"
                     print(f"⚠️ {error_msg}")
+                    print(f"Response body: {response.text}")
+                    print(f"Payload sent: {json.dumps(payload, indent=2)}")
                     return False, error_msg
         
         except asyncio.TimeoutError:
