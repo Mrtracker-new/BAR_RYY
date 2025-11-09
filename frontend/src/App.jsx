@@ -104,11 +104,11 @@ function MainApp() {
         max_views: rules.maxViews,
         expiry_minutes: rules.expiryMinutes,
         password: rules.password || null,
-        webhook_url: rules.webhookUrl || null,
+        webhook_url: (rules.webhookUrl && rules.webhookUrl.trim()) || null,
         view_only: rules.viewOnly || false,
         storage_mode: rules.storageMode || "client",
         require_otp: rules.requireOtp || false,
-        otp_email: rules.otpEmail || null,
+        otp_email: (rules.otpEmail && rules.otpEmail.trim()) || null,
       };
 
       const response = await axios.post("/seal", sealData);
