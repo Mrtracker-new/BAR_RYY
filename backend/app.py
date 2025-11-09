@@ -1075,7 +1075,7 @@ async def share_file(token: str, req: Request, request: DecryptRequest):
             webhook_srv = webhook_service.get_webhook_service()
             asyncio.create_task(webhook_srv.send_access_alert(
                 webhook_url=webhook_url,
-                filename=filename,
+                filename=metadata.get("filename", "unknown"),
                 ip_address=ip_address,
                 views_remaining=views_remaining
             ))
@@ -1091,7 +1091,7 @@ async def share_file(token: str, req: Request, request: DecryptRequest):
                 webhook_srv = webhook_service.get_webhook_service()
                 asyncio.create_task(webhook_srv.send_destruction_alert(
                     webhook_url=webhook_url,
-                    filename=filename,
+                    filename=metadata.get("filename", "unknown"),
                     reason="Maximum views reached",
                     views_used=max_views,
                     max_views=max_views
