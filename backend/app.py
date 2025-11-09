@@ -23,6 +23,7 @@ load_dotenv()
 import uuid
 import shutil
 import json
+import asyncio
 from datetime import datetime
 import mimetypes
 import crypto_utils
@@ -88,7 +89,6 @@ os.makedirs(GENERATED_DIR, exist_ok=True)
 @app.on_event("startup")
 async def startup_event():
     """Start background tasks on app startup"""
-    import asyncio
     print("🚀 BAR Web API starting...")
     
     # Initialize database in background to not block health checks
