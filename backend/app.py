@@ -41,7 +41,7 @@ app = FastAPI(title="BAR Web API", version="1.0")
 allowed_origins = [
     "http://localhost:5173",
     "http://localhost:3000",
-    "https://bar-dusky.vercel.app",  # Production frontend
+    "https://bar-rnr.vercel.app",  # Production frontend
 ]
 
 # Add frontend URL from environment variable (Render/production)
