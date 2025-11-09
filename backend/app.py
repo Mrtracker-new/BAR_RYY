@@ -917,6 +917,18 @@ async def share_file(token: str, req: Request, request: DecryptRequest):
                 print("❌ Password required but not provided")
                 # Record failed attempt
                 security.record_password_attempt(client_ip, False, token)
+                
+                # Send access denied webhook
+                webhook_url = metadata.get("webhook_url")
+                if webhook_url:
+                    webhook_srv = webhook_service.get_webhook_service()
+                    asyncio.create_task(webhook_srv.send_access_denied_alert(
+                        webhook_url=webhook_url,
+                        filename=metadata.get("filename", "unknown"),
+                        reason="Password required but not provided",
+                        ip_address=client_ip
+                    ))
+                
                 raise HTTPException(status_code=403, detail="Password required")
             
             # Check password hash (only for new files that have it)
@@ -937,6 +949,18 @@ async def share_file(token: str, req: Request, request: DecryptRequest):
                     print("❌ Password hash mismatch!")
                     # Record failed attempt
                     security.record_password_attempt(client_ip, False, token)
+                    
+                    # Send access denied webhook for wrong password
+                    webhook_url = metadata.get("webhook_url")
+                    if webhook_url:
+                        webhook_srv = webhook_service.get_webhook_service()
+                        asyncio.create_task(webhook_srv.send_access_denied_alert(
+                            webhook_url=webhook_url,
+                            filename=metadata.get("filename", "unknown"),
+                            reason="Invalid password",
+                            ip_address=client_ip
+                        ))
+                    
                     raise HTTPException(status_code=403, detail="Invalid password")
                 print("✅ Password validated successfully")
                 # Record successful attempt
@@ -950,6 +974,18 @@ async def share_file(token: str, req: Request, request: DecryptRequest):
         
         # Check if file has already reached max views (database is source of truth)
         if current_views >= max_views:
+            # Send access denied webhook
+            webhook_url = metadata.get("webhook_url")
+            if webhook_url:
+                webhook_srv = webhook_service.get_webhook_service()
+                client_ip = analytics.get_client_ip(req)
+                asyncio.create_task(webhook_srv.send_access_denied_alert(
+                    webhook_url=webhook_url,
+                    filename=metadata.get("filename", "unknown"),
+                    reason=f"Maximum views reached ({current_views}/{max_views})",
+                    ip_address=client_ip
+                ))
+            
             raise HTTPException(status_code=403, detail=f"Maximum views reached ({current_views}/{max_views})")
         
         # Check expiry from database record
@@ -966,6 +1002,18 @@ async def share_file(token: str, req: Request, request: DecryptRequest):
                     expires_at = expires_at_str
                 
                 if datetime.utcnow() > expires_at:
+                    # Send access denied webhook for expiry
+                    webhook_url = metadata.get("webhook_url")
+                    if webhook_url:
+                        webhook_srv = webhook_service.get_webhook_service()
+                        client_ip = analytics.get_client_ip(req)
+                        asyncio.create_task(webhook_srv.send_access_denied_alert(
+                            webhook_url=webhook_url,
+                            filename=metadata.get("filename", "unknown"),
+                            reason="File has expired",
+                            ip_address=client_ip
+                        ))
+                    
                     raise HTTPException(status_code=403, detail="File has expired")
         
         print("✅ Access validation passed")
@@ -1020,6 +1068,17 @@ async def share_file(token: str, req: Request, request: DecryptRequest):
             raise HTTPException(status_code=500, detail="Failed to update view count")
         
         print(f"✓ View count updated in database - {views_remaining} views remaining")
+        
+        # Send successful access webhook (optional monitoring)
+        webhook_url = metadata.get("webhook_url")
+        if webhook_url:
+            webhook_srv = webhook_service.get_webhook_service()
+            asyncio.create_task(webhook_srv.send_access_alert(
+                webhook_url=webhook_url,
+                filename=filename,
+                ip_address=ip_address,
+                views_remaining=views_remaining
+            ))
         
         # Destroy the file if view limit reached
         if should_destroy:
