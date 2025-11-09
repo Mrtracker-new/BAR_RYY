@@ -7,8 +7,8 @@ const SEO = ({
   keywords = "BAR, burn after reading, BAR rnr, self-destruct files, secure file sharing, encrypted file sharing, AES-256 encryption, zero-knowledge encryption, password protected files, temporary file sharing, self-destructing messages, mission impossible files, secure file transfer, confidential file sharing, auto-delete files, burn after reading app",
   author = "Rolan (RNR)",
   authorUrl = "https://rolan-rnr.netlify.app/",
-  ogImage = "https://bar-dusky.vercel.app/og-image.png",
-  url = "https://bar-dusky.vercel.app/",
+  ogImage = "https://bar-rnr.vercel.app/og-image.png",
+  url = "https://bar-rnr.vercel.app/",
   type = "website",
 }) => {
   return (
