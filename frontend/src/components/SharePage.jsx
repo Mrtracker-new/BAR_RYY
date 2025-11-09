@@ -198,7 +198,7 @@ const SharePage = ({ token }) => {
     <SEO 
       title="Secure File Access - BAR Web"
       description="Access your encrypted file securely. Military-grade AES-256 encryption with self-destruct capabilities."
-      url={`https://bar-dusky.vercel.app/share/${token}`}
+      url={`https://bar-rnr.vercel.app/share/${token}`}
     />
     {/* Burning Animation */}
     {showBurning && (
