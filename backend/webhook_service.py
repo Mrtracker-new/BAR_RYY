@@ -50,8 +50,9 @@ class WebhookService:
             
             # Detect webhook type and format accordingly
             print(f"🔍 Webhook URL: {webhook_url[:60]}...")
-            print(f"🔍 Contains 'discord.com': {'discord.com' in webhook_url.lower()}")
-            if "discord.com" in webhook_url.lower():
+            is_discord = "discord.com" in webhook_url.lower() or "discordapp.com" in webhook_url.lower()
+            print(f"🔍 Is Discord: {is_discord}")
+            if is_discord:
                 print("✅ Using Discord format")
                 payload = self._format_discord_webhook(event_type, data)
             elif "slack.com" in webhook_url.lower():
