@@ -23,6 +23,7 @@ import Toast from "./components/Toast";
 import DecryptPage from "./components/DecryptPage";
 import SEO from "./components/SEO";
 import SEOContent from "./components/SEOContent";
+import LandingPage from "./components/LandingPage";
 
 // Wrapper component for share page route
 const SharePageWrapper = () => {
@@ -120,7 +121,7 @@ function MainApp() {
     } catch (err) {
       setError(
         "Failed to seal container: " +
-          (err.response?.data?.detail || err.message)
+        (err.response?.data?.detail || err.message)
       );
     } finally {
       setIsSealing(false);
@@ -372,11 +373,10 @@ function MainApp() {
                   <button
                     onClick={handleSealContainer}
                     disabled={!uploadedFile || isSealing}
-                    className={`w-full mt-6 sm:mt-8 py-4 sm:py-5 rounded-xl font-bold text-base sm:text-lg transition-all duration-300 shadow-xl ${
-                      uploadedFile && !isSealing
-                        ? "bg-gradient-to-r from-gold-500 to-gold-600 hover:from-gold-600 hover:to-gold-700 text-black hover:scale-105 hover:shadow-2xl hover:shadow-gold-500/50 animate-glow"
-                        : "bg-dark-700 text-gray-600 cursor-not-allowed"
-                    }`}
+                    className={`w-full mt-6 sm:mt-8 py-4 sm:py-5 rounded-xl font-bold text-base sm:text-lg transition-all duration-300 shadow-xl ${uploadedFile && !isSealing
+                      ? "bg-gradient-to-r from-gold-500 to-gold-600 hover:from-gold-600 hover:to-gold-700 text-black hover:scale-105 hover:shadow-2xl hover:shadow-gold-500/50 animate-glow"
+                      : "bg-dark-700 text-gray-600 cursor-not-allowed"
+                      }`}
                   >
                     {isSealing ? (
                       <span className="flex items-center justify-center space-x-2">
@@ -561,7 +561,7 @@ function MainApp() {
                 </div>
               </div>
             )}
-            
+
             {/* SEO Content Section */}
             {!barResult && !showDecrypt && (
               <SEOContent />
@@ -604,7 +604,8 @@ function MainApp() {
 function App() {
   return (
     <Routes>
-      <Route path="/" element={<MainApp />} />
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/app" element={<MainApp />} />
       <Route path="/share/:token" element={<SharePageWrapper />} />
     </Routes>
   );
