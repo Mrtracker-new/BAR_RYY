@@ -2,7 +2,6 @@
 Analytics utilities for BAR Web
 Handles device detection and geolocation
 """
-import re
 from typing import Optional, Dict
 import httpx
 
