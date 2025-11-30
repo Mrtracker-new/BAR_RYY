@@ -21,11 +21,13 @@ import qr_generator
 load_dotenv()
 
 import uuid
-import shutil
 import json
 import asyncio
 from datetime import datetime
 import mimetypes
+import hashlib
+import traceback
+import re
 import crypto_utils
 import client_storage
 import server_storage
@@ -170,7 +172,7 @@ class SealRequest(BaseModel):
             raise ValueError('Email address required when 2FA is enabled')
         # Basic email validation
         if v:
-            import re
+
             email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
             if not re.match(email_pattern, v):
                 raise ValueError('Invalid email address')
@@ -337,7 +339,7 @@ async def seal_container(req: Request, request: SealRequest):
         
         if request.password:
             # Password-protected: Use password-derived encryption
-            import hashlib
+
             password_hash = hashlib.sha256(request.password.encode()).hexdigest()
         
         # Create metadata based on storage mode
@@ -458,7 +460,7 @@ async def seal_container(req: Request, request: SealRequest):
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
+
         error_detail = f"Seal failed: {str(e)}\n{traceback.format_exc()}"
         print(error_detail)  # Log to console
         raise HTTPException(status_code=500, detail=security.sanitize_error_message(str(e)))
@@ -599,7 +601,7 @@ async def decrypt_uploaded_bar_file(req: Request, file: UploadFile = File(...), 
         client_ip = analytics.get_client_ip(req)
         
         # Generate a pseudo-token from file hash for tracking attempts per file
-        import hashlib
+
         file_token = hashlib.sha256(bar_data[:100]).hexdigest()[:16]  # Use first 100 bytes
         
         # Check brute force protection BEFORE attempting to unpack
@@ -738,7 +740,7 @@ async def decrypt_uploaded_bar_file(req: Request, file: UploadFile = File(...), 
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
+
         error_detail = f"Decryption failed: {str(e)}\n{traceback.format_exc()}"
         print(error_detail)
         raise HTTPException(status_code=500, detail=f"Decryption failed: {str(e)}")
@@ -812,7 +814,7 @@ async def request_otp(token: str, req: Request):
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
+
         print(f"❌ OTP request failed: {str(e)}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Failed to send OTP: {str(e)}")
 
@@ -849,7 +851,7 @@ async def verify_otp(token: str, req: Request, otp_code: str = Form(...)):
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
+
         print(f"❌ OTP verification failed: {str(e)}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"OTP verification failed: {str(e)}")
 
@@ -958,7 +960,7 @@ async def share_file(token: str, req: Request, request: DecryptRequest):
             password_valid = False
             
             if stored_hash:
-                import hashlib
+
                 provided_hash = hashlib.sha256(password.strip().encode()).hexdigest()
                 print(f"Password validation:")
                 print(f"  Stored hash: {stored_hash[:16]}...")
@@ -1151,7 +1153,7 @@ async def share_file(token: str, req: Request, request: DecryptRequest):
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
+
         error_detail = f"Access failed: {str(e)}\n{traceback.format_exc()}"
         print(error_detail)
         raise HTTPException(status_code=500, detail=f"Access failed: {str(e)}")
