@@ -1104,6 +1104,11 @@ async def share_file(token: str, req: Request, request: DecryptRequest):
         
         print(f"✓ View count updated in database - {views_remaining} views remaining")
         
+        # Clear OTP verification after successful access (requires new OTP for next access)
+        if file_record.get('require_otp'):
+            otp_srv = otp_service.get_otp_service()
+            otp_srv.clear_verification(token)
+        
         # Send successful access webhook (optional monitoring)
         webhook_url = metadata.get("webhook_url")
         if webhook_url:

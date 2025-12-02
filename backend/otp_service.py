@@ -108,6 +108,12 @@ class OTPService:
             return False
         return self.otp_storage[token].get('verified', False)
     
+    def clear_verification(self, token: str) -> None:
+        """Clear OTP verification for a token (after successful file access)"""
+        if token in self.otp_storage:
+            del self.otp_storage[token]
+            print(f"🔒 OTP verification cleared for token {token[:8]}... (requires new OTP for next access)")
+    
     def cleanup_expired_otps(self):
         """Remove expired OTP sessions"""
         now = datetime.now(timezone.utc)
