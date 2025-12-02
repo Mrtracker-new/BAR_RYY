@@ -7,6 +7,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    host: true, // listen on 0.0.0.0 so phones on the same Wi‑Fi can reach it
     proxy: {
       '/upload': backendUrl,
       '/seal': backendUrl,

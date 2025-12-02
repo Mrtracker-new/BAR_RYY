@@ -413,9 +413,20 @@ async def seal_container(req: Request, request: SealRequest):
             print(f"✅ Server-side file created: {access_token}")
 
             # Generate full shareable link (absolute URL)
-            # Use FRONTEND_URL for production, localhost for development
-            base_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
-            share_link = f"{base_url}/share/{access_token}"
+            # Prefer FRONTEND_URL; if not set, fall back to request Origin header
+            base_url = os.getenv("FRONTEND_URL")
+            if not base_url:
+                # Try Origin header (e.g., https://bar-rnr.vercel.app)
+                base_url = req.headers.get("origin") or req.headers.get("referer") or "http://localhost:5173"
+                # If referer includes a path, strip to scheme://host
+                try:
+                    if base_url and "/" in base_url[8:]:
+                        from urllib.parse import urlparse
+                        parsed = urlparse(base_url)
+                        base_url = f"{parsed.scheme}://{parsed.netloc}"
+                except Exception:
+                    pass
+            share_link = f"{base_url.rstrip('/')}/share/{access_token}"
             
             # Generate custom themed QR code with logo
             logo_path = os.path.join(os.path.dirname(__file__), "BAR_web.png")
