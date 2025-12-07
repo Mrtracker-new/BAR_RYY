@@ -21,12 +21,18 @@ export default {
       },
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'glow': 'glow 2s ease-in-out infinite',
+        'float-slow': 'float-slow 8s ease-in-out infinite',
       },
       keyframes: {
-        glow: {
-          '0%, 100%': { boxShadow: '0 0 5px rgba(251, 191, 36, 0.5)' },
-          '50%': { boxShadow: '0 0 20px rgba(251, 191, 36, 0.8)' },
+        'float-slow': {
+          '0%, 100%': { 
+            transform: 'translate(0, 0) scale(1)',
+            opacity: '0.3'
+          },
+          '50%': { 
+            transform: 'translate(20px, -20px) scale(1.05)',
+            opacity: '0.4'
+          },
         }
       }
     },
