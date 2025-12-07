@@ -2,6 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
@@ -11,6 +15,23 @@ body {
   -moz-osx-font-smoothing: grayscale;
   background-color: #0A0A0A;
   color: #ffffff;
+}
+
+/* Performance optimization for all transitions */
+* {
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Respect user's motion preferences for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 code {
@@ -26,6 +47,14 @@ code {
   .terminal-glow {
     box-shadow: 0 0 10px rgba(251, 191, 36, 0.3),
                 inset 0 0 10px rgba(251, 191, 36, 0.1);
+  }
+
+  /* Hardware acceleration for smooth animations */
+  .animate-float-slow {
+    will-change: transform, opacity;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    perspective: 1000px;
   }
 
   .animate-slide-in {
