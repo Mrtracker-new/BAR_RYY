@@ -85,17 +85,18 @@ const LandingPage = () => {
 
   return (
     <div className="min-h-screen bg-dark-900 text-white overflow-hidden">
-      {/* Animated Background */}
+      {/* Animated Background - Subtle gradient orbs */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-gold-500/10 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse delay-1000"></div>
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-gold-500/5 rounded-full blur-3xl animate-float-slow"></div>
+        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-gold-600/5 rounded-full blur-3xl animate-float-slow" style={{animationDelay: '3s'}}></div>
+        <div className="absolute top-1/2 right-1/3 w-64 h-64 bg-gold-400/3 rounded-full blur-3xl animate-float-slow" style={{animationDelay: '1.5s'}}></div>
       </div>
 
       {/* Header */}
-      <header className="relative border-b border-dark-700 bg-gradient-to-r from-dark-800 via-dark-900 to-dark-800 backdrop-blur">
+      <header className="sticky top-0 z-50 border-b border-dark-700 bg-dark-900/80 backdrop-blur-xl">
         <div className="container mx-auto px-4 sm:px-6 py-5 sm:py-6">
           <div className="flex items-center space-x-3 sm:space-x-4">
-            <div className="p-2 bg-gradient-to-br from-gold-500 to-gold-600 rounded-xl shadow-lg shadow-gold-500/30">
+            <div className="p-2 bg-gradient-to-br from-gold-500 to-gold-600 rounded-xl shadow-lg shadow-gold-500/20 transition-all duration-300 hover:shadow-gold-500/40 hover:scale-105">
               <PackageOpen className="text-black" size={28} />
             </div>
             <div>
@@ -117,7 +118,7 @@ const LandingPage = () => {
           <div className="max-w-4xl mx-auto space-y-8">
             {/* Main Title */}
             <div className="space-y-4">
-              <h2 className="text-5xl sm:text-7xl md:text-8xl font-black bg-gradient-to-r from-gold-400 via-gold-500 to-gold-600 bg-clip-text text-transparent animate-glow">
+              <h2 className="text-5xl sm:text-7xl md:text-8xl font-black bg-gradient-to-r from-gold-400 via-gold-500 to-gold-600 bg-clip-text text-transparent">
                 BAR
               </h2>
               <div className="flex items-center justify-center space-x-2 sm:space-x-3">
@@ -142,7 +143,7 @@ const LandingPage = () => {
 
             {/* Stats */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 max-w-3xl mx-auto py-8">
-              <div className="p-4 bg-dark-800 rounded-xl border border-dark-700 hover:border-gold-500/50 transition-all duration-300">
+              <div className="p-4 bg-gradient-to-br from-dark-800 to-dark-900 rounded-xl border border-dark-700 hover:border-gold-500/50 transition-all duration-300 hover:-translate-y-1">
                 <div className="text-2xl sm:text-3xl font-bold text-gold-500">
                   AES-256
                 </div>
@@ -150,7 +151,7 @@ const LandingPage = () => {
                   Encryption
                 </div>
               </div>
-              <div className="p-4 bg-dark-800 rounded-xl border border-dark-700 hover:border-gold-500/50 transition-all duration-300">
+              <div className="p-4 bg-gradient-to-br from-dark-800 to-dark-900 rounded-xl border border-dark-700 hover:border-gold-500/50 transition-all duration-300 hover:-translate-y-1">
                 <div className="text-2xl sm:text-3xl font-bold text-gold-500">
                   100K
                 </div>
@@ -158,7 +159,7 @@ const LandingPage = () => {
                   PBKDF2 Iterations
                 </div>
               </div>
-              <div className="p-4 bg-dark-800 rounded-xl border border-dark-700 hover:border-gold-500/50 transition-all duration-300">
+              <div className="p-4 bg-gradient-to-br from-dark-800 to-dark-900 rounded-xl border border-dark-700 hover:border-gold-500/50 transition-all duration-300 hover:-translate-y-1">
                 <div className="text-2xl sm:text-3xl font-bold text-gold-500">
                   100MB
                 </div>
@@ -166,7 +167,7 @@ const LandingPage = () => {
                   Max File Size
                 </div>
               </div>
-              <div className="p-4 bg-dark-800 rounded-xl border border-dark-700 hover:border-gold-500/50 transition-all duration-300">
+              <div className="p-4 bg-gradient-to-br from-dark-800 to-dark-900 rounded-xl border border-dark-700 hover:border-gold-500/50 transition-all duration-300 hover:-translate-y-1">
                 <div className="text-2xl sm:text-3xl font-bold text-gold-500">
                   Zero
                 </div>
@@ -179,11 +180,11 @@ const LandingPage = () => {
             {/* CTA Button */}
             <button
               onClick={() => navigate("/app")}
-              className="group relative inline-flex items-center space-x-3 px-8 sm:px-12 py-4 sm:py-6 bg-gradient-to-r from-gold-500 to-gold-600 hover:from-gold-600 hover:to-gold-700 text-black font-bold text-lg sm:text-xl rounded-2xl transition-all duration-300 hover:scale-105 shadow-2xl shadow-gold-500/50 hover:shadow-gold-500/70 animate-glow"
+              className="group relative inline-flex items-center space-x-3 px-8 sm:px-12 py-4 sm:py-6 bg-gradient-to-r from-gold-500 to-gold-600 hover:from-gold-600 hover:to-gold-700 text-black font-bold text-lg sm:text-xl rounded-2xl transition-all duration-300 hover:scale-[1.02] shadow-lg shadow-gold-500/30 hover:shadow-xl hover:shadow-gold-500/50 focus:outline-none focus:ring-2 focus:ring-gold-500 focus:ring-offset-2 focus:ring-offset-dark-900"
             >
               <span>🔥</span>
               <span>Start Hiding</span>
-              <span className="transform transition-transform duration-300 group-hover:translate-x-1">
+              <span className="transform transition-transform duration-200 ease-out group-hover:translate-x-1">
                 →
               </span>
             </button>
@@ -214,12 +215,12 @@ const LandingPage = () => {
                 return (
                   <div
                     key={index}
-                    className={`group p-6 bg-gradient-to-br from-dark-800 to-dark-900 rounded-2xl border ${feature.borderColor} hover:border-gold-500/50 transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-gold-500/20`}
+                    className={`group p-6 bg-gradient-to-br from-dark-800 to-dark-900 rounded-2xl border ${feature.borderColor} hover:border-gold-500/50 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-gold-500/10`}
                   >
                     <div
-                      className={`inline-flex p-3 ${feature.bgColor} rounded-xl mb-4 group-hover:scale-110 transition-transform duration-300`}
+                      className={`inline-flex p-3 ${feature.bgColor} rounded-xl mb-4 group-hover:scale-105 transition-all duration-300 ease-out`}
                     >
-                      <Icon className={feature.color} size={24} />
+                      <Icon className={`${feature.color} transition-transform duration-300 group-hover:rotate-3`} size={24} />
                     </div>
                     <h4
                       className={`font-bold text-base sm:text-lg mb-2 ${feature.color}`}
@@ -281,7 +282,7 @@ const LandingPage = () => {
               ].map((step, index) => (
                 <div
                   key={index}
-                  className="flex items-start space-x-4 sm:space-x-6 p-6 bg-gradient-to-r from-dark-800 to-dark-900 rounded-2xl border border-dark-700 hover:border-gold-500/50 transition-all duration-300"
+                  className="flex items-start space-x-4 sm:space-x-6 p-6 bg-gradient-to-br from-dark-800 to-dark-900 rounded-2xl border border-dark-700 hover:border-gold-500/50 transition-all duration-300 hover:-translate-y-1"
                 >
                   <div className="flex-shrink-0">
                     <div className="flex items-center justify-center w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-gold-500 to-gold-600 rounded-xl text-2xl sm:text-3xl font-bold text-black shadow-lg">
@@ -307,11 +308,11 @@ const LandingPage = () => {
             <div className="text-center mt-12 sm:mt-16">
               <button
                 onClick={() => navigate("/app")}
-                className="group inline-flex items-center space-x-3 px-10 sm:px-14 py-4 sm:py-5 bg-gradient-to-r from-gold-500 to-gold-600 hover:from-gold-600 hover:to-gold-700 text-black font-bold text-lg sm:text-xl rounded-2xl transition-all duration-300 hover:scale-105 shadow-2xl shadow-gold-500/50 hover:shadow-gold-500/70"
+                className="group inline-flex items-center space-x-3 px-10 sm:px-14 py-4 sm:py-5 bg-gradient-to-r from-gold-500 to-gold-600 hover:from-gold-600 hover:to-gold-700 text-black font-bold text-lg sm:text-xl rounded-2xl transition-all duration-300 hover:scale-[1.02] shadow-lg shadow-gold-500/30 hover:shadow-xl hover:shadow-gold-500/50 focus:outline-none focus:ring-2 focus:ring-gold-500 focus:ring-offset-2 focus:ring-offset-dark-900"
               >
                 <span>🚀</span>
                 <span>Try It Now</span>
-                <span className="transform transition-transform duration-300 group-hover:translate-x-1">
+                <span className="transform transition-transform duration-200 ease-out group-hover:translate-x-1">
                   →
                 </span>
               </button>
