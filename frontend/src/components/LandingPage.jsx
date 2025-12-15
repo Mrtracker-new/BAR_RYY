@@ -145,7 +145,7 @@ const LandingPage = () => {
                 <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </button>
               <button
-                onClick={() => window.open('https://github.com/rolanlobo', '_blank')}
+                onClick={() => window.open('https://github.com/Mrtracker-new', '_blank')}
                 className="w-full sm:w-auto px-8 py-4 bg-dark-800 text-gray-300 font-semibold text-lg rounded-xl border border-dark-700 hover:border-gold-500/30 hover:text-gold-400 transition-all"
               >
                 Read Documentation
