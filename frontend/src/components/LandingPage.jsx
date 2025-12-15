@@ -1,4 +1,5 @@
 import React from "react";
+import { motion, useScroll, useTransform } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import {
   Shield,
@@ -9,327 +10,190 @@ import {
   Smartphone,
   PackageOpen,
   Eye,
-  Key,
   Bell,
+  ChevronRight,
+  Terminal,
 } from "lucide-react";
 
 const LandingPage = () => {
   const navigate = useNavigate();
+  const { scrollY } = useScroll();
+  const opacity = useTransform(scrollY, [0, 300], [1, 0]);
+  const y = useTransform(scrollY, [0, 300], [0, -50]);
 
   const features = [
     {
       icon: Shield,
       title: "AES-256 Encryption",
-      description: "Military-grade encryption used by banks and governments",
+      description: "Military-grade encryption used by governments.",
       color: "text-green-400",
-      bgColor: "bg-green-500/20",
-      borderColor: "border-green-500/30",
+      delay: 0.1,
     },
     {
       icon: Zap,
-      title: "Self-Destruct Files",
-      description: "Files automatically delete after viewing or expiration",
-      color: "text-yellow-400",
-      bgColor: "bg-yellow-500/20",
-      borderColor: "border-yellow-500/30",
+      title: "Self-Destruct",
+      description: "Files vanish automatically after viewing.",
+      color: "text-gold-500",
+      delay: 0.2,
     },
     {
       icon: Lock,
-      title: "Password Protection",
-      description: "Zero-knowledge encryption with PBKDF2 key derivation",
+      title: "Zero Knowledge",
+      description: "We cannot see your data. Only you have the key.",
       color: "text-purple-400",
-      bgColor: "bg-purple-500/20",
-      borderColor: "border-purple-500/30",
+      delay: 0.3,
     },
     {
       icon: Clock,
-      title: "Time-Based Expiry",
-      description: "Set custom expiration times for your sensitive files",
+      title: "Custom Expiry",
+      description: "Set exact time limits for file availability.",
       color: "text-blue-400",
-      bgColor: "bg-blue-500/20",
-      borderColor: "border-blue-500/30",
-    },
-    {
-      icon: Ban,
-      title: "Brute Force Protection",
-      description: "Progressive delays and lockouts prevent password attacks",
-      color: "text-red-400",
-      bgColor: "bg-red-500/20",
-      borderColor: "border-red-500/30",
-    },
-    {
-      icon: Smartphone,
-      title: "2FA Support",
-      description: "Email OTP authentication for enhanced security",
-      color: "text-cyan-400",
-      bgColor: "bg-cyan-500/20",
-      borderColor: "border-cyan-500/30",
-    },
-    {
-      icon: Eye,
-      title: "View Limits",
-      description: "Control exactly how many times files can be accessed",
-      color: "text-orange-400",
-      bgColor: "bg-orange-500/20",
-      borderColor: "border-orange-500/30",
-    },
-    {
-      icon: Bell,
-      title: "Webhook Alerts",
-      description: "Real-time Discord/Slack notifications for file events",
-      color: "text-pink-400",
-      bgColor: "bg-pink-500/20",
-      borderColor: "border-pink-500/30",
+      delay: 0.4,
     },
   ];
 
   return (
-    <div className="min-h-screen bg-dark-900 text-white overflow-hidden">
-      {/* Animated Background - Subtle gradient orbs */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-gold-500/5 rounded-full blur-3xl animate-float-slow"></div>
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-gold-600/5 rounded-full blur-3xl animate-float-slow" style={{animationDelay: '3s'}}></div>
-        <div className="absolute top-1/2 right-1/3 w-64 h-64 bg-gold-400/3 rounded-full blur-3xl animate-float-slow" style={{animationDelay: '1.5s'}}></div>
+    <div className="min-h-screen bg-dark-900 text-white font-sans selection:bg-gold-500/30 selection:text-gold-200 overflow-x-hidden">
+
+      {/* Background Ambience */}
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute top-[-10%] left-[-10%] w-[40rem] h-[40rem] bg-gold-500/5 rounded-full blur-[120px] animate-pulse-slow" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40rem] h-[40rem] bg-gold-600/5 rounded-full blur-[120px] animate-pulse-slow delay-1000" />
+        {/* Simple CSS radial gradient if external image fails, blended with noise if possible */}
+        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 brightness-100 contrast-150 mix-blend-overlay"></div>
       </div>
 
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-dark-700 bg-dark-900/80 backdrop-blur-xl">
-        <div className="container mx-auto px-4 sm:px-6 py-5 sm:py-6">
-          <div className="flex items-center space-x-3 sm:space-x-4">
-            <div className="p-2 bg-gradient-to-br from-gold-500 to-gold-600 rounded-xl shadow-lg shadow-gold-500/20 transition-all duration-300 hover:shadow-gold-500/40 hover:scale-105">
-              <PackageOpen className="text-black" size={28} />
+      {/* Grid Overlay */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#F59E0B0A_1px,transparent_1px),linear-gradient(to_bottom,#F59E0B0A_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] pointer-events-none"></div>
+
+      {/* Navbar */}
+      <motion.nav
+        initial={{ y: -100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.8, ease: "circOut" }}
+        className="fixed top-0 w-full z-50 border-b border-dark-800/80 bg-dark-900/80 backdrop-blur-md"
+      >
+        <div className="container mx-auto px-6 h-20 flex items-center justify-between">
+          <div className="flex items-center space-x-3 group cursor-pointer" onClick={() => navigate('/')}>
+            <div className="p-2 bg-gradient-to-br from-gold-500 to-gold-600 rounded-lg shadow-lg shadow-gold-500/20 group-hover:shadow-gold-500/40 transition-all duration-300">
+              <PackageOpen className="text-black w-6 h-6" />
             </div>
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-gold-400 via-gold-500 to-gold-600 bg-clip-text text-transparent">
-                BAR Web
-              </h1>
-              <p className="text-gray-400 text-xs sm:text-sm font-medium">
-                🔒 Burn After Reading
-              </p>
-            </div>
+            <span className="text-xl font-bold bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">BAR Web</span>
           </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="relative">
-        {/* Hero Section */}
-        <section className="container mx-auto px-4 sm:px-6 py-16 sm:py-24 text-center">
-          <div className="max-w-4xl mx-auto space-y-8">
-            {/* Main Title */}
-            <div className="space-y-4">
-              <h2 className="text-5xl sm:text-7xl md:text-8xl font-black bg-gradient-to-r from-gold-400 via-gold-500 to-gold-600 bg-clip-text text-transparent">
-                BAR
-              </h2>
-              <div className="flex items-center justify-center space-x-2 sm:space-x-3">
-                <div className="h-px w-12 sm:w-20 bg-gradient-to-r from-transparent via-gold-500 to-transparent"></div>
-                <p className="text-xl sm:text-2xl md:text-3xl font-semibold text-gray-300">
-                  Burn After Reading
-                </p>
-                <div className="h-px w-12 sm:w-20 bg-gradient-to-r from-transparent via-gold-500 to-transparent"></div>
-              </div>
-            </div>
-
-            {/* Description */}
-            <p className="text-lg sm:text-xl md:text-2xl text-gray-400 max-w-3xl mx-auto leading-relaxed">
-              Send files that{" "}
-              <span className="text-gold-400 font-semibold">self-destruct</span>{" "}
-              after viewing. Mission Impossible-style file sharing with{" "}
-              <span className="text-gold-400 font-semibold">
-                military-grade encryption
-              </span>
-              . No traces. No recovery. Just like the movies.
-            </p>
-
-            {/* Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 max-w-3xl mx-auto py-8">
-              <div className="p-4 bg-gradient-to-br from-dark-800 to-dark-900 rounded-xl border border-dark-700 hover:border-gold-500/50 transition-all duration-300 hover:-translate-y-1">
-                <div className="text-2xl sm:text-3xl font-bold text-gold-500">
-                  AES-256
-                </div>
-                <div className="text-xs sm:text-sm text-gray-400 mt-1">
-                  Encryption
-                </div>
-              </div>
-              <div className="p-4 bg-gradient-to-br from-dark-800 to-dark-900 rounded-xl border border-dark-700 hover:border-gold-500/50 transition-all duration-300 hover:-translate-y-1">
-                <div className="text-2xl sm:text-3xl font-bold text-gold-500">
-                  100K
-                </div>
-                <div className="text-xs sm:text-sm text-gray-400 mt-1">
-                  PBKDF2 Iterations
-                </div>
-              </div>
-              <div className="p-4 bg-gradient-to-br from-dark-800 to-dark-900 rounded-xl border border-dark-700 hover:border-gold-500/50 transition-all duration-300 hover:-translate-y-1">
-                <div className="text-2xl sm:text-3xl font-bold text-gold-500">
-                  100MB
-                </div>
-                <div className="text-xs sm:text-sm text-gray-400 mt-1">
-                  Max File Size
-                </div>
-              </div>
-              <div className="p-4 bg-gradient-to-br from-dark-800 to-dark-900 rounded-xl border border-dark-700 hover:border-gold-500/50 transition-all duration-300 hover:-translate-y-1">
-                <div className="text-2xl sm:text-3xl font-bold text-gold-500">
-                  Zero
-                </div>
-                <div className="text-xs sm:text-sm text-gray-400 mt-1">
-                  Knowledge
-                </div>
-              </div>
-            </div>
-
-            {/* CTA Button */}
+          <div className="flex items-center space-x-6">
+            <a href="https://github.com/Mrtracker-new" target="_blank" rel="noreferrer" className="hidden sm:block text-sm text-gray-400 hover:text-white transition-colors">GitHub</a>
             <button
-              onClick={() => navigate("/app")}
-              className="group relative inline-flex items-center space-x-3 px-8 sm:px-12 py-4 sm:py-6 bg-gradient-to-r from-gold-500 to-gold-600 hover:from-gold-600 hover:to-gold-700 text-black font-bold text-lg sm:text-xl rounded-2xl transition-all duration-300 hover:scale-[1.02] shadow-lg shadow-gold-500/30 hover:shadow-xl hover:shadow-gold-500/50 focus:outline-none focus:ring-2 focus:ring-gold-500 focus:ring-offset-2 focus:ring-offset-dark-900"
+              onClick={() => navigate('/app')}
+              className="px-6 py-2 bg-gold-500 hover:bg-gold-400 text-black font-semibold rounded-lg shadow-[0_0_20px_-5px_rgba(245,158,11,0.4)] hover:shadow-[0_0_25px_-5px_rgba(245,158,11,0.6)] transition-all duration-300 transform hover:scale-105"
             >
-              <span>🔥</span>
-              <span>Start Hiding</span>
-              <span className="transform transition-transform duration-200 ease-out group-hover:translate-x-1">
-                →
-              </span>
+              Launch App
             </button>
-
-            <p className="text-sm text-gray-500">
-              No sign-up required • Free forever • Open source
-            </p>
           </div>
-        </section>
-
-        {/* Features Section */}
-        <section className="container mx-auto px-4 sm:px-6 py-16 sm:py-20">
-          <div className="max-w-6xl mx-auto">
-            <div className="text-center mb-12 sm:mb-16">
-              <h3 className="text-3xl sm:text-4xl md:text-5xl font-bold bg-gradient-to-r from-gold-400 to-gold-600 bg-clip-text text-transparent mb-4">
-                Fort Knox-Level Security
-              </h3>
-              <p className="text-lg sm:text-xl text-gray-400 max-w-2xl mx-auto">
-                Every feature designed to keep your sensitive files secure and
-                self-destructing on your terms
-              </p>
-            </div>
-
-            {/* Feature Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {features.map((feature, index) => {
-                const Icon = feature.icon;
-                return (
-                  <div
-                    key={index}
-                    className={`group p-6 bg-gradient-to-br from-dark-800 to-dark-900 rounded-2xl border ${feature.borderColor} hover:border-gold-500/50 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-gold-500/10`}
-                  >
-                    <div
-                      className={`inline-flex p-3 ${feature.bgColor} rounded-xl mb-4 group-hover:scale-105 transition-all duration-300 ease-out`}
-                    >
-                      <Icon className={`${feature.color} transition-transform duration-300 group-hover:rotate-3`} size={24} />
-                    </div>
-                    <h4
-                      className={`font-bold text-base sm:text-lg mb-2 ${feature.color}`}
-                    >
-                      {feature.title}
-                    </h4>
-                    <p className="text-sm text-gray-400 leading-relaxed">
-                      {feature.description}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </section>
-
-        {/* How It Works Section */}
-        <section className="container mx-auto px-4 sm:px-6 py-16 sm:py-20">
-          <div className="max-w-4xl mx-auto">
-            <div className="text-center mb-12 sm:mb-16">
-              <h3 className="text-3xl sm:text-4xl md:text-5xl font-bold bg-gradient-to-r from-gold-400 to-gold-600 bg-clip-text text-transparent mb-4">
-                How It Works
-              </h3>
-              <p className="text-lg sm:text-xl text-gray-400">
-                Simple, secure, and self-destructing
-              </p>
-            </div>
-
-            <div className="space-y-6">
-              {[
-                {
-                  step: "1",
-                  title: "Upload Your File",
-                  description:
-                    "Drag and drop any file up to 100MB. Your file is encrypted immediately.",
-                  icon: "📤",
-                },
-                {
-                  step: "2",
-                  title: "Set Security Rules",
-                  description:
-                    "Choose storage mode, set password, view limits, expiry time, and more.",
-                  icon: "⚙️",
-                },
-                {
-                  step: "3",
-                  title: "Share Securely",
-                  description:
-                    "Get a shareable link or download the encrypted .BAR file to share.",
-                  icon: "🔗",
-                },
-                {
-                  step: "4",
-                  title: "Auto-Destruct",
-                  description:
-                    "File self-destructs after reaching view limit or expiry time. No traces left.",
-                  icon: "💥",
-                },
-              ].map((step, index) => (
-                <div
-                  key={index}
-                  className="flex items-start space-x-4 sm:space-x-6 p-6 bg-gradient-to-br from-dark-800 to-dark-900 rounded-2xl border border-dark-700 hover:border-gold-500/50 transition-all duration-300 hover:-translate-y-1"
-                >
-                  <div className="flex-shrink-0">
-                    <div className="flex items-center justify-center w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-gold-500 to-gold-600 rounded-xl text-2xl sm:text-3xl font-bold text-black shadow-lg">
-                      {step.step}
-                    </div>
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <span className="text-2xl">{step.icon}</span>
-                      <h4 className="text-lg sm:text-xl font-bold text-gold-400">
-                        {step.title}
-                      </h4>
-                    </div>
-                    <p className="text-gray-400 leading-relaxed">
-                      {step.description}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Final CTA */}
-            <div className="text-center mt-12 sm:mt-16">
-              <button
-                onClick={() => navigate("/app")}
-                className="group inline-flex items-center space-x-3 px-10 sm:px-14 py-4 sm:py-5 bg-gradient-to-r from-gold-500 to-gold-600 hover:from-gold-600 hover:to-gold-700 text-black font-bold text-lg sm:text-xl rounded-2xl transition-all duration-300 hover:scale-[1.02] shadow-lg shadow-gold-500/30 hover:shadow-xl hover:shadow-gold-500/50 focus:outline-none focus:ring-2 focus:ring-gold-500 focus:ring-offset-2 focus:ring-offset-dark-900"
-              >
-                <span>🚀</span>
-                <span>Try It Now</span>
-                <span className="transform transition-transform duration-200 ease-out group-hover:translate-x-1">
-                  →
-                </span>
-              </button>
-            </div>
-          </div>
-        </section>
-      </main>
-
-      {/* Footer */}
-      <footer className="relative border-t border-dark-700 mt-12 sm:mt-20">
-        <div className="container mx-auto px-4 sm:px-6 py-6 sm:py-8 text-center text-gray-500 text-sm sm:text-base">
-          <p>BAR Web - Burn After Reading © 2025</p>
-          <p className="mt-2 text-xs sm:text-sm">
-            Secure file encryption with self-destruct capabilities
-          </p>
         </div>
-      </footer>
+      </motion.nav>
+
+      <main className="relative pt-32 pb-20">
+
+        {/* Hero Section */}
+        <section className="container mx-auto px-6 text-center lg:min-h-[80vh] flex flex-col items-center justify-center">
+          <motion.div style={{ opacity, y }} className="max-w-4xl mx-auto space-y-8">
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.5 }}
+              className="inline-flex items-center space-x-2 px-3 py-1 rounded-full border border-gold-500/30 bg-gold-500/10 text-gold-400 text-xs tracking-wider uppercase font-medium mb-4"
+            >
+              <Terminal size={12} />
+              <span>Secure File Transmission Protocol</span>
+            </motion.div>
+
+            <motion.h1
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.2 }}
+              className="text-5xl md:text-7xl lg:text-8xl font-black tracking-tight"
+            >
+              <span className="block text-white mb-2">Burn After</span>
+              <span className="bg-gradient-to-r from-gold-400 via-gold-500 to-gold-600 bg-clip-text text-transparent filter drop-shadow-[0_0_30px_rgba(245,158,11,0.3)]">
+                Reading
+              </span>
+            </motion.h1>
+
+            <motion.p
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.4 }}
+              className="text-lg md:text-2xl text-gray-400 max-w-2xl mx-auto leading-relaxed font-light"
+            >
+              The most secure way to send sensitive documents.
+              <br className="hidden md:block" />
+              <span className="text-gray-300">Encrypted. Anonymous. Gone forever.</span>
+            </motion.p>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.6 }}
+              className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-8"
+            >
+              <button
+                onClick={() => navigate('/app')}
+                className="group w-full sm:w-auto px-8 py-4 bg-white text-black font-bold text-lg rounded-xl hover:bg-gray-100 transition-all flex items-center justify-center space-x-2 shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)]"
+              >
+                <span>Start Sealing</span>
+                <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </button>
+              <button
+                onClick={() => window.open('https://github.com/rolanlobo', '_blank')}
+                className="w-full sm:w-auto px-8 py-4 bg-dark-800 text-gray-300 font-semibold text-lg rounded-xl border border-dark-700 hover:border-gold-500/30 hover:text-gold-400 transition-all"
+              >
+                Read Documentation
+              </button>
+            </motion.div>
+
+          </motion.div>
+        </section>
+
+        {/* Features Staggered Grid */}
+        <section className="container mx-auto px-6 py-20 relative">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {features.map((feature, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-50px" }}
+                transition={{ duration: 0.6, delay: feature.delay }}
+                className="group p-6 bg-dark-800/50 backdrop-blur-sm border border-dark-700 rounded-2xl hover:bg-dark-800 hover:border-gold-500/20 transition-all duration-300 hover:-translate-y-1"
+              >
+                <div className={`w-12 h-12 rounded-lg bg-dark-900 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300 ring-1 ring-white/5`}>
+                  <feature.icon className={`w-6 h-6 ${feature.color}`} />
+                </div>
+                <h3 className="text-xl font-bold text-white mb-2">{feature.title}</h3>
+                <p className="text-sm text-gray-400 leading-relaxed">{feature.description}</p>
+              </motion.div>
+            ))}
+          </div>
+        </section>
+
+        {/* Status Bar / Footer */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          viewport={{ once: true }}
+          className="container mx-auto px-6 pt-10 border-t border-dark-800 text-center"
+        >
+          <div className="inline-flex items-center space-x-2 text-gold-500/50 text-sm font-mono uppercase tracking-widest">
+            <span className="animate-pulse">●</span>
+            <span>System Operational</span>
+          </div>
+          <p className="text-gray-600 text-sm mt-4">
+            &copy; 2025 BAR Web. Zero logs policy enforced.
+          </p>
+        </motion.div>
+
+      </main>
     </div>
   );
 };
