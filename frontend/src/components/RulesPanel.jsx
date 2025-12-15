@@ -31,12 +31,12 @@ const RulesPanel = ({ rules, onRulesChange }) => {
       </div>
 
       {/* Storage Mode */}
-      <div className="group space-y-4">
+      <div className="group space-y-3 sm:space-y-4">
         <label className="text-xs font-mono text-gold-500 uppercase tracking-widest ml-1">Storage Configuration</label>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <label className={`relative p-4 rounded-xl border transition-all cursor-pointer ${rules.storageMode === 'client'
-            ? 'bg-gold-500/10 border-gold-500/40 shadow-[0_0_20px_-5px_rgba(245,158,11,0.2)]'
-            : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/10'
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+          <label className={`relative p-3 sm:p-4 rounded-xl border transition-all cursor-pointer ${rules.storageMode === 'client'
+              ? 'bg-gold-500/10 border-gold-500/40 shadow-[0_0_20px_-5px_rgba(245,158,11,0.2)]'
+              : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/10'
             }`}>
             <input
               type="radio"
@@ -46,16 +46,16 @@ const RulesPanel = ({ rules, onRulesChange }) => {
               onChange={(e) => onRulesChange({ ...rules, storageMode: 'client' })}
               className="absolute opacity-0"
             />
-            <div className="flex items-center space-x-3 mb-2">
-              <Download size={20} className={rules.storageMode === 'client' ? 'text-gold-500' : 'text-gray-500'} />
-              <span className={`font-semibold ${rules.storageMode === 'client' ? 'text-white' : 'text-gray-400'}`}>Client-Side</span>
+            <div className="flex items-center space-x-3 mb-1 sm:mb-2">
+              <Download size={18} className={rules.storageMode === 'client' ? 'text-gold-500' : 'text-gray-500'} />
+              <span className={`font-semibold text-sm sm:text-base ${rules.storageMode === 'client' ? 'text-white' : 'text-gray-400'}`}>Client-Side</span>
             </div>
-            <p className="text-xs text-gray-500 leading-relaxed">Download .bar file. View limits not guaranteed.</p>
+            <p className="text-[10px] sm:text-xs text-gray-500 leading-relaxed">Download .bar file. View limits not guaranteed.</p>
           </label>
 
-          <label className={`relative p-4 rounded-xl border transition-all cursor-pointer ${rules.storageMode === 'server'
-            ? 'bg-gold-500/10 border-gold-500/40 shadow-[0_0_20px_-5px_rgba(245,158,11,0.2)]'
-            : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/10'
+          <label className={`relative p-3 sm:p-4 rounded-xl border transition-all cursor-pointer ${rules.storageMode === 'server'
+              ? 'bg-gold-500/10 border-gold-500/40 shadow-[0_0_20px_-5px_rgba(245,158,11,0.2)]'
+              : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/10'
             }`}>
             <input
               type="radio"
@@ -65,11 +65,11 @@ const RulesPanel = ({ rules, onRulesChange }) => {
               onChange={(e) => onRulesChange({ ...rules, storageMode: 'server' })}
               className="absolute opacity-0"
             />
-            <div className="flex items-center space-x-3 mb-2">
-              <Server size={20} className={rules.storageMode === 'server' ? 'text-gold-500' : 'text-gray-500'} />
-              <span className={`font-semibold ${rules.storageMode === 'server' ? 'text-white' : 'text-gray-400'}`}>Server-Side</span>
+            <div className="flex items-center space-x-3 mb-1 sm:mb-2">
+              <Server size={18} className={rules.storageMode === 'server' ? 'text-gold-500' : 'text-gray-500'} />
+              <span className={`font-semibold text-sm sm:text-base ${rules.storageMode === 'server' ? 'text-white' : 'text-gray-400'}`}>Server-Side</span>
             </div>
-            <p className="text-xs text-gray-500 leading-relaxed">Shareable link. Strict view limits & auto-delete.</p>
+            <p className="text-[10px] sm:text-xs text-gray-500 leading-relaxed">Shareable link. Strict view limits & auto-delete.</p>
           </label>
         </div>
       </div>

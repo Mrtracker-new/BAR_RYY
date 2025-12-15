@@ -83,7 +83,7 @@ const FileUpload = ({ onFileSelect, uploadedFile, onRemove, filePreview }) => {
     <div className="w-full">
       {!uploadedFile ? (
         <div
-          className={`border-2 border-dashed rounded-2xl p-10 sm:p-16 text-center cursor-pointer transition-all duration-500 relative overflow-hidden group ${isDragging
+          className={`border-2 border-dashed rounded-2xl p-8 sm:p-16 text-center cursor-pointer transition-all duration-500 relative overflow-hidden group ${isDragging
             ? 'border-gold-500 bg-gold-500/10 shadow-[0_0_50px_-10px_rgba(245,158,11,0.2)]'
             : 'border-white/10 hover:border-gold-500/50 bg-white/5 hover:bg-white/10'
             }`}
@@ -102,24 +102,24 @@ const FileUpload = ({ onFileSelect, uploadedFile, onRemove, filePreview }) => {
             onChange={handleFileInput}
           />
 
-          <div className={`inline-flex p-5 rounded-2xl mb-6 transition-all duration-300 ${isDragging ? 'bg-gold-500/20 scale-110' : 'bg-dark-800 border border-white/5 shadow-2xl'
+          <div className={`inline-flex p-4 sm:p-5 rounded-2xl mb-4 sm:mb-6 transition-all duration-300 ${isDragging ? 'bg-gold-500/20 scale-110' : 'bg-dark-800 border border-white/5 shadow-2xl'
             }`}>
-            <Upload className={`${isDragging ? 'text-gold-400' : 'text-gray-400 group-hover:text-gold-500'}`} size={40} />
+            <Upload className={`${isDragging ? 'text-gold-400' : 'text-gray-400 group-hover:text-gold-500'}`} size={32} />
           </div>
 
-          <h3 className="text-xl sm:text-2xl mb-3 text-white font-bold tracking-tight">
+          <h3 className="text-lg sm:text-2xl mb-2 sm:mb-3 text-white font-bold tracking-tight">
             {isDragging ? 'Drop to Encrypt' : 'Upload File'}
           </h3>
 
-          <p className="text-sm text-gray-400 mb-6 max-w-sm mx-auto leading-relaxed">
+          <p className="text-xs sm:text-sm text-gray-400 mb-4 sm:mb-6 max-w-sm mx-auto leading-relaxed">
             Drag & drop your file here or click to browse.
             <br className="hidden sm:block" />
-            <span className="text-gray-500 text-xs">Max size: 100MB • AES-256 Encrypted</span>
+            <span className="text-gray-500 text-[10px] sm:text-xs">Max size: 100MB • AES-256 Encrypted</span>
           </p>
 
-          <div className="inline-flex gap-3 justify-center">
+          <div className="inline-flex gap-2 sm:gap-3 justify-center flex-wrap">
             {['Images', 'PDF', 'Docs', 'Archives'].map((type) => (
-              <span key={type} className="px-3 py-1 rounded-full bg-white/5 border border-white/5 text-[10px] text-gray-500 uppercase tracking-wider font-semibold">
+              <span key={type} className="px-2 sm:px-3 py-1 rounded-full bg-white/5 border border-white/5 text-[10px] text-gray-500 uppercase tracking-wider font-semibold">
                 {type}
               </span>
             ))}
