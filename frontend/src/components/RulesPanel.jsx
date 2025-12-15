@@ -163,15 +163,33 @@ const RulesPanel = ({ rules, onRulesChange }) => {
         </div>
 
         {rules.storageMode === 'server' && (
-          <label className="flex items-center space-x-3 p-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors cursor-pointer border border-transparent hover:border-white/10">
-            <input
-              type="checkbox"
-              checked={rules.requireOtp || false}
-              onChange={(e) => onRulesChange({ ...rules, requireOtp: e.target.checked })}
-              className="w-4 h-4 rounded border-gray-600 bg-transparent text-gold-500 focus:ring-gold-500 focus:ring-offset-0"
-            />
-            <span className="text-sm text-gray-300">Require Email One-Time-Password (2FA)</span>
-          </label>
+          <>
+            <label className="flex items-center space-x-3 p-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors cursor-pointer border border-transparent hover:border-white/10">
+              <input
+                type="checkbox"
+                checked={rules.requireOtp || false}
+                onChange={(e) => onRulesChange({ ...rules, requireOtp: e.target.checked })}
+                className="w-4 h-4 rounded border-gray-600 bg-transparent text-gold-500 focus:ring-gold-500 focus:ring-offset-0"
+              />
+              <span className="text-sm text-gray-300">Require Email One-Time-Password (2FA)</span>
+            </label>
+
+            {rules.requireOtp && (
+              <div className="mt-3 ml-1 animate-fade-in-down">
+                <input
+                  type="email"
+                  value={rules.otpEmail || ''}
+                  onChange={(e) => onRulesChange({ ...rules, otpEmail: e.target.value })}
+                  className="w-full bg-dark-800 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-gray-700 focus:border-gold-500/50 focus:outline-none transition-all text-sm"
+                  placeholder="recipient@example.com"
+                  required={rules.requireOtp}
+                />
+                <p className="text-xs text-gray-500 mt-2 ml-1">
+                  A 6-digit code will be sent to this email.
+                </p>
+              </div>
+            )}
+          </>
         )}
       </div>
 
