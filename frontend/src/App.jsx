@@ -13,7 +13,9 @@ import {
   Lock,
   Clock,
   Zap,
+  Loader,
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import FileUpload from "./components/FileUpload";
 import RulesPanel from "./components/RulesPanel";
 import ContainerAnimation from "./components/ContainerAnimation";
@@ -598,49 +600,51 @@ function MainApp() {
                 {!barResult && !showDecrypt && (
                   <SEOContent />
                 )}
-              </>
-        )}
-            </main>
-
-            {/* Toast Notifications */}
-            {toast && (
-              <Toast
-                message={toast.message}
-                type={toast.type}
-                onClose={() => setToast(null)}
-              />
-            )}
-
-            {/* Analytics Dashboard */}
-            {showAnalytics && barResult && barResult.analytics_token && (
-              <AnalyticsDashboard
-                token={barResult.analytics_token}
-                onClose={() => setShowAnalytics(false)}
-              />
-            )}
-
-            {/* Footer */}
-            <footer className="border-t border-dark-700 mt-12 sm:mt-20">
-              <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-6 text-center text-gray-500 text-xs sm:text-sm">
-                <p>BAR Web - Burn After Reading © 2025</p>
-                <p className="mt-1 sm:mt-2">
-                  Secure file encryption with self-destruct capabilities
-                </p>
-              </div>
-            </footer>
+              </motion.div>
+            </AnimatePresence>
           </div>
-        );
+        )}
+      </main>
+
+      {/* Toast Notifications */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+
+      {/* Analytics Dashboard */}
+      {showAnalytics && barResult && barResult.analytics_token && (
+        <AnalyticsDashboard
+          token={barResult.analytics_token}
+          onClose={() => setShowAnalytics(false)}
+        />
+      )}
+
+      {/* Footer */}
+      <footer className="border-t border-dark-700 mt-12 sm:mt-20">
+        <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-6 text-center text-gray-500 text-xs sm:text-sm">
+          <p>BAR Web - Burn After Reading © 2025</p>
+          <p className="mt-1 sm:mt-2">
+            Secure file encryption with self-destruct capabilities
+          </p>
+        </div>
+      </footer>
+    </div>
+  );
 }
 
-        // App with routing
-        function App() {
+// App with routing
+function App() {
   return (
-        <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/app" element={<MainApp />} />
-          <Route path="/share/:token" element={<SharePageWrapper />} />
-        </Routes>
-        );
+    <Routes>
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/app" element={<MainApp />} />
+      <Route path="/share/:token" element={<SharePageWrapper />} />
+    </Routes>
+  );
 }
 
-        export default App;
+export default App;
