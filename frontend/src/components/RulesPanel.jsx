@@ -21,251 +21,162 @@ const RulesPanel = ({ rules, onRulesChange }) => {
   };
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-xl sm:text-2xl font-bold text-gold-500 text-shadow-gold mb-4 sm:mb-6">
-        Security Rules
-      </h2>
+
+    <div className="space-y-8">
+      <div className="flex items-center space-x-3 mb-6">
+        <div className="h-8 w-1 bg-gold-500 rounded-full shadow-[0_0_10px_rgba(245,158,11,0.5)]"></div>
+        <h2 className="text-xl font-bold text-white tracking-wide">
+          Security Protocols
+        </h2>
+      </div>
 
       {/* Storage Mode */}
-      <div className="space-y-3 bg-dark-700 border border-dark-600 rounded-lg p-3 sm:p-4">
-        <label className="text-base sm:text-lg text-gray-300 font-semibold">Storage Mode</label>
-        <div className="space-y-3">
-          <label className="flex items-start space-x-3 cursor-pointer group">
+      <div className="group space-y-4">
+        <label className="text-xs font-mono text-gold-500 uppercase tracking-widest ml-1">Storage Configuration</label>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <label className={`relative p-4 rounded-xl border transition-all cursor-pointer ${rules.storageMode === 'client'
+            ? 'bg-gold-500/10 border-gold-500/40 shadow-[0_0_20px_-5px_rgba(245,158,11,0.2)]'
+            : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/10'
+            }`}>
             <input
               type="radio"
               name="storageMode"
               value="client"
               checked={rules.storageMode === 'client' || !rules.storageMode}
               onChange={(e) => onRulesChange({ ...rules, storageMode: 'client' })}
-              className="mt-1 w-5 h-5 rounded-full border-dark-600 bg-dark-700 text-gold-500 focus:ring-gold-500 focus:ring-2 cursor-pointer"
+              className="absolute opacity-0"
             />
-            <div className="flex-1">
-              <div className="flex items-center space-x-2">
-                <Download size={18} className="text-gold-500" />
-                <span className="text-gray-200 font-medium group-hover:text-gold-400">Client-Side (Download File)</span>
-              </div>
-              <p className="text-xs sm:text-sm text-gray-500 mt-1">
-                Download .bar file and share it manually. Simple but view limits can be bypassed by keeping copies.
-              </p>
+            <div className="flex items-center space-x-3 mb-2">
+              <Download size={20} className={rules.storageMode === 'client' ? 'text-gold-500' : 'text-gray-500'} />
+              <span className={`font-semibold ${rules.storageMode === 'client' ? 'text-white' : 'text-gray-400'}`}>Client-Side</span>
             </div>
+            <p className="text-xs text-gray-500 leading-relaxed">Download .bar file. View limits not guaranteed.</p>
           </label>
-          <label className="flex items-start space-x-3 cursor-pointer group">
+
+          <label className={`relative p-4 rounded-xl border transition-all cursor-pointer ${rules.storageMode === 'server'
+            ? 'bg-gold-500/10 border-gold-500/40 shadow-[0_0_20px_-5px_rgba(245,158,11,0.2)]'
+            : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/10'
+            }`}>
             <input
               type="radio"
               name="storageMode"
               value="server"
               checked={rules.storageMode === 'server'}
               onChange={(e) => onRulesChange({ ...rules, storageMode: 'server' })}
-              className="mt-1 w-5 h-5 rounded-full border-dark-600 bg-dark-700 text-gold-500 focus:ring-gold-500 focus:ring-2 cursor-pointer"
+              className="absolute opacity-0"
             />
-            <div className="flex-1">
-              <div className="flex items-center space-x-2">
-                <Server size={18} className="text-gold-500" />
-                <span className="text-gray-200 font-medium group-hover:text-gold-400">Server-Side (Shareable Link)</span>
-              </div>
-              <p className="text-xs sm:text-sm text-gray-500 mt-1">
-                Get a shareable link. View limits properly enforced. File stored on server until destroyed.
-              </p>
+            <div className="flex items-center space-x-3 mb-2">
+              <Server size={20} className={rules.storageMode === 'server' ? 'text-gold-500' : 'text-gray-500'} />
+              <span className={`font-semibold ${rules.storageMode === 'server' ? 'text-white' : 'text-gray-400'}`}>Server-Side</span>
             </div>
+            <p className="text-xs text-gray-500 leading-relaxed">Shareable link. Strict view limits & auto-delete.</p>
           </label>
         </div>
       </div>
 
+      <div className="border-t border-white/5 my-6"></div>
+
       {/* Max Views - Only for Server-Side */}
       {rules.storageMode === 'server' ? (
-        <div className="space-y-3">
-          <div className="flex items-center space-x-2 sm:space-x-3">
-            <Eye className="text-gold-500" size={18} />
-            <label className="text-base sm:text-lg text-gray-300">Self-Destruct After Views</label>
-          </div>
-          <div className="flex items-center space-x-4">
-            <input
-              type="range"
-              min="1"
-              max="5"
-              value={rules.maxViews}
-              onChange={(e) => handleMaxViewsChange(e.target.value)}
-              className="flex-1 h-2 bg-dark-600 rounded-lg appearance-none cursor-pointer accent-gold-500"
-            />
-            <span className="text-2xl font-bold text-gold-500 w-12 text-center">
-              {rules.maxViews}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Eye className="text-gray-400" size={16} />
+              <label className="text-sm font-semibold text-gray-300">Self-Destruct Limit</label>
+            </div>
+            <span className="px-3 py-1 bg-gold-500/20 text-gold-500 text-xs font-mono rounded">
+              {rules.maxViews} VIEW{rules.maxViews > 1 ? 'S' : ''}
             </span>
           </div>
-          <p className="text-xs sm:text-sm text-gray-500">File will be destroyed after {rules.maxViews} view(s)</p>
+          <input
+            type="range"
+            min="1"
+            max="10"
+            value={rules.maxViews}
+            onChange={(e) => handleMaxViewsChange(e.target.value)}
+            className="w-full h-2 bg-dark-700 rounded-lg appearance-none cursor-pointer accent-gold-500"
+          />
         </div>
       ) : (
-        <div className="space-y-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 sm:p-4">
-          <div className="flex items-center space-x-2 sm:space-x-3">
-            <Eye className="text-yellow-500" size={18} />
-            <label className="text-base sm:text-lg text-yellow-400 font-semibold">View Count Limit Unavailable</label>
-          </div>
-          <p className="text-xs sm:text-sm text-yellow-300">
-            View count tracking doesn't work with client-side mode (users can keep copies of the .bar file). 
-            Switch to <strong>Server-Side</strong> storage to enable proper view limit enforcement.
+        <div className="p-4 rounded-xl bg-white/5 border border-dashed border-white/10 text-center">
+          <p className="text-xs text-gray-500">
+            To enable <span className="text-gray-300 font-semibold">Self-Destruct</span> views, switch to Server-Side storage.
           </p>
         </div>
       )}
 
       {/* Expiry Time */}
-      <div className="space-y-3 bg-dark-700/50 border border-dark-600 rounded-xl p-4">
-        <div className="flex items-center space-x-2 sm:space-x-3">
-          <div className="p-2 bg-blue-500/20 rounded-lg">
-            <Clock className="text-blue-400" size={18} />
-          </div>
-          <label className="text-base sm:text-lg text-gray-200 font-semibold">⏰ Auto-Expire Timer</label>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-2">
-            <label className="text-xs text-gray-400 font-medium uppercase tracking-wide">Duration</label>
-            <input
-              type="number"
-              min="0"
-              value={rules.expiryValue || 0}
-              onChange={(e) => handleExpiryChange(e.target.value, rules.expiryUnit || 'minutes')}
-              className="w-full px-4 py-2.5 bg-dark-800 border border-dark-600 rounded-lg text-white text-lg font-semibold focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 focus:outline-none transition-all"
-              placeholder="0"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-xs text-gray-400 font-medium uppercase tracking-wide">Unit</label>
-            <select
-              value={rules.expiryUnit || 'minutes'}
-              onChange={(e) => handleExpiryChange(rules.expiryValue || 0, e.target.value)}
-              className="w-full px-4 py-2.5 bg-dark-800 border border-dark-600 rounded-lg text-white font-semibold focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 focus:outline-none cursor-pointer transition-all"
-            >
-              <option value="minutes">⏱️ Minutes</option>
-              <option value="hours">🕐 Hours</option>
-              <option value="days">📅 Days</option>
-            </select>
-          </div>
-        </div>
-        <div className={`mt-2 px-3 py-2 rounded-lg border ${
-          rules.expiryMinutes > 0 
-            ? 'bg-blue-500/10 border-blue-500/30' 
-            : 'bg-gray-500/10 border-gray-500/30'
-        }`}>
-          <p className={`text-xs sm:text-sm font-medium ${
-            rules.expiryMinutes > 0 ? 'text-blue-300' : 'text-gray-400'
-          }`}>
-            {rules.expiryMinutes > 0 
-              ? `⏳ File expires in ${rules.expiryValue} ${rules.expiryUnit}` 
-              : '♾️ No expiration - lasts forever'}
-          </p>
+      <div className="space-y-4 mt-6">
+        <label className="text-xs font-mono text-gold-500 uppercase tracking-widest ml-1">Auto-Expiration</label>
+        <div className="flex space-x-2">
+          <input
+            type="number"
+            min="0"
+            value={rules.expiryValue || 0}
+            onChange={(e) => handleExpiryChange(e.target.value, rules.expiryUnit || 'minutes')}
+            className="w-24 bg-dark-800 border border-white/10 rounded-lg px-4 py-3 text-center text-white font-bold text-lg focus:border-gold-500/50 focus:outline-none focus:ring-1 focus:ring-gold-500/50 transition-all placeholder-gray-700"
+            placeholder="0"
+          />
+          <select
+            value={rules.expiryUnit || 'minutes'}
+            onChange={(e) => handleExpiryChange(rules.expiryValue || 0, e.target.value)}
+            className="flex-1 bg-dark-800 border border-white/10 rounded-lg px-4 py-3 text-gray-300 font-medium focus:border-gold-500/50 focus:outline-none transition-all cursor-pointer"
+          >
+            <option value="minutes">Minutes</option>
+            <option value="hours">Hours</option>
+            <option value="days">Days</option>
+          </select>
         </div>
       </div>
 
-      {/* Password Protection */}
-      <div className="space-y-3">
-        <div className="flex items-center space-x-2 sm:space-x-3">
-          <Lock className="text-gold-500" size={18} />
-          <label className="text-base sm:text-lg text-gray-300">Password Protection (Optional)</label>
-        </div>
-        <input
-          type="password"
-          value={rules.password || ''}
-          onChange={(e) => handlePasswordChange(e.target.value)}
-          className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white focus:border-gold-500 focus:outline-none"
-          placeholder="Leave empty for no password"
-        />
-        <p className="text-xs sm:text-sm text-gray-500">
-          {rules.password ? 'Password protection enabled' : 'No password protection'}
-        </p>
-      </div>
+      <div className="border-t border-white/5 my-6"></div>
 
-      {/* Tamper Alert Webhook */}
-      <div className="space-y-3">
-        <div className="flex items-center space-x-2 sm:space-x-3">
-          <Webhook className="text-gold-500" size={18} />
-          <label className="text-base sm:text-lg text-gray-300">Tamper Alert Webhook (Optional)</label>
+      {/* Advanced Options */}
+      <div className="space-y-5">
+        <div className="space-y-2">
+          <label className="flex items-center space-x-2 text-sm text-gray-300 font-medium">
+            <Lock size={14} className="text-gold-500" />
+            <span>Password Protection</span>
+          </label>
+          <input
+            type="password"
+            value={rules.password || ''}
+            onChange={(e) => handlePasswordChange(e.target.value)}
+            className="w-full bg-dark-800 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-gray-700 focus:border-gold-500/50 focus:outline-none transition-all text-sm"
+            placeholder="Optional access password..."
+            autoComplete="new-password"
+          />
         </div>
-        <input
-          type="url"
-          value={rules.webhookUrl || ''}
-          onChange={(e) => handleWebhookChange(e.target.value)}
-          className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white focus:border-gold-500 focus:outline-none"
-          placeholder="https://your-webhook-url.com"
-        />
-        <p className="text-xs sm:text-sm text-gray-500">
-          {rules.webhookUrl ? 'Webhook configured for tampering alerts' : 'No webhook configured'}
-        </p>
-      </div>
 
-      {/* Two-Factor Authentication (Email OTP) - Only for Server-Side */}
-      {rules.storageMode === 'server' && (
-        <div className="space-y-3 border-t border-dark-600 pt-6">
-          <div className="flex items-center space-x-2 sm:space-x-3">
-            <Mail className="text-gold-500" size={18} />
-            <label className="text-base sm:text-lg text-gray-300">Two-Factor Authentication (2FA)</label>
-          </div>
-          <label className="flex items-center space-x-3 cursor-pointer">
+        <div className="space-y-2">
+          <label className="flex items-center space-x-2 text-sm text-gray-300 font-medium">
+            <Webhook size={14} className="text-gold-500" />
+            <span>Tamper Prevention Webhook</span>
+          </label>
+          <input
+            type="url"
+            value={rules.webhookUrl || ''}
+            onChange={(e) => handleWebhookChange(e.target.value)}
+            className="w-full bg-dark-800 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-gray-700 focus:border-gold-500/50 focus:outline-none transition-all text-sm"
+            placeholder="https://discord.com/api/webhooks/..."
+          />
+        </div>
+
+        {rules.storageMode === 'server' && (
+          <label className="flex items-center space-x-3 p-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors cursor-pointer border border-transparent hover:border-white/10">
             <input
               type="checkbox"
               checked={rules.requireOtp || false}
               onChange={(e) => onRulesChange({ ...rules, requireOtp: e.target.checked })}
-              className="w-5 h-5 rounded border-dark-600 bg-dark-700 text-gold-500 focus:ring-gold-500 focus:ring-2 cursor-pointer"
+              className="w-4 h-4 rounded border-gray-600 bg-transparent text-gold-500 focus:ring-gold-500 focus:ring-offset-0"
             />
-            <span className="text-gray-300">
-              Require email verification (OTP) to access file
-            </span>
+            <span className="text-sm text-gray-300">Require Email One-Time-Password (2FA)</span>
           </label>
-          
-          {rules.requireOtp && (
-            <div className="mt-3 space-y-2">
-              <label className="text-sm text-gray-400">Recipient's Email Address</label>
-              <input
-                type="email"
-                value={rules.otpEmail || ''}
-                onChange={(e) => onRulesChange({ ...rules, otpEmail: e.target.value })}
-                className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white focus:border-gold-500 focus:outline-none"
-                placeholder="recipient@example.com"
-                required={rules.requireOtp}
-              />
-              <p className="text-xs text-gray-500">
-                A 6-digit code will be sent to this email. Only the recipient can access the file.
-              </p>
-            </div>
-          )}
-          
-          <p className="text-xs sm:text-sm text-gray-500">
-            {rules.requireOtp ? (
-              <span className="text-green-400">
-                ✅ Enabled: Recipient must verify via email OTP before accessing the file
-              </span>
-            ) : (
-              'Disabled: Anyone with the link can access (if password matches)'
-            )}
-          </p>
-        </div>
-      )}
-
-      {/* View Only Mode */}
-      <div className="space-y-3 border-t border-dark-600 pt-6">
-        <div className="flex items-center space-x-2 sm:space-x-3">
-          <ShieldAlert className="text-gold-500" size={18} />
-          <label className="text-base sm:text-lg text-gray-300">View Only Mode</label>
-        </div>
-        <label className="flex items-center space-x-3 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={rules.viewOnly || false}
-            onChange={(e) => onRulesChange({ ...rules, viewOnly: e.target.checked })}
-            className="w-5 h-5 rounded border-dark-600 bg-dark-700 text-gold-500 focus:ring-gold-500 focus:ring-2 cursor-pointer"
-          />
-          <span className="text-gray-300">
-            Enable view-only mode for supported file types
-          </span>
-        </label>
-        <p className="text-xs sm:text-sm text-gray-500">
-          {rules.viewOnly ? (
-            <span className="text-yellow-400">
-              ⚠️ Enabled: Files can only be viewed in browser (no downloads for .txt, .pdf, images, videos)
-            </span>
-          ) : (
-            'Disabled: Files can be downloaded normally'
-          )}
-        </p>
+        )}
       </div>
+
     </div>
+
   );
 };
 
