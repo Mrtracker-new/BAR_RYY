@@ -170,39 +170,49 @@ function MainApp() {
   };
 
   return (
-    <div className="min-h-screen bg-dark-900 text-white">
+    <div className="min-h-screen bg-dark-900 text-white font-sans selection:bg-gold-500/30 selection:text-gold-200 overflow-x-hidden relative">
       <SEO />
       <ContainerAnimation isSealing={isSealing} />
 
+      {/* Ambient Background Effects */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <div className="absolute top-[-20%] left-[-10%] w-[50rem] h-[50rem] bg-gold-500/5 rounded-full blur-[100px] animate-pulse-slow" />
+        <div className="absolute bottom-[-20%] right-[-10%] w-[40rem] h-[40rem] bg-gold-600/5 rounded-full blur-[100px] animate-pulse-slow delay-1000" />
+        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 brightness-100 contrast-150 mix-blend-overlay"></div>
+      </div>
+
+      {/* Grid Pattern */}
+      <div className="fixed inset-0 bg-[linear-gradient(to_right,#F59E0B0A_1px,transparent_1px),linear-gradient(to_bottom,#F59E0B0A_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] pointer-events-none z-0"></div>
+
       {/* Header */}
-      <header className="border-b border-dark-700 bg-gradient-to-r from-dark-800 via-dark-900 to-dark-800 backdrop-blur sticky top-0 z-50 shadow-xl">
-        <div className="container mx-auto px-4 sm:px-6 py-5 sm:py-6">
+      <header className="fixed top-0 w-full z-50 border-b border-white/5 bg-dark-900/80 backdrop-blur-md">
+        <div className="container mx-auto px-4 sm:px-6 py-4">
           <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center space-x-3 sm:space-x-4">
-              <div className="p-2 bg-gradient-to-br from-gold-500 to-gold-600 rounded-xl shadow-lg shadow-gold-500/30">
-                <PackageOpen className="text-black" size={28} />
+            <div className="flex items-center space-x-3 sm:space-x-4 cursor-pointer" onClick={() => window.location.href = '/'}>
+              <div className="p-2 bg-gradient-to-br from-gold-500 to-gold-600 rounded-lg shadow-lg shadow-gold-500/20">
+                <PackageOpen className="text-black" size={24} />
               </div>
               <div>
-                <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-gold-400 via-gold-500 to-gold-600 bg-clip-text text-transparent">
+                <h1 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">
                   BAR Web
                 </h1>
-                <p className="text-gray-400 text-xs sm:text-sm hidden sm:block font-medium">
-                  🔒 Burn After Reading - Military-Grade Encryption
+                <p className="text-gray-500 text-xs hidden sm:block font-medium tracking-wide">
+                  SECURE FILE TRANSMISSION
                 </p>
               </div>
             </div>
             <button
               onClick={() => setShowDecrypt(!showDecrypt)}
-              className="px-4 sm:px-6 py-2.5 text-sm sm:text-base bg-gradient-to-r from-gold-500/20 to-gold-600/20 hover:from-gold-500/30 hover:to-gold-600/30 text-gold-400 rounded-xl transition-all duration-300 border border-gold-500/40 hover:border-gold-400 whitespace-nowrap font-semibold hover:scale-105 shadow-lg hover:shadow-gold-500/20"
+              className="px-5 py-2 text-sm font-semibold bg-white/5 hover:bg-white/10 text-gold-500 border border-gold-500/20 hover:border-gold-500/50 rounded-lg transition-all duration-300 shadow-[0_0_15px_-5px_rgba(245,158,11,0.1)] hover:shadow-[0_0_20px_-5px_rgba(245,158,11,0.3)]"
             >
-              {showDecrypt ? "📦 Create" : "🔓 Decrypt"}
+              {showDecrypt ? "📦 Create New" : "🔓 Decrypt File"}
             </button>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 sm:px-6 py-8 sm:py-12">
+      <main className="container relative z-10 mx-auto px-4 sm:px-6 py-28 sm:py-32">
         {showDecrypt ? (
           <DecryptPage onBack={() => setShowDecrypt(false)} />
         ) : (
@@ -218,15 +228,22 @@ function MainApp() {
               <div className="grid lg:grid-cols-5 gap-6 sm:gap-8 max-w-7xl mx-auto">
                 {/* Left Column - File Upload (3/5 width) */}
                 <div className="lg:col-span-3 space-y-6">
-                  <div className="bg-gradient-to-br from-dark-800 to-dark-900 rounded-2xl p-6 border border-dark-700 shadow-2xl">
+                  <div className="bg-dark-900/50 backdrop-blur-xl rounded-3xl p-6 border border-white/5 shadow-2xl relative">
+                    {/* Decorative corner accents */}
+                    <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-gold-500/30 rounded-tl-2xl"></div>
+                    <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-gold-500/30 rounded-tr-2xl"></div>
+                    <div className="absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-gold-500/30 rounded-bl-2xl"></div>
+                    <div className="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-gold-500/30 rounded-br-2xl"></div>
+
                     <div className="flex items-center space-x-3 mb-5">
-                      <div className="p-2 bg-gold-500/20 rounded-lg">
-                        <Upload className="text-gold-500" size={24} />
+                      <div className="p-2 bg-gold-500/10 rounded-lg border border-gold-500/20">
+                        <Upload className="text-gold-500" size={20} />
                       </div>
-                      <h2 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-gold-400 to-gold-600 bg-clip-text text-transparent">
-                        Upload Your File
+                      <h2 className="text-xl font-bold text-white tracking-tight">
+                        Encrypted Upload
                       </h2>
                     </div>
+
                     <FileUpload
                       onFileSelect={handleFileSelect}
                       uploadedFile={uploadedFile}
@@ -359,7 +376,8 @@ function MainApp() {
                 </div>
 
                 {/* Right Column - Rules Panel (2/5 width) */}
-                <div className="lg:col-span-2 bg-gradient-to-br from-dark-800 to-dark-900 rounded-2xl p-6 border border-dark-700 shadow-2xl">
+                <div className="lg:col-span-2 bg-dark-900/50 backdrop-blur-xl rounded-3xl p-6 border border-white/5 shadow-2xl relative h-fit">
+                  <div className="absolute -z-10 bg-gradient-to-b from-gold-500/5 to-transparent inset-0 rounded-3xl pointer-events-none"></div>
                   <div className="flex items-center space-x-3 mb-5">
                     <div className="p-2 bg-purple-500/20 rounded-lg">
                       <AlertCircle className="text-purple-400" size={24} />
