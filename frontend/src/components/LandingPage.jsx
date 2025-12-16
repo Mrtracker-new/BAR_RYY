@@ -70,7 +70,8 @@ const LandingPage = () => {
             <span className="text-lg sm:text-xl font-bold tracking-tight text-white">BAR Web</span>
           </div>
           <div className="flex items-center space-x-4">
-            <a href="https://github.com/Mrtracker-new" target="_blank" rel="noreferrer" className="hidden sm:inline-block text-sm text-zinc-400 hover:text-white transition-colors">GitHub</a>
+            <a href="https://rolan-rnr.netlify.app" target="_blank" rel="noreferrer" className="text-sm text-zinc-400 hover:text-white transition-colors">Portfolio</a>
+            <a href="https://github.com/Mrtracker-new/BAR_RYY" target="_blank" rel="noreferrer" className="text-sm text-zinc-400 hover:text-white transition-colors">GitHub</a>
           </div>
         </div>
       </nav>
@@ -142,7 +143,7 @@ const LandingPage = () => {
         </div>
 
       </main>
-    </div>
+    </div >
   );
 };
 
