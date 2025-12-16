@@ -71,12 +71,6 @@ const LandingPage = () => {
           </div>
           <div className="flex items-center space-x-4">
             <a href="https://github.com/Mrtracker-new" target="_blank" rel="noreferrer" className="hidden sm:inline-block text-sm text-zinc-400 hover:text-white transition-colors">GitHub</a>
-            <button
-              onClick={() => navigate('/app')}
-              className="px-5 py-2 bg-white text-black text-sm font-semibold rounded-lg hover:bg-zinc-200 transition-colors"
-            >
-              Launch App
-            </button>
           </div>
         </div>
       </nav>
@@ -113,12 +107,6 @@ const LandingPage = () => {
               >
                 <span>Start Sealing</span>
                 <ChevronRight className="w-5 h-5" />
-              </button>
-              <button
-                onClick={() => window.open('https://github.com/Mrtracker-new', '_blank')}
-                className="w-full sm:w-auto px-8 py-3.5 bg-transparent border border-zinc-700 hover:bg-zinc-800 text-white font-medium text-lg rounded-xl transition-all"
-              >
-                Documentation
               </button>
             </div>
           </motion.div>
