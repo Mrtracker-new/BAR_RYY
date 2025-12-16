@@ -10,24 +10,20 @@ const ContentProtection = ({ children, enabled = true, watermarkText = '' }) => 
 
     // Blur content when window loses focus
     const handleVisibilityChange = () => {
-      console.log('Visibility changed:', document.hidden);
       setIsBlurred(document.hidden);
     };
 
     const handleBlur = () => {
-      console.log('Window blur event triggered');
       setIsBlurred(true);
     };
 
     const handleFocus = () => {
-      console.log('Window focus event triggered');
       setIsBlurred(false);
       if (blurTimeout) clearTimeout(blurTimeout);
     };
 
     // Additional blur detection using Page Visibility API
     const handlePageHide = () => {
-      console.log('Page hide event');
       setIsBlurred(true);
     };
 
@@ -91,17 +87,21 @@ const ContentProtection = ({ children, enabled = true, watermarkText = '' }) => 
             right: 0,
             bottom: 0,
             backdropFilter: 'blur(20px)',
-            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            backgroundColor: 'rgba(0, 0, 0, 0.9)',
             zIndex: 9999,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             color: 'white',
-            fontSize: '24px',
-            fontWeight: 'bold'
+            fontSize: '18px',
+            fontWeight: '600',
+            fontFamily: 'system-ui'
           }}
         >
-          🔒 Content Hidden
+          <div className="text-center p-4">
+            <div className="mb-2 text-2xl">🔒</div>
+            Protected Content
+          </div>
         </div>
       )}
 
@@ -130,12 +130,12 @@ const ContentProtection = ({ children, enabled = true, watermarkText = '' }) => 
                 top: `${(i * 150) % 800}px`,
                 left: `${(i * 300) % 1200}px`,
                 transform: 'rotate(-45deg)',
-                color: 'rgba(255, 215, 0, 0.15)',
-                fontSize: '20px',
-                fontWeight: 'bold',
+                color: 'rgba(255, 255, 255, 0.05)',
+                fontSize: '14px',
+                fontWeight: '500',
                 whiteSpace: 'nowrap',
                 userSelect: 'none',
-                textShadow: '0 0 10px rgba(255, 215, 0, 0.3)'
+                fontFamily: 'monospace'
               }}
             >
               {watermarkText}
