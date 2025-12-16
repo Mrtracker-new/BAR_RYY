@@ -15,21 +15,21 @@ const Toast = ({ message, type = 'success', onClose, duration = 3000 }) => {
     info: <Info className="text-blue-500" size={20} />,
   };
 
-  const bgColors = {
-    success: 'bg-green-500/20 border-green-500',
-    error: 'bg-red-500/20 border-red-500',
-    info: 'bg-blue-500/20 border-blue-500',
+  const styles = {
+    success: 'bg-green-500/10 border-green-500/20 text-green-200',
+    error: 'bg-red-500/10 border-red-500/20 text-red-200',
+    info: 'bg-blue-500/10 border-blue-500/20 text-blue-200',
   };
 
   return (
     <div
-      className={`fixed top-4 right-4 z-50 flex items-center space-x-3 p-4 rounded-lg border ${bgColors[type]} backdrop-blur-sm animate-slide-in shadow-lg max-w-md`}
+      className={`fixed top-4 right-4 z-50 flex items-center space-x-3 p-4 rounded-xl border backdrop-blur-md animate-slide-in shadow-xl max-w-md ${styles[type]}`}
     >
       {icons[type]}
-      <p className="text-white text-sm flex-1">{message}</p>
+      <p className="text-sm font-medium flex-1">{message}</p>
       <button
         onClick={onClose}
-        className="text-gray-400 hover:text-white transition-colors"
+        className="text-current opacity-50 hover:opacity-100 transition-opacity"
       >
         <X size={18} />
       </button>
