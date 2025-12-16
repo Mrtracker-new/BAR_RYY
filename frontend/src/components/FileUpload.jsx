@@ -83,18 +83,15 @@ const FileUpload = ({ onFileSelect, uploadedFile, onRemove, filePreview }) => {
     <div className="w-full">
       {!uploadedFile ? (
         <div
-          className={`border-2 border-dashed rounded-2xl p-8 sm:p-16 text-center cursor-pointer transition-all duration-500 relative overflow-hidden group ${isDragging
-            ? 'border-gold-500 bg-gold-500/10 shadow-[0_0_50px_-10px_rgba(245,158,11,0.2)]'
-            : 'border-white/10 hover:border-gold-500/50 bg-white/5 hover:bg-white/10'
+          className={`border-2 border-dashed rounded-xl p-8 sm:p-12 text-center cursor-pointer transition-all duration-300 relative overflow-hidden group ${isDragging
+            ? 'border-amber-500 bg-amber-500/5'
+            : 'border-zinc-800 hover:border-zinc-700 bg-zinc-900/30 hover:bg-zinc-900/50'
             }`}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           onClick={handleClick}
         >
-          {/* Scanning Effect */}
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-gold-500/5 to-transparent translate-y-[-100%] group-hover:translate-y-[100%] transition-transform duration-[2s] ease-in-out"></div>
-
           <input
             ref={fileInputRef}
             type="file"
@@ -102,49 +99,38 @@ const FileUpload = ({ onFileSelect, uploadedFile, onRemove, filePreview }) => {
             onChange={handleFileInput}
           />
 
-          <div className={`inline-flex p-4 sm:p-5 rounded-2xl mb-4 sm:mb-6 transition-all duration-300 ${isDragging ? 'bg-gold-500/20 scale-110' : 'bg-dark-800 border border-white/5 shadow-2xl'
+          <div className={`inline-flex p-4 rounded-xl mb-4 transition-all duration-300 ${isDragging ? 'bg-amber-500/20 text-amber-500' : 'bg-zinc-800 text-zinc-400 group-hover:bg-zinc-700'
             }`}>
-            <Upload className={`${isDragging ? 'text-gold-400' : 'text-gray-400 group-hover:text-gold-500'}`} size={32} />
+            <Upload size={32} />
           </div>
 
-          <h3 className="text-lg sm:text-2xl mb-2 sm:mb-3 text-white font-bold tracking-tight">
-            {isDragging ? 'Drop to Encrypt' : 'Upload File'}
+          <h3 className="text-lg mb-2 text-white font-semibold">
+            {isDragging ? 'Drop to Encrypt' : 'Click to Upload'}
           </h3>
 
-          <p className="text-xs sm:text-sm text-gray-400 mb-4 sm:mb-6 max-w-sm mx-auto leading-relaxed">
-            Drag & drop your file here or click to browse.
-            <br className="hidden sm:block" />
-            <span className="text-gray-500 text-[10px] sm:text-xs">Max size: 100MB • AES-256 Encrypted</span>
+          <p className="text-sm text-zinc-500 mb-6 max-w-sm mx-auto">
+            Drag & drop your file here or browse.
           </p>
 
-          <div className="inline-flex gap-2 sm:gap-3 justify-center flex-wrap">
+          <div className="inline-flex gap-2 justify-center flex-wrap">
             {['Images', 'PDF', 'Docs', 'Archives'].map((type) => (
-              <span key={type} className="px-2 sm:px-3 py-1 rounded-full bg-white/5 border border-white/5 text-[10px] text-gray-500 uppercase tracking-wider font-semibold">
+              <span key={type} className="px-2.5 py-1 rounded-md bg-zinc-800 border border-zinc-700 text-[10px] text-zinc-400 uppercase tracking-wider font-medium">
                 {type}
               </span>
             ))}
           </div>
         </div>
       ) : (
-        <div className="bg-dark-800/80 backdrop-blur-md border border-gold-500/20 rounded-2xl p-6 shadow-2xl relative overflow-hidden group">
-          {/* Glow Effect */}
-          <div className="absolute -top-20 -right-20 w-64 h-64 bg-gold-500/10 rounded-full blur-[80px] pointer-events-none"></div>
+        <div className="bg-zinc-900/80 border border-white/10 rounded-xl p-6 relative overflow-hidden">
 
           <div className="flex items-center justify-between gap-4 relative z-10">
-            <div className="flex items-center space-x-5 min-w-0 flex-1">
-              <div className="p-4 bg-gradient-to-br from-dark-700 to-dark-800 rounded-xl border border-white/10 shadow-lg shrink-0">
-                <File className="text-gold-500" size={32} />
+            <div className="flex items-center space-x-4 min-w-0 flex-1">
+              <div className="p-3 bg-zinc-800 rounded-lg border border-white/5 shrink-0">
+                <File className="text-amber-500" size={24} />
               </div>
-              <div className="min-w-0 flex-1 space-y-1">
-                <div className="flex items-center space-x-2">
-                  <span className="flex h-2 w-2 relative">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                  </span>
-                  <span className="text-xs text-green-400 font-mono tracking-wider uppercase">Ready to Seal</span>
-                </div>
-                <h4 className="text-lg font-bold text-white truncate">{uploadedFile.name}</h4>
-                <p className="text-xs text-gray-500 font-mono">{formatFileSize(uploadedFile.size)}</p>
+              <div className="min-w-0 flex-1 space-y-0.5">
+                <h4 className="font-medium text-white truncate">{uploadedFile.name}</h4>
+                <p className="text-xs text-zinc-500 font-mono">{formatFileSize(uploadedFile.size)}</p>
               </div>
             </div>
 
@@ -153,7 +139,7 @@ const FileUpload = ({ onFileSelect, uploadedFile, onRemove, filePreview }) => {
                 onRemove();
                 setPreviewUrl(null);
               }}
-              className="p-3 hover:bg-red-500/10 text-gray-500 hover:text-red-400 rounded-xl transition-all duration-300 border border-transparent hover:border-red-500/20"
+              className="p-2 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 rounded-lg transition-colors"
               title="Remove file"
             >
               <X size={20} />
@@ -162,17 +148,15 @@ const FileUpload = ({ onFileSelect, uploadedFile, onRemove, filePreview }) => {
 
           {/* Minimal Preview Section */}
           {(filePreview || previewUrl) && (
-            <div className="mt-6 border-t border-white/5 pt-6 animate-fade-in-up">
-              <div className="rounded-xl overflow-hidden border border-white/5 bg-dark-900/50">
-                {/* (Preview rendering logic remains same, just wrapper styled) */}
+            <div className="mt-4 border-t border-white/5 pt-4">
+              <div className="rounded-lg overflow-hidden border border-white/5 bg-black/20">
                 {filePreview ? (
                   <img src={filePreview} alt="Preview" className="w-full max-h-64 object-contain" />
                 ) : previewUrl?.type === 'image' ? (
                   <img src={previewUrl.url} alt="Preview" className="w-full max-h-64 object-contain" />
                 ) : (
-                  // Simple Fallback for non-images in this view
-                  <div className="p-8 text-center">
-                    <p className="text-gray-500 italic">Preview available for this file type</p>
+                  <div className="p-6 text-center">
+                    <p className="text-zinc-500 text-sm">Preview available for this file type</p>
                   </div>
                 )}
               </div>
