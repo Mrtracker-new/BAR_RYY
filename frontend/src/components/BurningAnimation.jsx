@@ -1,85 +1,37 @@
 import React, { useEffect } from 'react';
-import { File } from 'lucide-react';
+import { FileX, Trash2 } from 'lucide-react';
 
 const BurningAnimation = ({ onComplete }) => {
   useEffect(() => {
-    console.log('🔥 BurningAnimation mounted!');
-    // Auto-complete after animation finishes (5 seconds)
     const timer = setTimeout(() => {
-      console.log('🔥 BurningAnimation complete!');
       if (onComplete) onComplete();
-    }, 5000);
+    }, 3000); // Reduced to 3s for snappier experience
 
-    return () => {
-      console.log('🔥 BurningAnimation unmounted!');
-      clearTimeout(timer);
-    };
+    return () => clearTimeout(timer);
   }, [onComplete]);
 
   return (
-    <div className="fixed inset-0 bg-gradient-to-b from-black via-gray-900 to-black flex items-center justify-center z-[9999]">
-      {/* Background glow effect */}
-      <div className="absolute inset-0 bg-gradient-radial from-orange-900/20 via-transparent to-transparent animate-pulse"></div>
-      
-      <div className="relative flex flex-col items-center w-full max-w-2xl px-8">
-        {/* File icon with shake and burn animation */}
-        <div className="relative z-20 mb-16 animate-shake-burn">
-          <File size={96} className="text-gray-200 drop-shadow-2xl" strokeWidth={1.5} />
+    <div className="fixed inset-0 bg-zinc-950 flex items-center justify-center z-[9999]">
+      <div className="flex flex-col items-center animate-fade-in text-center p-8">
+
+        {/* Icon Animation */}
+        <div className="relative mb-8">
+          <div className="absolute inset-0 bg-red-500/20 blur-3xl rounded-full animate-pulse-slow"></div>
+          <FileX className="text-red-500 animate-bounce relative z-10" size={80} strokeWidth={1.5} />
         </div>
-        
-        {/* Fire effect - multiple flames with better positioning */}
-        <div className="flames absolute bottom-32 left-1/2 -translate-x-1/2 w-96 h-64 z-10">
-          {[...Array(15)].map((_, i) => (
-            <div
-              key={i}
-              className="flame absolute bottom-0"
-              style={{
-                left: `${(i * 100) / 14}%`,
-                animationDelay: `${i * 0.15}s`,
-                width: `${40 + Math.random() * 20}px`,
-                height: `${80 + Math.random() * 40}px`,
-                transform: `translateX(-50%)`
-              }}
-            />
-          ))}
-        </div>
-        
-        {/* Multiple smoke layers for depth */}
-        <div className="smoke absolute top-0 left-1/2 -translate-x-1/2 w-80 h-80 opacity-70" />
-        <div className="smoke absolute top-10 left-1/3 -translate-x-1/2 w-64 h-64 opacity-50" style={{ animationDelay: '0.5s' }} />
-        <div className="smoke absolute top-5 left-2/3 -translate-x-1/2 w-72 h-72 opacity-60" style={{ animationDelay: '0.3s' }} />
-        
-        {/* Message with better styling */}
-        <h2 className="text-5xl font-black text-red-500 mt-48 animate-fade-in text-shadow-fire z-30 tracking-tight">
-          🔥 File Destroyed Forever
+
+        {/* Text */}
+        <h2 className="text-3xl font-bold text-white mb-2 tracking-tight">
+          File Destroyed
         </h2>
-        <p className="text-xl text-gray-400 mt-4 animate-fade-in-delayed z-30 opacity-0">
-          This file can never be recovered
+        <p className="text-zinc-400 max-w-xs mx-auto">
+          This file has been permanently deleted and can no longer be accessed.
         </p>
-        
-        {/* Enhanced embers with more variety */}
-        <div className="embers absolute inset-0 pointer-events-none">
-          {[...Array(30)].map((_, i) => {
-            const size = 3 + Math.random() * 5;
-            return (
-              <div
-                key={i}
-                className="ember absolute rounded-full"
-                style={{
-                  left: `${20 + Math.random() * 60}%`,
-                  top: `${40 + Math.random() * 30}%`,
-                  width: `${size}px`,
-                  height: `${size}px`,
-                  animationDelay: `${Math.random() * 3}s`,
-                  animationDuration: `${3 + Math.random() * 3}s`
-                }}
-              />
-            );
-          })}
+
+        {/* Minimal loading bar */}
+        <div className="w-48 h-1 bg-zinc-800 rounded-full mt-8 overflow-hidden">
+          <div className="h-full bg-red-500 animate-progress-bar w-full origin-left"></div>
         </div>
-        
-        {/* Heat distortion effect */}
-        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 w-full h-64 bg-gradient-to-t from-orange-600/10 to-transparent blur-2xl animate-pulse z-0"></div>
       </div>
     </div>
   );
