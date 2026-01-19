@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Terminal,
 } from "lucide-react";
+import WakeUpButton from "./WakeUpButton";
 
 const LandingPage = () => {
   const navigate = useNavigate();
@@ -101,14 +102,21 @@ const LandingPage = () => {
               Encrypted, anonymous, and designed to disappear.
             </p>
 
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-8">
-              <button
-                onClick={() => navigate('/app')}
-                className="w-full sm:w-auto px-8 py-3.5 bg-amber-500 hover:bg-amber-400 text-black font-semibold text-lg rounded-xl transition-all flex items-center justify-center space-x-2"
-              >
-                <span>Start Sealing</span>
-                <ChevronRight className="w-5 h-5" />
-              </button>
+            <div className="flex flex-col items-center justify-center gap-4 pt-8">
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <button
+                  onClick={() => navigate('/app')}
+                  className="w-full sm:w-auto px-8 py-3.5 bg-amber-500 hover:bg-amber-400 text-black font-semibold text-lg rounded-xl transition-all flex items-center justify-center space-x-2"
+                >
+                  <span>Start Sealing</span>
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+                <WakeUpButton />
+              </div>
+
+              <p className="text-xs text-zinc-500 max-w-md text-center mt-2">
+                💤 Server sleeps after inactivity (free tier). Click "Wake Server" if it's been idle for a while (~50s wake time).
+              </p>
             </div>
           </motion.div>
         </section>

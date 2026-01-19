@@ -56,7 +56,10 @@ Think of it as your own private self-destructing vault:
 > 
 > The backend runs on Render's free tier (thanks, budget constraints 💸). It sleeps when not in use and takes ~50 seconds to wake up, stretch, and brew its virtual coffee. After that? Lightning fast! ⚡
 > 
+> **💡 Pro Tip**: Use the **"Wake Server"** button on the homepage to manually wake up the backend before uploading files. It's the power icon button with a glassy look!
+> 
 > *Think of it as a really lazy security guard who naps between shifts.*
+
 
 ## 🔐 Security That Actually Matters
 
