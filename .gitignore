@@ -6,6 +6,7 @@ __pycache__/
 .Python
 env/
 venv/
+.venv/
 ENV/
 build/
 develop-eggs/
@@ -43,11 +44,13 @@ frontend/dist/
 frontend/build/
 
 # Environment variables
+# ⚠️ Critical: Never commit any .env files with actual secrets
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+.env.production  # Explicitly block production env file
 
 # IDE
 .vscode/
