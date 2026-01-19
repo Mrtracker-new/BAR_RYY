@@ -6,7 +6,7 @@ echo.
 
 echo [1/2] Starting Backend Server...
 echo.
-start cmd /k "cd backend && python app.py"
+start cmd /k "cd backend && .venv\Scripts\activate && python run.py"
 timeout /t 3 /nobreak > nul
 
 echo [2/2] Starting Frontend Server...
