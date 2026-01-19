@@ -152,11 +152,10 @@ class SealRequest(BaseModel):
     def validate_password(cls, v):
         # Optional password, skip validation if empty or None
         if v and len(v) > 0:
-            # Basic check: min 4 chars (lowered from 8 for UX)
-            if len(v) < 4:
-                raise ValueError('Password must be at least 4 characters')
-            if len(v) > 128:
-                raise ValueError('Password too long (max 128 characters)')
+            # Use security module's password strength validation (8 chars + complexity)
+            is_valid, error = security.validate_password_strength(v)
+            if not is_valid:
+                raise ValueError(error)
         return v
 
     @validator('webhook_url')

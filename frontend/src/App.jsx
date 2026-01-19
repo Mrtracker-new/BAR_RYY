@@ -26,6 +26,7 @@ import DecryptPage from "./components/DecryptPage";
 import SEO from "./components/SEO";
 import SEOContent from "./components/SEOContent";
 import LandingPage from "./components/LandingPage";
+import ErrorModal from "./components/ErrorModal";
 
 // Wrapper component for share page route
 const SharePageWrapper = () => {
@@ -75,9 +76,25 @@ function MainApp() {
       setFileInfo(response.data);
       setFilePreview(response.data.preview || null);
     } catch (err) {
-      setError(
-        "Failed to upload file: " + (err.response?.data?.detail || err.message)
-      );
+      let errorMessage = "Failed to upload file";
+
+      if (err.response?.data?.detail) {
+        const detail = err.response.data.detail;
+
+        // Pydantic validation errors return an array of error objects
+        if (Array.isArray(detail)) {
+          errorMessage = detail
+            .map(error => error.msg)
+            .join("; ");
+        } else {
+          // Simple string error
+          errorMessage = detail;
+        }
+      } else if (err.message) {
+        errorMessage += ": " + err.message;
+      }
+
+      setError(errorMessage);
     }
   };
 
@@ -121,10 +138,25 @@ function MainApp() {
       setUploadedFile(null);
       setFileInfo(null);
     } catch (err) {
-      setError(
-        "Failed to seal container: " +
-        (err.response?.data?.detail || err.message)
-      );
+      let errorMessage = "Failed to seal container";
+
+      if (err.response?.data?.detail) {
+        const detail = err.response.data.detail;
+
+        // Pydantic validation errors return an array of error objects
+        if (Array.isArray(detail)) {
+          errorMessage = detail
+            .map(error => error.msg)
+            .join("; ");
+        } else {
+          // Simple string error
+          errorMessage = detail;
+        }
+      } else if (err.message) {
+        errorMessage += ": " + err.message;
+      }
+
+      setError(errorMessage);
     } finally {
       setIsSealing(false);
     }
@@ -212,12 +244,8 @@ function MainApp() {
           <DecryptPage onBack={() => setShowDecrypt(false)} />
         ) : (
           <div className="relative">
-            {error && (
-              <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center space-x-3">
-                <AlertCircle className="text-red-500" size={20} />
-                <p className="text-red-400 text-sm">{error}</p>
-              </div>
-            )}
+            {/* Error Modal - Glassmorphic Popup */}
+            <ErrorModal error={error} onClose={() => setError(null)} />
 
             {!barResult ? (
               <div className="grid lg:grid-cols-5 gap-6 sm:gap-8 max-w-7xl mx-auto">
