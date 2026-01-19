@@ -1228,5 +1228,9 @@ async def get_analytics(token: str):
 
 
 if __name__ == "__main__":
+    # Validate environment variables if running app.py directly
+    import env_validator
+    env_validator.validate_and_exit_on_error()
+    
     import uvicorn
     uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)

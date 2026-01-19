@@ -4,8 +4,12 @@ Works on Railway, Render, Fly.io, local, etc.
 """
 import os
 import uvicorn
+import env_validator
 
 if __name__ == "__main__":
+    # Validate environment variables before starting
+    env_validator.validate_and_exit_on_error()
+    
     # Get port from environment or default to 8000
     port = int(os.getenv("PORT", 8000))
     
