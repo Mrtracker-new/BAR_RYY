@@ -3,6 +3,7 @@ uvicorn==0.34.0
 python-multipart==0.0.20
 cryptography==44.0.0
 pydantic==2.10.6
+pydantic-settings==2.7.1
 PyJWT==2.10.1
 aiofiles==24.1.0
 aiosqlite==0.20.0
