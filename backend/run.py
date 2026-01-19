@@ -21,5 +21,5 @@ if __name__ == "__main__":
         "app:app",
         host="0.0.0.0",
         port=port,
-        log_level="info"
+        log_level="warning"  # Suppress INFO logs (health checks) but keep warnings/errors
     )
