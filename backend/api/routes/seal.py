@@ -53,7 +53,9 @@ async def seal_container(
             view_only=request.view_only,
             storage_mode=request.storage_mode,
             require_otp=request.require_otp,
-            otp_email=request.otp_email
+            otp_email=request.otp_email,
+            view_refresh_minutes=request.view_refresh_minutes,
+            auto_refresh_seconds=request.auto_refresh_seconds
         )
         
         # Clean up uploaded file (secure deletion)

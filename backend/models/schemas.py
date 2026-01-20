@@ -16,6 +16,8 @@ class SealRequest(BaseModel):
     storage_mode: str = 'client'  # 'client' or 'server'
     require_otp: bool = False  # Enable 2FA
     otp_email: Optional[str] = None  # Email for OTP delivery
+    view_refresh_minutes: int = 0  # Time threshold for view refresh control (0 = disabled)
+    auto_refresh_seconds: int = 0  # Auto-refresh interval in seconds (0 = disabled)
 
     @validator('filename')
     def validate_filename(cls, v):
@@ -63,6 +65,18 @@ class SealRequest(BaseModel):
             email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
             if not re.match(email_pattern, v):
                 raise ValueError('Invalid email address')
+        return v
+    
+    @validator('view_refresh_minutes')
+    def validate_view_refresh_minutes(cls, v):
+        if v < 0 or v > 1440:  # Max 24 hours
+            raise ValueError('View refresh minutes must be between 0 and 1440 (24 hours)')
+        return v
+    
+    @validator('auto_refresh_seconds')
+    def validate_auto_refresh_seconds(cls, v):
+        if v < 0 or v > 300:  # Max 5 minutes
+            raise ValueError('Auto refresh seconds must be between 0 and 300 (5 minutes)')
         return v
 
 

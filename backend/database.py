@@ -90,6 +90,8 @@ class Database:
                     country TEXT,
                     city TEXT,
                     device_type TEXT,
+                    session_fingerprint TEXT,
+                    is_counted_as_view INTEGER DEFAULT 1,
                     FOREIGN KEY (token) REFERENCES bar_files(token) ON DELETE CASCADE
                 )
             """)
@@ -158,6 +160,8 @@ class Database:
                         country TEXT,
                         city TEXT,
                         device_type TEXT,
+                        session_fingerprint TEXT,
+                        is_counted_as_view BOOLEAN DEFAULT TRUE,
                         FOREIGN KEY (token) REFERENCES bar_files(token) ON DELETE CASCADE
                     )
                 """)
@@ -269,58 +273,138 @@ class Database:
             print(f"❌ Failed to get file record: {e}")
             return None
     
-    async def increment_view_count(self, token: str) -> tuple[bool, int, bool]:
+    async def get_recent_access(
+        self,
+        token: str,
+        session_fingerprint: str,
+        minutes: int
+    ) -> Optional[Dict]:
         """
-        Increment view count for a file
-        Returns: (success, views_remaining, should_destroy)
+        Check if this session fingerprint accessed the file within X minutes.
+        Used for view refresh control to prevent rapid view consumption.
+        
+        Returns:
+            Dict with access info if found within threshold, None otherwise
         """
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
+        
         try:
             if self.is_postgres:
+                cutoff_naive = cutoff.replace(tzinfo=None)
                 async with self.pool.acquire() as conn:
                     row = await conn.fetchrow("""
-                        UPDATE bar_files 
-                        SET current_views = current_views + 1,
-                            last_accessed_at = NOW()
-                        WHERE token = $1 AND destroyed = FALSE
-                        RETURNING current_views, max_views
-                    """, token)
-                    
-                    if not row:
-                        return False, 0, False
-                    
-                    current_views = row['current_views']
-                    max_views = row['max_views']
+                        SELECT * FROM access_logs
+                        WHERE token = $1 
+                        AND session_fingerprint = $2
+                        AND accessed_at > $3
+                        AND is_counted_as_view = TRUE
+                        ORDER BY accessed_at DESC
+                        LIMIT 1
+                    """, token, session_fingerprint, cutoff_naive)
+                    return dict(row) if row else None
             else:
                 async with aiosqlite.connect(self.db_path) as db:
-                    await db.execute("""
-                        UPDATE bar_files 
-                        SET current_views = current_views + 1,
-                            last_accessed_at = ?
-                        WHERE token = ? AND destroyed = 0
-                    """, (datetime.now(timezone.utc).isoformat(), token))
-                    await db.commit()
-                    
-                    async with db.execute(
-                        "SELECT current_views, max_views FROM bar_files WHERE token = ?",
-                        (token,)
-                    ) as cursor:
+                    db.row_factory = aiosqlite.Row
+                    async with db.execute("""
+                        SELECT * FROM access_logs
+                        WHERE token = ? 
+                        AND session_fingerprint = ?
+                        AND accessed_at > ?
+                        AND is_counted_as_view = 1
+                        ORDER BY accessed_at DESC
+                        LIMIT 1
+                    """, (token, session_fingerprint, cutoff.isoformat())) as cursor:
                         row = await cursor.fetchone()
+                        return dict(row) if row else None
+        except Exception as e:
+            print(f"❌ Failed to get recent access: {e}")
+            return None
+    
+    async def increment_view_count(
+        self,
+        token: str,
+        session_fingerprint: str = None,
+        view_refresh_minutes: int = 0
+    ) -> tuple[bool, int, bool, bool]:
+        """
+        Increment view count for a file with view refresh control support.
+        
+        Args:
+            token: File access token
+            session_fingerprint: Optional session fingerprint for refresh control
+            view_refresh_minutes: Time threshold in minutes (0 = always increment)
+            
+        Returns:
+            Tuple of (success, views_remaining, should_destroy, is_new_view)
+        """
+        try:
+            is_new_view = True
+            
+            # Check if within refresh threshold
+            if view_refresh_minutes > 0 and session_fingerprint:
+                recent = await self.get_recent_access(
+                    token,
+                    session_fingerprint,
+                    view_refresh_minutes
+                )
+                is_new_view = (recent is None)
+            
+            if is_new_view:
+                # Increment view count
+                if self.is_postgres:
+                    async with self.pool.acquire() as conn:
+                        row = await conn.fetchrow("""
+                            UPDATE bar_files 
+                            SET current_views = current_views + 1,
+                                last_accessed_at = NOW()
+                            WHERE token = $1 AND destroyed = FALSE
+                            RETURNING current_views, max_views
+                        """, token)
+                        
                         if not row:
-                            return False, 0, False
-                        current_views, max_views = row
+                            return False, 0, False, False
+                        
+                        current_views = row['current_views']
+                        max_views = row['max_views']
+                else:
+                    async with aiosqlite.connect(self.db_path) as db:
+                        await db.execute("""
+                            UPDATE bar_files 
+                            SET current_views = current_views + 1,
+                                last_accessed_at = ?
+                            WHERE token = ? AND destroyed = 0
+                        """, (datetime.now(timezone.utc).isoformat(), token))
+                        await db.commit()
+                        
+                        async with db.execute(
+                            "SELECT current_views, max_views FROM bar_files WHERE token = ?",
+                            (token,)
+                        ) as cursor:
+                            row = await cursor.fetchone()
+                            if not row:
+                                return False, 0, False, False
+                            current_views, max_views = row
+            else:
+                # Don't increment, just get current counts
+                file_record = await self.get_file_record(token)
+                if not file_record:
+                    return False, 0, False, False
+                current_views = file_record['current_views']
+                max_views = file_record['max_views']
             
             views_remaining = max(0, max_views - current_views)
             should_destroy = current_views >= max_views
             
             # Mark as destroyed if limit reached
-            if should_destroy:
+            if should_destroy and is_new_view:
                 await self.mark_as_destroyed(token)
             
-            return True, views_remaining, should_destroy
+            return True, views_remaining, should_destroy, is_new_view
             
         except Exception as e:
             print(f"❌ Failed to increment view count: {e}")
-            return False, 0, False
+            return False, 0, False, False
+
     
     async def mark_as_destroyed(self, token: str) -> bool:
         """Mark a file as destroyed"""
@@ -438,9 +522,11 @@ class Database:
         user_agent: str,
         country: Optional[str] = None,
         city: Optional[str] = None,
-        device_type: Optional[str] = None
+        device_type: Optional[str] = None,
+        session_fingerprint: Optional[str] = None,
+        is_counted_as_view: bool = True
     ) -> bool:
-        """Log a file access for analytics"""
+        """Log a file access for analytics with session tracking."""
         try:
             accessed_at = datetime.now(timezone.utc)
             
@@ -449,16 +535,20 @@ class Database:
                 async with self.pool.acquire() as conn:
                     await conn.execute("""
                         INSERT INTO access_logs 
-                        (token, accessed_at, ip_address, user_agent, country, city, device_type)
-                        VALUES ($1, $2, $3, $4, $5, $6, $7)
-                    """, token, accessed_at_naive, ip_address, user_agent, country, city, device_type)
+                        (token, accessed_at, ip_address, user_agent, country, city, 
+                         device_type, session_fingerprint, is_counted_as_view)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    """, token, accessed_at_naive, ip_address, user_agent, country, 
+                        city, device_type, session_fingerprint, is_counted_as_view)
             else:
                 async with aiosqlite.connect(self.db_path) as db:
                     await db.execute("""
                         INSERT INTO access_logs 
-                        (token, accessed_at, ip_address, user_agent, country, city, device_type)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """, (token, accessed_at.isoformat(), ip_address, user_agent, country, city, device_type))
+                        (token, accessed_at, ip_address, user_agent, country, city, 
+                         device_type, session_fingerprint, is_counted_as_view)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (token, accessed_at.isoformat(), ip_address, user_agent, country, 
+                          city, device_type, session_fingerprint, is_counted_as_view))
                     await db.commit()
             
             return True

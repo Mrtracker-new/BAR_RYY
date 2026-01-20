@@ -48,7 +48,9 @@ app.add_middleware(
         "X-BAR-Filename",
         "X-BAR-Storage-Mode",
         "X-BAR-Destroyed",
-        "X-BAR-Metadata"
+        "X-BAR-Metadata",
+        "X-BAR-Is-New-View",
+        "X-BAR-Auto-Refresh-Seconds"
     ],
 )
 

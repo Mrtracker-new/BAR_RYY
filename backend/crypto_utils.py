@@ -55,6 +55,31 @@ def calculate_file_hash(file_data: bytes) -> str:
     return hashlib.sha256(file_data).hexdigest()
 
 
+def generate_session_fingerprint(token: str, ip_address: str, user_agent: str) -> str:
+    """
+    Generate privacy-respecting session fingerprint for view tracking.
+    
+    Args:
+        token: File access token (prevents cross-file tracking)
+        ip_address: Client IP address
+        user_agent: Client User-Agent string
+        
+    Returns:
+        16-character hex fingerprint (first 16 chars of SHA256 hash)
+        
+    Security:
+        - Includes token to prevent tracking across different files
+        - Hashed immediately for privacy
+        - Short enough to be efficient, long enough to prevent collisions
+        
+    Note:
+        This is used for view refresh control to identify the same user
+        accessing the same file within a time threshold.
+    """
+    data = f"{token}|{ip_address}|{user_agent}"
+    return hashlib.sha256(data.encode()).hexdigest()[:16]
+
+
 def generate_hmac_signature(data: bytes, key: bytes) -> str:
     """
     Generate HMAC-SHA256 signature for data integrity verification.

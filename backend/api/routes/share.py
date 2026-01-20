@@ -302,33 +302,48 @@ async def share_file(
         
         print("✅ Access validation passed")
         
-        # Log access for analytics
+        # Generate session fingerprint for view refresh control
         ip_address = analytics.get_client_ip(req)
         user_agent = req.headers.get("User-Agent", "Unknown")
-        device_type = analytics.get_device_type(user_agent)
         
-        # Get geolocation
+        from crypto_utils import generate_session_fingerprint
+        session_fingerprint = generate_session_fingerprint(token, ip_address, user_agent)
+        
+        # Get view refresh setting from metadata
+        view_refresh_minutes = metadata.get("view_refresh_minutes", 0)
+        
+        # Get device and geolocation for analytics
+        device_type = analytics.get_device_type(user_agent)
         geo_data = await analytics.get_geolocation(ip_address)
         country = geo_data.get("country") if geo_data else None
         city = geo_data.get("city") if geo_data else None
         
-        # Log the access
+        # Update view count in database (with fingerprint check)
+        success, views_remaining, should_destroy, is_new_view = await db.increment_view_count(
+            token,
+            session_fingerprint=session_fingerprint,
+            view_refresh_minutes=view_refresh_minutes
+        )
+        
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to update view count")
+        
+        # Log the access (always log, even if not counted as new view)
         await db.log_access(
             token=token,
             ip_address=ip_address,
             user_agent=user_agent,
             country=country,
             city=city,
-            device_type=device_type
+            device_type=device_type,
+            session_fingerprint=session_fingerprint,
+            is_counted_as_view=is_new_view
         )
         
-        # Update view count in database
-        success, views_remaining, should_destroy = await db.increment_view_count(token)
-        
-        if not success:
-            raise HTTPException(status_code=500, detail="Failed to update view count")
-        
-        print(f"✓ View count updated - {views_remaining} views remaining")
+        if is_new_view:
+            print(f"✓ New view counted - {views_remaining} views remaining")
+        else:
+            print(f"⏱️ Within refresh threshold - view not counted ({views_remaining} remaining)")
         
         # Clear OTP verification
         if file_record.get('require_otp'):
@@ -385,7 +400,9 @@ async def share_file(
                 "X-BAR-Should-Destroy": str(should_destroy).lower(),
                 "X-BAR-View-Only": str(view_only).lower(),
                 "X-BAR-Filename": filename,
-                "X-BAR-Storage-Mode": "server"
+                "X-BAR-Storage-Mode": "server",
+                "X-BAR-Is-New-View": str(is_new_view).lower(),
+                "X-BAR-Auto-Refresh-Seconds": str(metadata.get("auto_refresh_seconds", 0))
             }
         )
         

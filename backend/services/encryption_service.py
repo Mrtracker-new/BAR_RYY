@@ -31,7 +31,9 @@ class EncryptionService:
         view_only: bool,
         storage_mode: str,
         require_otp: bool = False,
-        otp_email: Optional[str] = None
+        otp_email: Optional[str] = None,
+        view_refresh_minutes: int = 0,
+        auto_refresh_seconds: int = 0
     ) -> Dict[str, Any]:
         """
         Create an encrypted BAR file.
@@ -67,7 +69,9 @@ class EncryptionService:
                 expiry_minutes=expiry_minutes,
                 password_protected=bool(password),
                 webhook_url=webhook_url,
-                view_only=view_only
+                view_only=view_only,
+                view_refresh_minutes=view_refresh_minutes,
+                auto_refresh_seconds=auto_refresh_seconds
             )
         else:
             metadata = client_storage.create_client_metadata(

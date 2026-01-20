@@ -25,7 +25,9 @@ def create_server_metadata(
     expiry_minutes: int,
     password_protected: bool,
     webhook_url: Optional[str] = None,
-    view_only: bool = False
+    view_only: bool = False,
+    view_refresh_minutes: int = 0,
+    auto_refresh_seconds: int = 0
 ) -> dict:
     """Create metadata for a server-side file (we keep track of EVERYTHING here!)"""
     now = datetime.now(timezone.utc)
@@ -44,6 +46,8 @@ def create_server_metadata(
         "password_protected": password_protected,
         "webhook_url": webhook_url,
         "view_only": view_only,
+        "view_refresh_minutes": view_refresh_minutes,
+        "auto_refresh_seconds": auto_refresh_seconds,
         "storage_mode": "server",
         "file_hash": "",
         "version": "1.0",
