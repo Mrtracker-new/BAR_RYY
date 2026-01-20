@@ -128,6 +128,122 @@ const RulesPanel = ({ rules, onRulesChange }) => {
         </div>
       </div>
 
+      {/* Refresh Control - Only for Server-Side */}
+      {rules.storageMode === 'server' && (
+        <div className="space-y-4 mt-6">
+          <label className="text-xs font-medium text-amber-500 uppercase tracking-wider ml-1">
+            Refresh Control
+          </label>
+
+          {/* Radio button selection */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className={`relative p-4 rounded-xl border transition-all cursor-pointer ${(rules.viewRefreshMinutes || 0) > 0 || !(rules.autoRefreshSeconds || 0)
+                ? 'bg-amber-500/10 border-amber-500/30'
+                : 'bg-white/5 border-white/5 hover:bg-white/10'
+              }`}>
+              <input
+                type="radio"
+                name="refreshControl"
+                checked={(rules.viewRefreshMinutes || 0) > 0 || !(rules.autoRefreshSeconds || 0)}
+                onChange={() => onRulesChange({
+                  ...rules,
+                  viewRefreshMinutes: (rules.viewRefreshMinutes || 5),
+                  autoRefreshSeconds: 0
+                })}
+                className="absolute opacity-0"
+              />
+              <div className="flex items-center space-x-3 mb-1">
+                <Clock size={18} className={
+                  (rules.viewRefreshMinutes || 0) > 0 || !(rules.autoRefreshSeconds || 0)
+                    ? 'text-amber-500'
+                    : 'text-zinc-500'
+                } />
+                <span className={`font-medium text-sm ${(rules.viewRefreshMinutes || 0) > 0 || !(rules.autoRefreshSeconds || 0)
+                    ? 'text-white'
+                    : 'text-zinc-400'
+                  }`}>View Refresh Threshold</span>
+              </div>
+              <p className="text-xs text-zinc-500">Prevents rapid refreshes from consuming views</p>
+            </label>
+
+            <label className={`relative p-4 rounded-xl border transition-all cursor-pointer ${(rules.autoRefreshSeconds || 0) > 0
+                ? 'bg-amber-500/10 border-amber-500/30'
+                : 'bg-white/5 border-white/5 hover:bg-white/10'
+              }`}>
+              <input
+                type="radio"
+                name="refreshControl"
+                checked={(rules.autoRefreshSeconds || 0) > 0}
+                onChange={() => onRulesChange({
+                  ...rules,
+                  viewRefreshMinutes: 0,
+                  autoRefreshSeconds: (rules.autoRefreshSeconds || 30)
+                })}
+                className="absolute opacity-0"
+              />
+              <div className="flex items-center space-x-3 mb-1">
+                <Clock size={18} className={
+                  (rules.autoRefreshSeconds || 0) > 0
+                    ? 'text-amber-500'
+                    : 'text-zinc-500'
+                } />
+                <span className={`font-medium text-sm ${(rules.autoRefreshSeconds || 0) > 0
+                    ? 'text-white'
+                    : 'text-zinc-400'
+                  }`}>Auto-Refresh Interval</span>
+              </div>
+              <p className="text-xs text-zinc-500">Forces automatic page reload</p>
+            </label>
+          </div>
+
+          {/* Show settings for selected option */}
+          {(rules.viewRefreshMinutes || 0) > 0 || !(rules.autoRefreshSeconds || 0) ? (
+            <div className="space-y-2">
+              <select
+                value={rules.viewRefreshMinutes || 0}
+                onChange={(e) => onRulesChange({
+                  ...rules,
+                  viewRefreshMinutes: parseInt(e.target.value),
+                  autoRefreshSeconds: 0
+                })}
+                className="w-full bg-zinc-900 border border-white/10 rounded-lg px-3 py-2 text-zinc-300 text-sm focus:border-amber-500/50 focus:outline-none transition-all cursor-pointer"
+              >
+                <option value="0">Every access counts (default)</option>
+                <option value="1">1 minute</option>
+                <option value="5">5 minutes (recommended)</option>
+                <option value="10">10 minutes</option>
+                <option value="30">30 minutes</option>
+                <option value="60">1 hour</option>
+              </select>
+              <p className="text-xs text-zinc-500 ml-1">
+                Same user within this window = counts as one view
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <select
+                value={rules.autoRefreshSeconds || 0}
+                onChange={(e) => onRulesChange({
+                  ...rules,
+                  viewRefreshMinutes: 0,
+                  autoRefreshSeconds: parseInt(e.target.value)
+                })}
+                className="w-full bg-zinc-900 border border-white/10 rounded-lg px-3 py-2 text-zinc-300 text-sm focus:border-amber-500/50 focus:outline-none transition-all cursor-pointer"
+              >
+                <option value="10">10 seconds (very strict)</option>
+                <option value="30">30 seconds (recommended)</option>
+                <option value="60">1 minute</option>
+                <option value="120">2 minutes</option>
+                <option value="300">5 minutes</option>
+              </select>
+              <p className="text-xs text-zinc-500 ml-1">
+                Page reloads automatically to ensure file disappears when expired
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="border-t border-white/5 my-6"></div>
 
       {/* Advanced Options */}
