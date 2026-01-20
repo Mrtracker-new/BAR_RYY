@@ -50,6 +50,8 @@ function MainApp() {
     viewOnly: false,
     requireOtp: false, // 2FA
     otpEmail: "", // Recipient's email for OTP
+    viewRefreshMinutes: 0, // View refresh threshold
+    autoRefreshSeconds: 0 // Auto-refresh interval
   });
   const [barResult, setBarResult] = useState(null);
   const [isSealing, setIsSealing] = useState(false);
@@ -129,6 +131,8 @@ function MainApp() {
         storage_mode: rules.storageMode || "client",
         require_otp: rules.requireOtp || false,
         otp_email: (rules.otpEmail && rules.otpEmail.trim()) || null,
+        view_refresh_minutes: rules.viewRefreshMinutes || 0,
+        auto_refresh_seconds: rules.autoRefreshSeconds || 0
       };
 
       const response = await axios.post("/seal", sealData);
@@ -200,6 +204,8 @@ function MainApp() {
       viewOnly: false,
       requireOtp: false,
       otpEmail: "",
+      viewRefreshMinutes: 0,
+      autoRefreshSeconds: 0
     });
   };
 

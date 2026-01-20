@@ -80,7 +80,6 @@ const SharePage = ({ token }) => {
       );
 
       // Get metadata from headers (axios lowercases header names)
-      console.log('Response headers:', response.headers);
       const retrievedFileName = response.headers['x-bar-filename'];
       const retrievedViewsRemaining = response.headers['x-bar-views-remaining'] || '0';
       const shouldDestroy = response.headers['x-bar-should-destroy'] === 'true';
@@ -118,6 +117,14 @@ const SharePage = ({ token }) => {
         } else {
           setSuccessMessage(`✅ File downloaded! ${retrievedViewsRemaining} view(s) remaining.`);
         }
+      }
+
+      // Setup auto-refresh if configured
+      const autoRefreshSeconds = parseInt(response.headers['x-bar-auto-refresh-seconds'] || '0');
+      if (autoRefreshSeconds > 0) {
+        setTimeout(() => {
+          window.location.reload();
+        }, autoRefreshSeconds * 1000);
       }
 
     } catch (err) {
@@ -280,8 +287,8 @@ const SharePage = ({ token }) => {
                           onClick={handleVerifyOtp}
                           disabled={isLoading || otpCode.length !== 6}
                           className={`w-full py-3 rounded-lg font-bold transition-all ${otpCode.length === 6 && !isLoading
-                              ? 'bg-amber-500 hover:bg-amber-600 text-black shadow-lg shadow-amber-500/20'
-                              : 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
+                            ? 'bg-amber-500 hover:bg-amber-600 text-black shadow-lg shadow-amber-500/20'
+                            : 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
                             }`}
                         >
                           {isLoading ? 'Verifying...' : 'Verify & Unlock'}
@@ -304,8 +311,8 @@ const SharePage = ({ token }) => {
                     onClick={handleDownload}
                     disabled={isLoading}
                     className={`w-full py-4 rounded-xl font-bold text-base transition-all duration-300 ${isLoading
-                        ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-white/5'
-                        : 'bg-amber-500 hover:bg-amber-600 text-black shadow-lg shadow-amber-500/20 active:scale-[0.98]'
+                      ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-white/5'
+                      : 'bg-amber-500 hover:bg-amber-600 text-black shadow-lg shadow-amber-500/20 active:scale-[0.98]'
                       }`}
                   >
                     {isLoading ? (
