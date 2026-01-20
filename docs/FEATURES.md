@@ -299,6 +299,58 @@ Remaining Views: 2
 
 ---
 
+## 🔄 Smart Refresh Control
+
+**What:** Choose how page refreshes affect your view count
+
+**Two Options (Pick One!):**
+
+### View Refresh Threshold
+**What:** Prevents rapid refreshes from eating up views  
+**How:** Same user can refresh within X minutes = still counts as 1 view
+
+**Options:**
+- 0 minutes (every refresh counts - default)
+- 1 minute (chill mode)
+- 5 minutes (recommended)
+- 10 minutes
+- 30 minutes
+- 1 hour (very forgiving)
+
+**Use Cases:**
+- Recipient might need to scroll or review
+- Protecting against accidental refreshes
+- Mobile users with spotty connections
+
+**Example:** Set 5 minutes → User refreshes 3 times in 4 minutes → Still counts as 1 view 🎯
+
+---
+
+### Auto-Refresh Interval
+**What:** Forces the page to reload automatically  
+**How:** Page reloads every X seconds (bye-bye file!)
+
+**Options:**
+- 10 seconds (ruthless)
+- 30 seconds (recommended)
+- 1 minute
+- 2 minutes
+- 5 minutes (generous)
+
+**Use Cases:**
+- Extra paranoid mode
+- Ensure file disappears when expired
+- Prevent screenshots/screen recording (kinda)
+- Time-limited access codes
+
+**Example:** Set 30 seconds → User has 30 seconds to view → Page reloads → File might be gone 💨
+
+---
+
+**Pro Tip:** You can't enable both at once (that'd be confusing). Pick based on your paranoia level! 🔐
+
+---
+
 ## 📊 Tech Stack
 
 **Backend:**

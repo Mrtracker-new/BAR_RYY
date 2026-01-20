@@ -35,6 +35,7 @@ Perfect for:
 - 🔑 **Zero-Knowledge** - We literally can't read your files
 - ⏱️ **Auto-Destruct** - Set timers or view limits
 - 💾 **Two Modes** - Client-side (.bar file) or Server-side (link)
+- 🔄 **Smart Refresh Control** - Stop refreshes from eating views OR force auto-reload
 - 🔔 **Webhooks** - Get notified on Discord/Slack
 - 📧 **2FA Support** - Email OTP for extra security
 - 🛡️ **Brute-Force Protection** - 5 fails = 60 min lockout
