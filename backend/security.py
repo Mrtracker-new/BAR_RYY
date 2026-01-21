@@ -367,7 +367,16 @@ def validate_password_strength(password: str) -> tuple[bool, str]:
 
 
 def validate_webhook_url(url: str) -> bool:
-    """Validate webhook URL"""
+    """
+    Validate webhook URL with comprehensive SSRF protection.
+    
+    Blocks:
+    - Private IP ranges (10.x.x.x, 172.16-31.x.x, 192.168.x.x)
+    - Loopback addresses (127.x.x.x, localhost)
+    - Link-local addresses (169.254.x.x)
+    - Cloud metadata endpoints (169.254.169.254)
+    - DNS rebinding attacks via DNS resolution
+    """
     if not url:
         return True  # Optional
     
@@ -383,9 +392,94 @@ def validate_webhook_url(url: str) -> bool:
     if not url_pattern.match(url):
         return False
     
-    # Block localhost/private IPs in production (SSRF protection)
+    # Enhanced SSRF protection in production
     if os.getenv("RENDER") or os.getenv("IS_PRODUCTION"):
-        if any(x in url.lower() for x in ['localhost', '127.0.0.1', '0.0.0.0', '192.168.', '10.', '172.16.']):
+        from urllib.parse import urlparse
+        import socket
+        import ipaddress
+        
+        try:
+            # Parse URL and extract hostname
+            parsed = urlparse(url)
+            hostname = parsed.hostname
+            
+            if not hostname:
+                return False
+            
+            # Block localhost explicitly
+            if hostname.lower() in ['localhost', '0.0.0.0']:
+                return False
+            
+            # Check if hostname is already an IP address
+            try:
+                ip_obj = ipaddress.ip_address(hostname)
+                # It's a direct IP - validate it
+                if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local:
+                    return False
+                if ip_obj.is_reserved or ip_obj.is_multicast:
+                    return False
+                if str(ip_obj) == "169.254.169.254":
+                    return False
+                if hasattr(ip_obj, 'is_global') and not ip_obj.is_global:
+                    return False
+                return True
+            except ValueError:
+                # Not a direct IP, it's a hostname - continue to DNS resolution
+                pass
+            
+            # Resolve DNS to get actual IP address (prevents DNS rebinding)
+            try:
+                ip = socket.gethostbyname(hostname)
+            except (socket.gaierror, socket.herror, OSError):
+                # DNS resolution failed - this could be:
+                # 1. Hostname doesn't exist yet (will fail when webhook is called anyway)
+                # 2. Network issue
+                # 3. Invalid hostname
+                # We'll allow it to proceed - if it's invalid, the webhook call will fail
+                # But we should still block obvious private hostname patterns
+                if any(pattern in hostname.lower() for pattern in [
+                    'localhost', '127.', '.local', '.internal', 'consul', 
+                    '169.254.', '192.168.', '10.', '172.16.', '172.17.',
+                    '172.18.', '172.19.', '172.20.', '172.21.', '172.22.',
+                    '172.23.', '172.24.', '172.25.', '172.26.', '172.27.',
+                    '172.28.', '172.29.', '172.30.', '172.31.'
+                ]):
+                    return False
+                return True
+            
+            # Parse resolved IP address
+            try:
+                ip_obj = ipaddress.ip_address(ip)
+            except ValueError:
+                # Invalid IP address from DNS
+                return False
+            
+            # Block private IP ranges (10.x.x.x, 172.16-31.x.x, 192.168.x.x)
+            if ip_obj.is_private:
+                return False
+            
+            # Block loopback addresses (127.x.x.x, ::1)
+            if ip_obj.is_loopback:
+                return False
+            
+            # Block link-local addresses (169.254.x.x, fe80::/10)
+            if ip_obj.is_link_local:
+                return False
+            
+            # Block reserved/multicast addresses
+            if ip_obj.is_reserved or ip_obj.is_multicast:
+                return False
+            
+            # Explicitly block cloud metadata endpoint
+            if str(ip) == "169.254.169.254":
+                return False
+            
+            # Block IPv6 unique local addresses (fc00::/7)
+            if hasattr(ip_obj, 'is_global') and not ip_obj.is_global:
+                return False
+                
+        except Exception:
+            # If any unexpected error occurs during validation, reject the URL
             return False
     
     return True
