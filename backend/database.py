@@ -96,9 +96,23 @@ class Database:
                 )
             """)
             
+            # Basic index on token
             await db.execute("""
                 CREATE INDEX IF NOT EXISTS idx_access_token 
                 ON access_logs(token)
+            """)
+            
+            # Composite index for view refresh queries (get_recent_access)
+            await db.execute("""
+                CREATE INDEX IF NOT EXISTS idx_access_recent 
+                ON access_logs(token, session_fingerprint, accessed_at DESC)
+            """)
+            
+            # Partial index for analytics on counted views
+            await db.execute("""
+                CREATE INDEX IF NOT EXISTS idx_access_analytics 
+                ON access_logs(token, accessed_at DESC)
+                WHERE is_counted_as_view = 1
             """)
             
             await db.commit()
@@ -166,9 +180,23 @@ class Database:
                     )
                 """)
                 
+                # Basic index on token
                 await conn.execute("""
                     CREATE INDEX IF NOT EXISTS idx_access_token 
                     ON access_logs(token)
+                """)
+                
+                # Composite index for view refresh queries (get_recent_access)
+                await conn.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_access_recent 
+                    ON access_logs(token, session_fingerprint, accessed_at DESC)
+                """)
+                
+                # Partial index for analytics on counted views
+                await conn.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_access_analytics 
+                    ON access_logs(token, accessed_at DESC)
+                    WHERE is_counted_as_view = TRUE
                 """)
                 
             print("✅ PostgreSQL database initialized")
