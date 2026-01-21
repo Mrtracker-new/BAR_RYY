@@ -391,19 +391,27 @@ async def share_file(
             mime_type = "application/octet-stream"
             content_disposition = f"attachment; filename={filename}"
         
+        # Build security headers
+        response_headers = {
+            "Content-Disposition": content_disposition,
+            "X-Content-Type-Options": "nosniff",  # Prevent MIME-sniffing
+            "X-BAR-Views-Remaining": str(views_remaining),
+            "X-BAR-Should-Destroy": str(should_destroy).lower(),
+            "X-BAR-View-Only": str(view_only).lower(),
+            "X-BAR-Filename": filename,
+            "X-BAR-Storage-Mode": "server",
+            "X-BAR-Is-New-View": str(is_new_view).lower(),
+            "X-BAR-Auto-Refresh-Seconds": str(metadata.get("auto_refresh_seconds", 0))
+        }
+        
+        # Add CSP sandbox for inline content to prevent XSS attacks
+        if view_only:
+            response_headers["Content-Security-Policy"] = "sandbox; default-src 'none';"
+        
         return Response(
             content=decrypted_data,
             media_type=mime_type,
-            headers={
-                "Content-Disposition": content_disposition,
-                "X-BAR-Views-Remaining": str(views_remaining),
-                "X-BAR-Should-Destroy": str(should_destroy).lower(),
-                "X-BAR-View-Only": str(view_only).lower(),
-                "X-BAR-Filename": filename,
-                "X-BAR-Storage-Mode": "server",
-                "X-BAR-Is-New-View": str(is_new_view).lower(),
-                "X-BAR-Auto-Refresh-Seconds": str(metadata.get("auto_refresh_seconds", 0))
-            }
+            headers=response_headers
         )
         
     except HTTPException:
