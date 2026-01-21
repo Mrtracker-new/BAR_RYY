@@ -6,8 +6,8 @@ from core import security
 from core.config import settings
 from services.file_service import FileService
 from api.dependencies import get_file_service_dep
-import client_storage
-import server_storage
+from storage import client_storage
+from storage import server_storage
 
 router = APIRouter()
 

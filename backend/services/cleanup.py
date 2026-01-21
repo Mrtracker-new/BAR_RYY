@@ -9,8 +9,8 @@ import time
 from datetime import datetime, timedelta
 import asyncio
 import json
-import crypto_utils
-import database
+from utils import crypto_utils
+from core import database
 
 # Directories
 UPLOAD_DIR = "uploads"

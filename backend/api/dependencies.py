@@ -4,7 +4,7 @@ from core.config import settings, Settings
 from services.file_service import get_file_service, FileService
 from services.encryption_service import get_encryption_service, EncryptionService
 from services import otp_service
-import database
+from core import database
 
 
 def get_settings() -> Settings:

@@ -7,10 +7,10 @@ from typing import Optional, Tuple, Dict, Any
 from datetime import datetime
 from fastapi import HTTPException
 
-import crypto_utils
-import client_storage
-import server_storage
-import database
+from utils import crypto_utils
+from storage import client_storage
+from storage import server_storage
+from core import database
 from core.config import settings
 
 

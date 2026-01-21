@@ -10,8 +10,8 @@ from core import security
 from services.file_service import FileService
 from services.encryption_service import EncryptionService
 from api.dependencies import get_file_service_dep, get_encryption_service_dep
-import crypto_utils
-import qr_generator
+from utils import crypto_utils
+from services import qr_generator
 
 router = APIRouter()
 

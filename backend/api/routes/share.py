@@ -13,10 +13,10 @@ from models.schemas import DecryptRequest
 from core import security
 from services.encryption_service import EncryptionService
 from api.dependencies import get_encryption_service_dep, get_otp_service_dep, get_database
-import crypto_utils
-import database
-import analytics
-import webhook_service
+from utils import crypto_utils
+from core import database
+from services import analytics
+from services import webhook_service
 
 router = APIRouter()
 
@@ -306,7 +306,7 @@ async def share_file(
         ip_address = analytics.get_client_ip(req)
         user_agent = req.headers.get("User-Agent", "Unknown")
         
-        from crypto_utils import generate_session_fingerprint
+        from utils.crypto_utils import generate_session_fingerprint
         session_fingerprint = generate_session_fingerprint(token, ip_address, user_agent)
         
         # Get view refresh setting from metadata

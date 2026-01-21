@@ -17,8 +17,8 @@ from core.config import settings
 from core import security
 
 # Import utilities
-import database
-import cleanup
+from core import database
+from services import cleanup
 
 # Import API routes
 from api.routes import upload, seal, decrypt, share
@@ -129,7 +129,7 @@ async def health_check():
 # Main entry point
 if __name__ == "__main__":
     # Validate environment variables if running app.py directly
-    import env_validator
+    from core import env_validator
     env_validator.validate_and_exit_on_error()
     
     import uvicorn

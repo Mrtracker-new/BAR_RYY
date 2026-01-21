@@ -12,10 +12,10 @@ from core import security
 from services.file_service import FileService
 from services.encryption_service import EncryptionService
 from api.dependencies import get_file_service_dep, get_encryption_service_dep
-import crypto_utils
-import client_storage
-import analytics
-import webhook_service
+from utils import crypto_utils
+from storage import client_storage
+from services import analytics
+from services import webhook_service
 
 router = APIRouter()
 

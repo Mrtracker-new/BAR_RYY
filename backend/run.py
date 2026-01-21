@@ -4,7 +4,7 @@ Works on Railway, Render, Fly.io, local, etc.
 """
 import os
 import uvicorn
-import env_validator
+from core import env_validator
 
 if __name__ == "__main__":
     # Validate environment variables before starting
