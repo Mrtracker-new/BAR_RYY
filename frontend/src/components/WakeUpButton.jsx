@@ -120,45 +120,45 @@ const WakeUpButton = () => {
         switch (status) {
             case "loading":
                 return (
-                    <>
+                    <div className="relative z-10 flex items-center gap-1">
                         <Loader className="w-5 h-5 animate-spin" />
                         <span>Waking...</span>
-                    </>
+                    </div>
                 );
             case "success":
                 return (
-                    <>
+                    <div className="relative z-10 flex items-center gap-1">
                         <CheckCircle className="w-5 h-5" />
                         <span>Ready!</span>
-                    </>
+                    </div>
                 );
             case "error":
                 return (
-                    <>
+                    <div className="relative z-10 flex items-center gap-1">
                         <XCircle className="w-5 h-5" />
                         <span>Failed - Retry</span>
-                    </>
+                    </div>
                 );
             case "cooldown":
                 return (
-                    <>
+                    <div className="relative z-10 flex items-center gap-1">
                         <Clock className="w-5 h-5" />
                         <span>Wait {cooldownTime}s</span>
-                    </>
+                    </div>
                 );
             default:
                 return (
-                    <>
+                    <div className="relative z-10 flex items-center gap-1">
                         <Power className="w-5 h-5" />
                         <span>Wake Server</span>
-                    </>
+                    </div>
                 );
         }
     };
 
     const getButtonStyles = () => {
         const baseStyles =
-            "relative w-full sm:w-auto px-8 py-3.5 rounded-xl font-semibold text-lg transition-all duration-500 flex items-center justify-center space-x-2 overflow-hidden group";
+            "relative w-full sm:w-auto sm:min-w-[180px] px-8 py-3.5 rounded-xl font-semibold text-lg transition-all duration-500 flex items-center justify-center overflow-hidden group";
 
         switch (status) {
             case "loading":
@@ -199,9 +199,7 @@ const WakeUpButton = () => {
             )}
 
             {/* Content */}
-            <div className="relative z-10 flex items-center space-x-2">
-                {getButtonContent()}
-            </div>
+            {getButtonContent()}
         </button>
     );
 };
