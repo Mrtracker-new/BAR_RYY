@@ -74,6 +74,43 @@ def validate_file_extension(filename: str) -> bool:
     return ext in ALLOWED_FILE_EXTENSIONS if ext else False
 
 
+async def validate_file_size_streaming(file, max_size: int = None) -> int:
+    """
+    Validate file size while streaming to prevent memory exhaustion.
+    
+    Args:
+        file: FastAPI UploadFile object
+        max_size: Maximum allowed size in bytes (defaults to MAX_FILE_SIZE)
+        
+    Returns:
+        Total file size in bytes
+        
+    Raises:
+        HTTPException: If file exceeds max_size
+    """
+    from fastapi import UploadFile
+    
+    if max_size is None:
+        max_size = MAX_FILE_SIZE
+    
+    total_size = 0
+    chunk_size = 1024 * 1024  # 1MB chunks
+    
+    # Read file in chunks to check size without loading entire file
+    while chunk := await file.read(chunk_size):
+        total_size += len(chunk)
+        if total_size > max_size:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large (max {max_size // 1024 // 1024}MB)"
+            )
+    
+    # Reset file pointer to beginning for subsequent reads
+    await file.seek(0)
+    
+    return total_size
+
+
 def sanitize_filename(filename: str) -> str:
     """Sanitize filename to prevent security issues"""
     # Remove path components

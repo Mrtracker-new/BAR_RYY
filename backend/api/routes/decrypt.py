@@ -105,10 +105,12 @@ async def decrypt_uploaded_bar_file(
         if not file.filename.lower().endswith('.bar'):
             raise HTTPException(status_code=400, detail="Only .bar files are accepted")
         
-        # Size guard
+        # Streaming size validation (prevents memory exhaustion)
+        file_size = await security.validate_file_size_streaming(file, security.MAX_FILE_SIZE)
+        print(f"✓ File size validated: {file_size / (1024*1024):.2f}MB")
+        
+        # Now safe to read entire file
         bar_data = await file.read()
-        if len(bar_data) > security.MAX_FILE_SIZE * 2:
-            raise HTTPException(status_code=413, detail="File too large")
         
         # Get client IP for brute force tracking
         client_ip = analytics.get_client_ip(req)
