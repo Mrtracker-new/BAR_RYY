@@ -13,7 +13,8 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #0d0d0d; /* Slightly lighter than pure black for less contrast strain */
+  background-color: #0d0d0d;
+  /* Slightly lighter than pure black for less contrast strain */
   color: #e5e5e5;
 }
 
@@ -26,6 +27,7 @@ body {
 
 /* Respect user's motion preferences */
 @media (prefers-reduced-motion: reduce) {
+
   *,
   *::before,
   *::after {
@@ -44,12 +46,83 @@ code {
   .text-shadow-gold {
     text-shadow: 0 0 1px rgba(251, 191, 36, 0.5);
   }
-  
+
   .glass-panel {
     background: rgba(23, 23, 23, 0.6);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  /* Premium Glassmorphism */
+  .glass-card {
+    background: rgba(15, 15, 15, 0.3);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 10px 40px 0 rgba(0, 0, 0, 0.3),
+      0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  }
+
+  .glass-navbar {
+    background: rgba(13, 13, 13, 0.7);
+    backdrop-filter: blur(16px) saturate(150%);
+    -webkit-backdrop-filter: blur(16px) saturate(150%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+  }
+
+  .glass-hero {
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.08) 0%, rgba(168, 85, 247, 0.06) 100%);
+    backdrop-filter: blur(24px) saturate(200%);
+    -webkit-backdrop-filter: blur(24px) saturate(200%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+  }
+
+  /* Gradient Text Effects */
+  .gradient-text-amber {
+    background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #d97706 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .gradient-text-primary {
+    background: linear-gradient(135deg, #fbbf24 0%, #a855f7 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  /* Glow Effects */
+  .glow-text {
+    text-shadow: 0 0 20px rgba(251, 191, 36, 0.3), 0 0 40px rgba(251, 191, 36, 0.2);
+  }
+
+  .glow-border {
+    box-shadow: 0 0 20px rgba(251, 191, 36, 0.2), inset 0 0 20px rgba(251, 191, 36, 0.05);
+  }
+
+  .glow-border-purple {
+    box-shadow: 0 0 20px rgba(168, 85, 247, 0.2), inset 0 0 20px rgba(168, 85, 247, 0.05);
+  }
+
+  /* Subtle Shimmer Animation */
+  @keyframes shimmer {
+    0% {
+      background-position: -200% center;
+    }
+
+    100% {
+      background-position: 200% center;
+    }
+  }
+
+  .shimmer {
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+    background-size: 200% 100%;
+    animation: shimmer 3s infinite;
   }
 
   .text-balance {
