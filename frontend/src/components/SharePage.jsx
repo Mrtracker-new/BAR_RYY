@@ -3,6 +3,7 @@ import axios from '../config/axios';
 import { Lock, Download, AlertCircle, FileCheck, Mail, Shield } from 'lucide-react';
 import ContentProtection from './ContentProtection';
 import BurningAnimation from './BurningAnimation';
+import LoadingStages from './LoadingStages';
 import SEO from './SEO';
 
 const SharePage = ({ token }) => {
@@ -20,6 +21,12 @@ const SharePage = ({ token }) => {
   const [otpInfo, setOtpInfo] = useState(null);
   const [showOtpUI, setShowOtpUI] = useState(false);
   const [showBurning, setShowBurning] = useState(false);
+
+  // Enhanced loading states
+  const [loadingStage, setLoadingStage] = useState(null);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [estimatedTime, setEstimatedTime] = useState(null);
+  const [requestStartTime, setRequestStartTime] = useState(null);
 
   const handleRequestOtp = async () => {
     setIsLoading(true);
@@ -71,13 +78,41 @@ const SharePage = ({ token }) => {
     setError(null);
     setSuccessMessage(null);
 
+    // Stage 1: Connecting (0-25%)
+    setLoadingStage('connecting');
+    setLoadingProgress(0);
+    const startTime = Date.now();
+    setRequestStartTime(startTime);
+
     try {
+      // Stage 2: Authenticating (25-50%)
+      setTimeout(() => {
+        if (loadingStage !== null) {
+          setLoadingStage('authenticating');
+          setLoadingProgress(25);
+        }
+      }, 300);
+
       // Call backend API with POST (axios config will add base URL in production)
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
       const response = await axios.post(`${backendUrl}/share/${token}`,
         { password: password || null },
         { responseType: 'arraybuffer' }
       );
+
+      // Detect cold start
+      const responseTime = (Date.now() - startTime) / 1000;
+      if (responseTime > 3) {
+        setEstimatedTime(15); // Cold start detected, estimate 15 seconds total
+      }
+
+      // Stage 3: Decrypting (50-75%)
+      setLoadingStage('decrypting');
+      setLoadingProgress(50);
+
+      // Stage 4: Rendering (75-100%)
+      setLoadingStage('rendering');
+      setLoadingProgress(75);
 
       // Get metadata from headers (axios lowercases header names)
       const retrievedFileName = response.headers['x-bar-filename'];
@@ -88,6 +123,9 @@ const SharePage = ({ token }) => {
       setFileName(retrievedFileName);
       setViewsRemaining(retrievedViewsRemaining);
       setIsViewOnly(viewOnly);
+
+      // Complete progress
+      setLoadingProgress(100);
 
       // Check if view-only mode
       if (viewOnly) {
@@ -177,6 +215,10 @@ const SharePage = ({ token }) => {
       setError(errorMsg);
     } finally {
       setIsLoading(false);
+      // Reset loading stages
+      setLoadingStage(null);
+      setLoadingProgress(0);
+      setEstimatedTime(null);
     }
   };
 
@@ -307,26 +349,29 @@ const SharePage = ({ token }) => {
 
                 {/* Step 3: Show download button (if no OTP UI showing, or after OTP verified) */}
                 {(!showOtpUI || otpVerified) && !fileData && (
-                  <button
-                    onClick={handleDownload}
-                    disabled={isLoading}
-                    className={`w-full py-4 rounded-xl font-bold text-base transition-all duration-300 ${isLoading
-                      ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-white/5'
-                      : 'bg-amber-500 hover:bg-amber-600 text-black shadow-lg shadow-amber-500/20 active:scale-[0.98]'
-                      }`}
-                  >
-                    {isLoading ? (
-                      <span className="flex items-center justify-center space-x-2">
-                        <Lock className="animate-spin" size={18} />
-                        <span>Processing...</span>
-                      </span>
+                  <>
+                    {isLoading && loadingStage ? (
+                      <LoadingStages
+                        currentStage={loadingStage}
+                        progress={loadingProgress}
+                        estimatedTime={estimatedTime}
+                      />
                     ) : (
-                      <span className="flex items-center justify-center space-x-2">
-                        <Download size={18} />
-                        <span>Access File</span>
-                      </span>
+                      <button
+                        onClick={handleDownload}
+                        disabled={isLoading}
+                        className={`w-full py-4 rounded-xl font-bold text-base transition-all duration-300 ${isLoading
+                          ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-white/5'
+                          : 'bg-amber-500 hover:bg-amber-600 text-black shadow-lg shadow-amber-500/20 active:scale-[0.98]'
+                          }`}
+                      >
+                        <span className="flex items-center justify-center space-x-2">
+                          <Download size={18} />
+                          <span>Access File</span>
+                        </span>
+                      </button>
                     )}
-                  </button>
+                  </>
                 )}
               </div>
 
