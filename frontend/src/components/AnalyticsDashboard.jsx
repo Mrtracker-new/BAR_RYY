@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from '../config/axios';
 import { BarChart3, Globe, Smartphone, Clock, Eye, MapPin, RefreshCw, X } from 'lucide-react';
 
-const AnalyticsDashboard = ({ token, onClose }) => {
+const AnalyticsDashboard = ({ token, analyticsKey, onClose }) => {
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -15,7 +15,9 @@ const AnalyticsDashboard = ({ token, onClose }) => {
     try {
       setLoading(true);
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-      const response = await axios.get(`${backendUrl}/analytics/${token}`);
+      const response = await axios.get(`${backendUrl}/analytics/${token}`, {
+        params: { analytics_key: analyticsKey }
+      });
       setAnalytics(response.data);
       setError(null);
     } catch (err) {
