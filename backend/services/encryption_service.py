@@ -3,6 +3,7 @@ import os
 import uuid
 import base64
 import hashlib
+import secrets
 from typing import Optional, Tuple, Dict, Any
 from datetime import datetime
 from fastapi import HTTPException
@@ -138,8 +139,9 @@ class EncryptionService:
         Returns:
             Dictionary with access token and share URL
         """
-        # Generate access token
+        # Generate access token and analytics key
         access_token = str(uuid.uuid4())
+        analytics_key = secrets.token_urlsafe(32)  # 256-bit secret, shown only once to creator
         token_bar_filename = f"{access_token}.bar"
         token_bar_path = os.path.join(self.generated_dir, token_bar_filename)
         
@@ -154,7 +156,8 @@ class EncryptionService:
             file_path=token_bar_path,
             metadata=bar_result["metadata"],
             require_otp=require_otp,
-            otp_email=otp_email
+            otp_email=otp_email,
+            analytics_key=analytics_key
         )
         
         print(f"✅ Server-side file created: {access_token}")
@@ -164,6 +167,7 @@ class EncryptionService:
         
         return {
             "access_token": access_token,
+            "analytics_key": analytics_key,
             "share_url": share_link,
             "bar_filename": token_bar_filename
         }
