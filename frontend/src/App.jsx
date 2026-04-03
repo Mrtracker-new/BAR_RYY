@@ -518,9 +518,10 @@ function MainApp() {
       )}
 
       {/* Analytics Dashboard */}
-      {showAnalytics && barResult && barResult.analytics_token && (
+      {showAnalytics && barResult && barResult.access_token && barResult.analytics_key && (
         <AnalyticsDashboard
-          token={barResult.analytics_token}
+          token={barResult.access_token}
+          analyticsKey={barResult.analytics_key}
           onClose={() => setShowAnalytics(false)}
         />
       )}
