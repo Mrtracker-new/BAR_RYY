@@ -6,7 +6,7 @@ import asyncio
 import traceback
 import mimetypes
 from datetime import datetime
-from fastapi import APIRouter, Request, Form, Depends, HTTPException
+from fastapi import APIRouter, Request, Form, Depends, HTTPException, Query
 from fastapi.responses import Response
 
 from models.schemas import DecryptRequest
@@ -423,13 +423,18 @@ async def share_file(
 
 
 @router.get("/analytics/{token}")
-async def get_analytics(token: str, db=Depends(get_database)):
-    """Get analytics data for a server-side file."""
+async def get_analytics(
+    token: str,
+    analytics_key: str = Query(..., description="Secret analytics key issued at seal time"),
+    db=Depends(get_database)
+):
+    """Get analytics data for a server-side file. Requires the analytics_key issued at seal time."""
     try:
-        analytics_data = await db.get_analytics(token)
+        analytics_data = await db.get_analytics(token, analytics_key)
         
-        if not analytics_data:
-            raise HTTPException(status_code=404, detail="File not found or no analytics data available")
+        if analytics_data is None:
+            # Return 403 for both missing record and wrong key — don't reveal which
+            raise HTTPException(status_code=403, detail="Unauthorized")
         
         return analytics_data
         
