@@ -64,7 +64,8 @@ class Database:
                     last_accessed_at TEXT,
                     destroyed BOOLEAN DEFAULT 0,
                     require_otp BOOLEAN DEFAULT 0,
-                    otp_email TEXT
+                    otp_email TEXT,
+                    analytics_key TEXT
                 )
             """)
             
@@ -116,6 +117,15 @@ class Database:
             """)
             
             await db.commit()
+            
+            # Migration: add analytics_key column if it doesn't exist (idempotent)
+            try:
+                await db.execute("ALTER TABLE bar_files ADD COLUMN analytics_key TEXT")
+                await db.commit()
+                print("✅ Migrated: added analytics_key column")
+            except Exception:
+                pass  # Column already exists — safe to ignore
+            
             print("✅ SQLite database initialized")
     
     async def _init_postgres(self):
@@ -148,7 +158,8 @@ class Database:
                         last_accessed_at TIMESTAMP,
                         destroyed BOOLEAN DEFAULT FALSE,
                         require_otp BOOLEAN DEFAULT FALSE,
-                        otp_email TEXT
+                        otp_email TEXT,
+                        analytics_key TEXT
                     )
                 """)
                 
@@ -199,6 +210,12 @@ class Database:
                     WHERE is_counted_as_view = TRUE
                 """)
                 
+                # Migration: add analytics_key column if it doesn't exist
+                await conn.execute("""
+                    ALTER TABLE bar_files 
+                    ADD COLUMN IF NOT EXISTS analytics_key TEXT
+                """)
+                
             print("✅ PostgreSQL database initialized")
         except Exception as e:
             print(f"⚠️ PostgreSQL init failed: {e}")
@@ -214,7 +231,8 @@ class Database:
         file_path: str,
         metadata: Dict[str, Any],
         require_otp: bool = False,
-        otp_email: Optional[str] = None
+        otp_email: Optional[str] = None,
+        analytics_key: Optional[str] = None
     ) -> bool:
         """Create a new file record in the database"""
         try:
@@ -254,19 +272,23 @@ class Database:
                     await conn.execute("""
                         INSERT INTO bar_files 
                         (token, filename, bar_filename, file_path, metadata, 
-                         current_views, max_views, expires_at, created_at, require_otp, otp_email)
-                        VALUES ($1, $2, $3, $4, $5, 0, $6, $7, $8, $9, $10)
+                         current_views, max_views, expires_at, created_at, require_otp, otp_email,
+                         analytics_key)
+                        VALUES ($1, $2, $3, $4, $5, 0, $6, $7, $8, $9, $10, $11)
                     """, token, filename, bar_filename, file_path, 
-                       json.dumps(metadata), max_views, expires_at_dt, created_at_dt, require_otp, otp_email)
+                       json.dumps(metadata), max_views, expires_at_dt, created_at_dt, require_otp, otp_email,
+                       analytics_key)
             else:
                 async with aiosqlite.connect(self.db_path) as db:
                     await db.execute("""
                         INSERT INTO bar_files 
                         (token, filename, bar_filename, file_path, metadata, 
-                         current_views, max_views, expires_at, created_at, require_otp, otp_email)
-                        VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+                         current_views, max_views, expires_at, created_at, require_otp, otp_email,
+                         analytics_key)
+                        VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
                     """, (token, filename, bar_filename, file_path, 
-                          json.dumps(metadata), max_views, expires_at, created_at, require_otp, otp_email))
+                          json.dumps(metadata), max_views, expires_at, created_at, require_otp, otp_email,
+                          analytics_key))
                     await db.commit()
             
             return True
@@ -584,7 +606,7 @@ class Database:
             print(f"❌ Failed to log access: {e}")
             return False
     
-    async def get_analytics(self, token: str) -> Optional[Dict[str, Any]]:
+    async def get_analytics(self, token: str, analytics_key: str) -> Optional[Dict[str, Any]]:
         """Get analytics data for a file"""
         try:
             if self.is_postgres:
@@ -595,6 +617,9 @@ class Database:
                         token
                     )
                     if not file_row:
+                        return None
+                    # Validate analytics key
+                    if file_row['analytics_key'] != analytics_key:
                         return None
                     
                     # Get access logs
@@ -616,6 +641,9 @@ class Database:
                     ) as cursor:
                         file_row = await cursor.fetchone()
                         if not file_row:
+                            return None
+                        # Validate analytics key
+                        if dict(file_row).get('analytics_key') != analytics_key:
                             return None
                     
                     # Get access logs
