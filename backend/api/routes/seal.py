@@ -104,7 +104,7 @@ async def seal_container(
                 "share_url": server_result["share_url"],
                 "qr_code": qr_base64,
                 "analytics_url": f"/analytics/{server_result['access_token']}",
-                "analytics_token": server_result["access_token"],
+                "analytics_key": server_result["analytics_key"],
                 "metadata": bar_result["metadata"],
                 "message": "Container sealed and stored on server"
             }
