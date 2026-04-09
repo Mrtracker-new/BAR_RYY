@@ -40,7 +40,17 @@ app.add_middleware(
     allow_origins=settings.allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+    allow_headers=[
+        "Content-Type",
+        "Authorization",
+        "X-Requested-With",
+        # Analytics key header — must be explicitly allowed so the browser's
+        # CORS preflight (OPTIONS) for /analytics/{token} succeeds.
+        # The key is transmitted as a header rather than a query parameter to
+        # prevent it from appearing in server access logs, browser history,
+        # CDN/proxy logs, and Referer headers.
+        "X-Analytics-Key",
+    ],
     expose_headers=[
         "X-BAR-Views-Remaining",
         "X-BAR-Should-Destroy",
