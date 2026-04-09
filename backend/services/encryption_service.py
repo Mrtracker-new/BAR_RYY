@@ -139,16 +139,23 @@ class EncryptionService:
         Returns:
             Dictionary with access token and share URL
         """
-        # Generate access token and analytics key
+        # Generate access token and analytics key.
+        # Security lifecycle:
+        #   1. Generate a 256-bit CSPRNG raw key.
+        #   2. Compute its SHA-256 hash — this is the ONLY value stored in DB.
+        #   3. Return the raw key ONCE in the seal response to the creator.
+        #   4. After this function returns, the raw key exists only in the
+        #      creator's browser; it can never be recovered from the database.
         access_token = str(uuid.uuid4())
-        analytics_key = secrets.token_urlsafe(32)  # 256-bit secret, shown only once to creator
+        analytics_key = secrets.token_urlsafe(32)
+        analytics_key_hash = database._hash_analytics_key(analytics_key)
         token_bar_filename = f"{access_token}.bar"
         token_bar_path = os.path.join(self.generated_dir, token_bar_filename)
-        
+
         # Rename the bar file to use token
         os.rename(bar_result["bar_path"], token_bar_path)
-        
-        # Save file record to database
+
+        # Save file record to database — store the HASH, not the raw key.
         await database.db.create_file_record(
             token=access_token,
             filename=filename,
@@ -157,7 +164,7 @@ class EncryptionService:
             metadata=bar_result["metadata"],
             require_otp=require_otp,
             otp_email=otp_email,
-            analytics_key=analytics_key
+            analytics_key_hash=analytics_key_hash,
         )
         
         print(f"✅ Server-side file created: {access_token}")
