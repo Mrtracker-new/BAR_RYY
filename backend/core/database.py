@@ -65,6 +65,56 @@ def _verify_analytics_key(stored_key: Optional[str], supplied_key: str) -> bool:
         return False
 
 
+# ---------------------------------------------------------------------------
+# Column-level access control for the analytics endpoint
+# ---------------------------------------------------------------------------
+# This is the single source of truth for which bar_files columns are safe to
+# expose through the public-facing analytics API response.
+#
+# Design rationale
+# ----------------
+# Rather than fetching every column with SELECT * and then stripping secrets
+# after the fact, we embed an explicit allowlist directly into the SQL query.
+# This means sensitive values (analytics_key, otp_email) are NEVER loaded into
+# Python memory during an analytics request — not just redacted before the
+# response is serialised.  Defence-in-depth: a post-fetch pop() is kept as a
+# final safety net, but it should never fire under normal operation.
+#
+# When adding new columns to bar_files:
+#   • If the column is safe for analytics consumers → add it here.
+#   • If the column is a secret or PII           → do NOT add it here.
+_PUBLIC_FILE_COLUMNS: tuple[str, ...] = (
+    "token",
+    "filename",
+    "bar_filename",
+    "file_path",
+    "metadata",
+    "current_views",
+    "max_views",
+    "expires_at",
+    "created_at",
+    "last_accessed_at",
+    "destroyed",
+    "require_otp",
+    # analytics_key  ← secret: intentionally excluded
+    # otp_email      ← PII:    intentionally excluded
+)
+
+# Pre-build the SQL fragment once at import time — joining inside a hot path
+# on every request would be wasteful, and having it as a constant makes it
+# easy to grep/audit.
+_PUBLIC_FILE_COLUMNS_SQL: str = ", ".join(
+    f"bf.{col}" for col in _PUBLIC_FILE_COLUMNS
+)
+
+# Columns that must NEVER appear in any outbound response, used as the
+# last-resort post-fetch strip in get_analytics().
+_FORBIDDEN_RESPONSE_FIELDS: frozenset[str] = frozenset({
+    "analytics_key",
+    "otp_email",
+})
+
+
 class Database:
     """Unified database interface for SQLite and PostgreSQL"""
     
@@ -640,78 +690,151 @@ class Database:
             return False
     
     async def get_analytics(self, token: str, analytics_key: str) -> Optional[Dict[str, Any]]:
-        """Get analytics data for a file"""
+        """
+        Return analytics data for the given file token after validating the
+        caller-supplied analytics_key.
+
+        Security architecture
+        ---------------------
+        Access-control is enforced in two independent layers:
+
+        Layer 1 — Query-time column allowlist
+            The SQL SELECT fetches only the columns listed in
+            ``_PUBLIC_FILE_COLUMNS``.  ``analytics_key`` and ``otp_email`` are
+            never retrieved from the database, so they cannot appear in memory
+            at any point during this call.
+
+            Key validation is performed via a *separate*, minimal SELECT that
+            fetches only the ``analytics_key`` column.  This keeps the secret
+            strictly inside the validation path and out of the data path.
+
+        Layer 2 — Post-fetch field strip (defence-in-depth)
+            After the query returns, any column in ``_FORBIDDEN_RESPONSE_FIELDS``
+            is unconditionally removed from the dict before it is returned.
+            This guard catches future regressions (e.g. someone widens
+            ``_PUBLIC_FILE_COLUMNS`` without realising the implication).
+        """
         try:
             if self.is_postgres:
                 async with self.pool.acquire() as conn:
-                    # Get file info
+                    # ── Layer 1a: validate key with a minimal, targeted query ──
+                    # Fetch only the secret column — never the full row — so
+                    # that a bug in the validation branch cannot accidentally
+                    # expose other data.
+                    key_row = await conn.fetchrow(
+                        "SELECT analytics_key FROM bar_files WHERE token = $1",
+                        token,
+                    )
+                    if not key_row:
+                        return None
+                    if not _verify_analytics_key(key_row["analytics_key"], analytics_key):
+                        return None
+
+                    # ── Layer 1b: fetch only allowlisted public columns ──
                     file_row = await conn.fetchrow(
-                        "SELECT * FROM bar_files WHERE token = $1",
-                        token
+                        f"SELECT {_PUBLIC_FILE_COLUMNS_SQL}"
+                        f" FROM bar_files bf WHERE bf.token = $1",
+                        token,
                     )
                     if not file_row:
                         return None
-                    # Validate analytics key (constant-time to prevent timing attacks)
-                    if not _verify_analytics_key(file_row['analytics_key'], analytics_key):
-                        return None
-                    
+
                     # Get access logs
-                    log_rows = await conn.fetch("""
-                        SELECT * FROM access_logs 
-                        WHERE token = $1 
+                    log_rows = await conn.fetch(
+                        """
+                        SELECT id, token, accessed_at, ip_address, user_agent,
+                               country, city, device_type, session_fingerprint,
+                               is_counted_as_view
+                        FROM access_logs
+                        WHERE token = $1
                         ORDER BY accessed_at DESC
-                    """, token)
-                    
+                        """,
+                        token,
+                    )
                     logs = [dict(row) for row in log_rows]
+
             else:
                 async with aiosqlite.connect(self.db_path) as db:
                     db.row_factory = aiosqlite.Row
-                    
-                    # Get file info
+
+                    # ── Layer 1a: validate key with a minimal, targeted query ──
                     async with db.execute(
-                        "SELECT * FROM bar_files WHERE token = ?",
-                        (token,)
+                        "SELECT analytics_key FROM bar_files WHERE token = ?",
+                        (token,),
+                    ) as cursor:
+                        key_row = await cursor.fetchone()
+                    if not key_row:
+                        return None
+                    if not _verify_analytics_key(dict(key_row).get("analytics_key"), analytics_key):
+                        return None
+
+                    # ── Layer 1b: build the public-column query for SQLite ──
+                    # SQLite doesn't support table-qualified column names in
+                    # simple SELECT, so strip the "bf." prefix.
+                    sqlite_cols = ", ".join(_PUBLIC_FILE_COLUMNS)
+                    async with db.execute(
+                        f"SELECT {sqlite_cols} FROM bar_files WHERE token = ?",
+                        (token,),
                     ) as cursor:
                         file_row = await cursor.fetchone()
-                        if not file_row:
-                            return None
-                        # Validate analytics key (constant-time to prevent timing attacks)
-                        if not _verify_analytics_key(dict(file_row).get('analytics_key'), analytics_key):
-                            return None
-                    
+                    if not file_row:
+                        return None
+
                     # Get access logs
-                    async with db.execute("""
-                        SELECT * FROM access_logs 
-                        WHERE token = ? 
+                    async with db.execute(
+                        """
+                        SELECT id, token, accessed_at, ip_address, user_agent,
+                               country, city, device_type, session_fingerprint,
+                               is_counted_as_view
+                        FROM access_logs
+                        WHERE token = ?
                         ORDER BY accessed_at DESC
-                    """, (token,)) as cursor:
+                        """,
+                        (token,),
+                    ) as cursor:
                         log_rows = await cursor.fetchall()
-                        logs = [dict(row) for row in log_rows]
-            
+                    logs = [dict(row) for row in log_rows]
+
             file_info = dict(file_row)
 
-            # Strip secrets / PII that must never leave the server layer.
-            # analytics_key — returning it would let any caller harvest the credential.
-            # otp_email    — PII with no place in an analytics response.
-            for _sensitive_field in ("analytics_key", "otp_email"):
-                file_info.pop(_sensitive_field, None)
+            # ── Layer 2: defence-in-depth field strip ──
+            # _PUBLIC_FILE_COLUMNS already excludes these, so under normal
+            # operation this is a no-op.  It acts as a regression guard in
+            # case the allowlist is widened without careful review.
+            leaked = _FORBIDDEN_RESPONSE_FIELDS.intersection(file_info)
+            if leaked:
+                import logging as _logging
+                _logging.getLogger(__name__).error(
+                    "SECURITY: forbidden field(s) %s reached get_analytics() "
+                    "response dict — stripped before return.  Audit "
+                    "_PUBLIC_FILE_COLUMNS immediately.",
+                    leaked,
+                )
+                for field in leaked:
+                    file_info.pop(field, None)
 
-            # Parse metadata if it's a string
-            if isinstance(file_info.get('metadata'), str):
-                file_info['metadata'] = json.loads(file_info['metadata'])
-            
+            # Parse metadata if it's a JSON string (SQLite stores it as text)
+            if isinstance(file_info.get("metadata"), str):
+                file_info["metadata"] = json.loads(file_info["metadata"])
+
             return {
                 "file": file_info,
                 "access_logs": logs,
                 "total_accesses": len(logs),
-                "unique_ips": len(set(log.get('ip_address') for log in logs if log.get('ip_address'))),
-                "countries": list(set(log.get('country') for log in logs if log.get('country'))),
+                "unique_ips": len(
+                    set(log.get("ip_address") for log in logs if log.get("ip_address"))
+                ),
+                "countries": list(
+                    set(log.get("country") for log in logs if log.get("country"))
+                ),
                 "device_types": {
-                    device: sum(1 for log in logs if log.get('device_type') == device)
-                    for device in set(log.get('device_type') for log in logs if log.get('device_type'))
-                }
+                    device: sum(1 for log in logs if log.get("device_type") == device)
+                    for device in set(
+                        log.get("device_type") for log in logs if log.get("device_type")
+                    )
+                },
             }
-            
+
         except Exception as e:
             print(f"❌ Failed to get analytics: {e}")
             return None
