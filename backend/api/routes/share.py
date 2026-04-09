@@ -6,7 +6,7 @@ import asyncio
 import traceback
 import mimetypes
 from datetime import datetime
-from fastapi import APIRouter, Request, Form, Depends, HTTPException, Query
+from fastapi import APIRouter, Request, Form, Depends, HTTPException, Header
 from fastapi.responses import Response
 
 from models.schemas import DecryptRequest
@@ -425,10 +425,39 @@ async def share_file(
 @router.get("/analytics/{token}")
 async def get_analytics(
     token: str,
-    analytics_key: str = Query(..., description="Secret analytics key issued at seal time"),
-    db=Depends(get_database)
+    db=Depends(get_database),
+    analytics_key: str = Header(
+        ...,
+        alias="X-Analytics-Key",
+        description=(
+            "Secret analytics key issued at seal time. "
+            "Must be transmitted as a request header — never as a query parameter — "
+            "so it is not captured in server access logs, browser history, "
+            "CDN/proxy logs, or Referer headers."
+        ),
+    ),
 ):
-    """Get analytics data for a server-side file. Requires the analytics_key issued at seal time."""
+    """
+    Get analytics data for a server-side file.
+
+    Authentication
+    --------------
+    The caller must supply the ``X-Analytics-Key`` header whose value matches
+    the key that was generated at seal time.  The key is validated with a
+    constant-time comparison (``hmac.compare_digest``) inside
+    ``Database.get_analytics`` to prevent timing side-channel attacks.
+
+    Security note
+    -------------
+    The key is intentionally delivered via a *header* rather than a query
+    parameter.  Query parameters are:
+    * logged verbatim in web-server / CDN access logs
+    * stored in browser history
+    * forwarded in the ``Referer`` header to third-party resources
+
+    Headers are kept out of URL-based log fields and are therefore
+    substantially harder for an adversary to recover passively.
+    """
     try:
         analytics_data = await db.get_analytics(token, analytics_key)
         
