@@ -10,6 +10,7 @@ Supports:
 """
 import os
 import json
+import hmac
 import asyncio
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any
@@ -30,6 +31,38 @@ if IS_POSTGRES:
         print("⚠️ asyncpg not installed - PostgreSQL support disabled")
 else:
     HAS_POSTGRES = False
+
+
+def _verify_analytics_key(stored_key: Optional[str], supplied_key: str) -> bool:
+    """
+    Constant-time comparison of the analytics key to prevent timing side-channel
+    attacks.
+
+    Python's built-in string/bytes ``!=`` short-circuits on the first differing
+    byte, which lets an attacker measure response latency across thousands of
+    requests to recover the key character-by-character.  ``hmac.compare_digest``
+    is guaranteed to run in time proportional to the *length* of the inputs, not
+    the position of the first mismatch.
+
+    Rules:
+    * If no key was ever stored for this file (``stored_key`` is None or empty)
+      the comparison always fails — there is no valid key to present.
+    * Both values are normalised to UTF-8 bytes before comparison so the
+      comparison length is identical regardless of unicode codepoint width.
+    """
+    if not stored_key:
+        # File was created without analytics; no key is valid.  Use a dummy
+        # compare so the function still runs in constant time.
+        hmac.compare_digest(b"\x00", b"\x01")
+        return False
+    try:
+        return hmac.compare_digest(
+            stored_key.encode("utf-8"),
+            supplied_key.encode("utf-8"),
+        )
+    except (UnicodeEncodeError, AttributeError):
+        # Malformed input — reject without leaking information.
+        return False
 
 
 class Database:
@@ -618,8 +651,8 @@ class Database:
                     )
                     if not file_row:
                         return None
-                    # Validate analytics key
-                    if file_row['analytics_key'] != analytics_key:
+                    # Validate analytics key (constant-time to prevent timing attacks)
+                    if not _verify_analytics_key(file_row['analytics_key'], analytics_key):
                         return None
                     
                     # Get access logs
@@ -642,8 +675,8 @@ class Database:
                         file_row = await cursor.fetchone()
                         if not file_row:
                             return None
-                        # Validate analytics key
-                        if dict(file_row).get('analytics_key') != analytics_key:
+                        # Validate analytics key (constant-time to prevent timing attacks)
+                        if not _verify_analytics_key(dict(file_row).get('analytics_key'), analytics_key):
                             return None
                     
                     # Get access logs
@@ -656,7 +689,13 @@ class Database:
                         logs = [dict(row) for row in log_rows]
             
             file_info = dict(file_row)
-            
+
+            # Strip secrets / PII that must never leave the server layer.
+            # analytics_key — returning it would let any caller harvest the credential.
+            # otp_email    — PII with no place in an analytics response.
+            for _sensitive_field in ("analytics_key", "otp_email"):
+                file_info.pop(_sensitive_field, None)
+
             # Parse metadata if it's a string
             if isinstance(file_info.get('metadata'), str):
                 file_info['metadata'] = json.loads(file_info['metadata'])
