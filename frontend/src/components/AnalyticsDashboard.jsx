@@ -16,7 +16,12 @@ const AnalyticsDashboard = ({ token, analyticsKey, onClose }) => {
       setLoading(true);
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
       const response = await axios.get(`${backendUrl}/analytics/${token}`, {
-        params: { analytics_key: analyticsKey }
+        // Transmit the analytics key as a custom header rather than a query
+        // parameter.  Query parameters are logged verbatim in server access
+        // logs, stored in browser history, and forwarded in the Referer header
+        // to any third-party resources on the page — none of which is
+        // acceptable for a secret credential.
+        headers: { 'X-Analytics-Key': analyticsKey },
       });
       setAnalytics(response.data);
       setError(null);
