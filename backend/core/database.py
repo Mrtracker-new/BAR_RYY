@@ -10,6 +10,7 @@ Supports:
 """
 import os
 import json
+import hashlib
 import hmac
 import asyncio
 from datetime import datetime, timezone, timedelta
@@ -33,32 +34,52 @@ else:
     HAS_POSTGRES = False
 
 
-def _verify_analytics_key(stored_key: Optional[str], supplied_key: str) -> bool:
+def _hash_analytics_key(raw_key: str) -> str:
     """
-    Constant-time comparison of the analytics key to prevent timing side-channel
-    attacks.
+    Return the SHA-256 hex digest of a raw analytics key.
 
-    Python's built-in string/bytes ``!=`` short-circuits on the first differing
-    byte, which lets an attacker measure response latency across thousands of
-    requests to recover the key character-by-character.  ``hmac.compare_digest``
-    is guaranteed to run in time proportional to the *length* of the inputs, not
-    the position of the first mismatch.
+    This is the single source of truth for the hashing algorithm.  Calling it
+    both at creation time (``encryption_service.py``) and at validation time
+    (``get_analytics``) guarantees the algorithm is never applied
+    inconsistently.
+
+    SHA-256 (not bcrypt) is appropriate here: the key is already a 256-bit
+    CSPRNG token (``secrets.token_urlsafe(32)``), so brute-force is
+    computationally infeasible regardless of hash speed.  Bcrypt is a slow KDF
+    designed only to protect low-entropy passwords.
+    """
+    return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+
+
+def _verify_analytics_key(stored_hash: Optional[str], supplied_key: str) -> bool:
+    """
+    Constant-time comparison of the stored SHA-256 hash against the hash of
+    the caller-supplied key, preventing timing side-channel attacks.
+
+    The raw analytics key is NEVER stored in the database — only its SHA-256
+    digest (``analytics_key_hash`` column).  Validation re-hashes the incoming
+    key and compares the two digests with ``hmac.compare_digest`` (constant-time).
+
+    Python's built-in ``!=`` short-circuits on the first differing byte, letting
+    an attacker measure response latency to recover the secret character-by-
+    character.  ``hmac.compare_digest`` runs in time proportional to the
+    *length* of the inputs, not the position of the first mismatch.
 
     Rules:
-    * If no key was ever stored for this file (``stored_key`` is None or empty)
-      the comparison always fails — there is no valid key to present.
-    * Both values are normalised to UTF-8 bytes before comparison so the
-      comparison length is identical regardless of unicode codepoint width.
+    * If no hash was ever stored (``stored_hash`` is None or empty) the
+      comparison always fails — there is no valid key to present.
+    * Both digest strings are normalised to UTF-8 bytes before comparison.
     """
-    if not stored_key:
+    if not stored_hash:
         # File was created without analytics; no key is valid.  Use a dummy
         # compare so the function still runs in constant time.
         hmac.compare_digest(b"\x00", b"\x01")
         return False
     try:
+        supplied_hash = _hash_analytics_key(supplied_key)
         return hmac.compare_digest(
-            stored_key.encode("utf-8"),
-            supplied_key.encode("utf-8"),
+            stored_hash.encode("utf-8"),
+            supplied_hash.encode("utf-8"),
         )
     except (UnicodeEncodeError, AttributeError):
         # Malformed input — reject without leaking information.
@@ -96,8 +117,8 @@ _PUBLIC_FILE_COLUMNS: tuple[str, ...] = (
     "last_accessed_at",
     "destroyed",
     "require_otp",
-    # analytics_key  ← secret: intentionally excluded
-    # otp_email      ← PII:    intentionally excluded
+    # analytics_key_hash  ← derived secret: intentionally excluded
+    # otp_email           ← PII:            intentionally excluded
 )
 
 # Pre-build the SQL fragment once at import time — joining inside a hot path
@@ -110,7 +131,7 @@ _PUBLIC_FILE_COLUMNS_SQL: str = ", ".join(
 # Columns that must NEVER appear in any outbound response, used as the
 # last-resort post-fetch strip in get_analytics().
 _FORBIDDEN_RESPONSE_FIELDS: frozenset[str] = frozenset({
-    "analytics_key",
+    "analytics_key_hash",  # SHA-256 digest — still a secret, never expose
     "otp_email",
 })
 
@@ -148,7 +169,7 @@ class Database:
                     destroyed BOOLEAN DEFAULT 0,
                     require_otp BOOLEAN DEFAULT 0,
                     otp_email TEXT,
-                    analytics_key TEXT
+                    analytics_key_hash TEXT   -- SHA-256 hex digest; raw key never persisted
                 )
             """)
             
@@ -201,14 +222,73 @@ class Database:
             
             await db.commit()
             
-            # Migration: add analytics_key column if it doesn't exist (idempotent)
+            # ── Migration: analytics_key (plaintext) → analytics_key_hash ───────
+            # This entire block is idempotent — safe to run on every startup.
+            #
+            # Phase 1 — ensure the hashed column exists.
             try:
-                await db.execute("ALTER TABLE bar_files ADD COLUMN analytics_key TEXT")
+                await db.execute("ALTER TABLE bar_files ADD COLUMN analytics_key_hash TEXT")
                 await db.commit()
-                print("✅ Migrated: added analytics_key column")
+                print("✅ Migration: added analytics_key_hash column")
             except Exception:
                 pass  # Column already exists — safe to ignore
-            
+
+            # Phase 2 — back-fill SHA-256 hash for rows that still have the
+            # plaintext key.  We detect the SQLite version to decide whether
+            # the built-in sha256() SQL function is available (≥ 3.38) or
+            # whether we must fall back to a Python-side loop.
+            import sqlite3 as _sqlite3
+            _sqlite_version = tuple(
+                int(x) for x in _sqlite3.sqlite_version.split(".")
+            )
+            if _sqlite_version >= (3, 38, 0):
+                # Built-in sha256() available — single SQL UPDATE.
+                await db.execute("""
+                    UPDATE bar_files
+                    SET analytics_key_hash = lower(hex(sha256(analytics_key)))
+                    WHERE analytics_key IS NOT NULL
+                      AND analytics_key != ''
+                      AND analytics_key_hash IS NULL
+                """)
+            else:
+                # Python-loop fallback for SQLite < 3.38.
+                async with db.execute(
+                    "SELECT token, analytics_key FROM bar_files "
+                    "WHERE analytics_key IS NOT NULL "
+                    "  AND analytics_key != '' "
+                    "  AND analytics_key_hash IS NULL"
+                ) as _cur:
+                    _stale_rows = await _cur.fetchall()
+                for _token_val, _raw_key in _stale_rows:
+                    _key_hash = _hash_analytics_key(_raw_key)
+                    await db.execute(
+                        "UPDATE bar_files SET analytics_key_hash = ? WHERE token = ?",
+                        (_key_hash, _token_val),
+                    )
+            await db.commit()
+
+            # Phase 3 — drop the old plaintext column.
+            # ALTER TABLE … DROP COLUMN requires SQLite 3.35+.
+            if _sqlite_version >= (3, 35, 0):
+                try:
+                    async with db.execute("PRAGMA table_info(bar_files)") as _cur:
+                        _col_info = await _cur.fetchall()
+                    _existing_cols = {row[1] for row in _col_info}
+                    if "analytics_key" in _existing_cols:
+                        await db.execute(
+                            "ALTER TABLE bar_files DROP COLUMN analytics_key"
+                        )
+                        await db.commit()
+                        print("✅ Migration: dropped plaintext analytics_key column")
+                except Exception as _exc:
+                    print(f"⚠️ Could not drop analytics_key column: {_exc}")
+            else:
+                print(
+                    "⚠️  SQLite < 3.35 detected: plaintext analytics_key column "
+                    "cannot be auto-dropped — it will be retained but is no longer "
+                    "used. Upgrade SQLite to ≥ 3.35 to remove it."
+                )
+
             print("✅ SQLite database initialized")
     
     async def _init_postgres(self):
@@ -242,7 +322,7 @@ class Database:
                         destroyed BOOLEAN DEFAULT FALSE,
                         require_otp BOOLEAN DEFAULT FALSE,
                         otp_email TEXT,
-                        analytics_key TEXT
+                        analytics_key_hash TEXT   -- SHA-256 hex digest; raw key never persisted
                     )
                 """)
                 
@@ -293,12 +373,32 @@ class Database:
                     WHERE is_counted_as_view = TRUE
                 """)
                 
-                # Migration: add analytics_key column if it doesn't exist
+                # ── Migration: analytics_key (plaintext) → analytics_key_hash ─
+                # Phase 1 — ensure the hashed column exists.
                 await conn.execute("""
-                    ALTER TABLE bar_files 
-                    ADD COLUMN IF NOT EXISTS analytics_key TEXT
+                    ALTER TABLE bar_files
+                    ADD COLUMN IF NOT EXISTS analytics_key_hash TEXT
                 """)
-                
+
+                # Phase 2 — back-fill SHA-256 hash for rows that still carry
+                # the plaintext key.  PostgreSQL's sha256() returns bytea;
+                # encode(..., 'hex') converts it to a lowercase hex string.
+                await conn.execute("""
+                    UPDATE bar_files
+                    SET analytics_key_hash =
+                        encode(sha256(analytics_key::bytea), 'hex')
+                    WHERE analytics_key IS NOT NULL
+                      AND analytics_key_hash IS NULL
+                """)
+
+                # Phase 3 — drop the old plaintext column.
+                # We confirm the hash column is populated before dropping to
+                # prevent any data loss on a partial migration.
+                await conn.execute("""
+                    ALTER TABLE bar_files
+                    DROP COLUMN IF EXISTS analytics_key
+                """)
+
             print("✅ PostgreSQL database initialized")
         except Exception as e:
             print(f"⚠️ PostgreSQL init failed: {e}")
@@ -315,9 +415,15 @@ class Database:
         metadata: Dict[str, Any],
         require_otp: bool = False,
         otp_email: Optional[str] = None,
-        analytics_key: Optional[str] = None
+        analytics_key_hash: Optional[str] = None
     ) -> bool:
-        """Create a new file record in the database"""
+        """Create a new file record in the database.
+
+        ``analytics_key_hash`` must be the SHA-256 hex digest of the raw key
+        (produced by ``_hash_analytics_key``).  The raw key must never be
+        passed here — it should exist only in the seal response returned to
+        the file creator.
+        """
         try:
             max_views = metadata.get("max_views", 1)
             expires_at = metadata.get("expires_at")
@@ -356,22 +462,22 @@ class Database:
                         INSERT INTO bar_files 
                         (token, filename, bar_filename, file_path, metadata, 
                          current_views, max_views, expires_at, created_at, require_otp, otp_email,
-                         analytics_key)
+                         analytics_key_hash)
                         VALUES ($1, $2, $3, $4, $5, 0, $6, $7, $8, $9, $10, $11)
                     """, token, filename, bar_filename, file_path, 
                        json.dumps(metadata), max_views, expires_at_dt, created_at_dt, require_otp, otp_email,
-                       analytics_key)
+                       analytics_key_hash)
             else:
                 async with aiosqlite.connect(self.db_path) as db:
                     await db.execute("""
                         INSERT INTO bar_files 
                         (token, filename, bar_filename, file_path, metadata, 
                          current_views, max_views, expires_at, created_at, require_otp, otp_email,
-                         analytics_key)
+                         analytics_key_hash)
                         VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
                     """, (token, filename, bar_filename, file_path, 
                           json.dumps(metadata), max_views, expires_at, created_at, require_otp, otp_email,
-                          analytics_key))
+                          analytics_key_hash))
                     await db.commit()
             
             return True
@@ -722,12 +828,12 @@ class Database:
                     # that a bug in the validation branch cannot accidentally
                     # expose other data.
                     key_row = await conn.fetchrow(
-                        "SELECT analytics_key FROM bar_files WHERE token = $1",
+                        "SELECT analytics_key_hash FROM bar_files WHERE token = $1",
                         token,
                     )
                     if not key_row:
                         return None
-                    if not _verify_analytics_key(key_row["analytics_key"], analytics_key):
+                    if not _verify_analytics_key(key_row["analytics_key_hash"], analytics_key):
                         return None
 
                     # ── Layer 1b: fetch only allowlisted public columns ──
@@ -759,13 +865,13 @@ class Database:
 
                     # ── Layer 1a: validate key with a minimal, targeted query ──
                     async with db.execute(
-                        "SELECT analytics_key FROM bar_files WHERE token = ?",
+                        "SELECT analytics_key_hash FROM bar_files WHERE token = ?",
                         (token,),
                     ) as cursor:
                         key_row = await cursor.fetchone()
                     if not key_row:
                         return None
-                    if not _verify_analytics_key(dict(key_row).get("analytics_key"), analytics_key):
+                    if not _verify_analytics_key(dict(key_row).get("analytics_key_hash"), analytics_key):
                         return None
 
                     # ── Layer 1b: build the public-column query for SQLite ──
