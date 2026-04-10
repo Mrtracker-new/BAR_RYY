@@ -3,8 +3,8 @@ OTP (One-Time Password) Service for Two-Factor Authentication
 Supports email-based OTP verification
 """
 import os
-import random
-import string
+import hmac
+import secrets
 import sib_api_v3_sdk
 from sib_api_v3_sdk.rest import ApiException
 from datetime import datetime, timedelta, timezone
@@ -37,8 +37,13 @@ class OTPService:
         self.otp_storage: Dict[str, Dict[str, Any]] = {}
     
     def generate_otp(self) -> str:
-        """Generate a random 6-digit OTP"""
-        return ''.join(random.choices(string.digits, k=OTP_LENGTH))
+        """Generate a cryptographically secure random numeric OTP.
+
+        Uses `secrets.randbelow` (backed by os.urandom / CSPRNG) instead of
+        Python's Mersenne Twister `random` module, which is NOT suitable for
+        security-sensitive token generation (CWE-338).
+        """
+        return ''.join(str(secrets.randbelow(10)) for _ in range(OTP_LENGTH))
     
     def create_otp_session(self, token: str, email: str) -> str:
         """
@@ -91,10 +96,12 @@ class OTPService:
         # Increment attempt counter
         session['attempts'] += 1
         
-        # Verify OTP
+        # Verify OTP — use hmac.compare_digest for constant-time comparison to
+        # prevent timing side-channel attacks (CWE-208).  Both operands are
+        # hex digests (ASCII str), satisfying compare_digest's type constraint.
         otp_hash = hashlib.sha256(otp_code.encode()).hexdigest()
-        
-        if otp_hash == session['otp_hash']:
+
+        if hmac.compare_digest(otp_hash, session['otp_hash']):
             session['verified'] = True
             print(f"✅ OTP verified successfully for token {token[:8]}...")
             return True, ""
@@ -206,7 +213,7 @@ class OTPService:
             send_smtp_email = sib_api_v3_sdk.SendSmtpEmail(
                 to=[{"email": email}],
                 sender={"name": FROM_NAME, "email": FROM_EMAIL},
-                subject=f"Your OTP Code - {otp_code}",
+                subject="Your One-Time Password - BAR Web",
                 html_content=html_body
             )
             
