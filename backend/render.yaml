@@ -16,7 +16,7 @@ services:
       - key: BREVO_API_KEY
         sync: false  # You'll add this manually
       - key: FROM_EMAIL
-        value: barweb.noreply@gmail.com
+        value: bar_rnr@outlook.com
       - key: FROM_NAME
         value: BAR Web - Secure File Sharing
       # Optional: override the trusted-proxy CIDR list if Render's LB IPs change.
