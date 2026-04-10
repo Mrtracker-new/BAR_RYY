@@ -1,246 +1,360 @@
 """
 OTP (One-Time Password) Service for Two-Factor Authentication
-Supports email-based OTP verification
+Supports email-based OTP verification via Brevo Transactional Email REST API.
+
+Design principles
+-----------------
+* Fully async — uses httpx.AsyncClient so we never block the event loop
+  (the old sib-api-v3-sdk was synchronous and blocked the uvicorn event loop,
+  causing emails to stall / time out silently).
+* Lazy credential validation — env vars are read inside the first call, not at
+  import time, so load_dotenv() in app.py always runs first.
+* Exponential-backoff retry — transient 5xx / network errors are retried up to
+  3 times so a momentary Brevo blip does not silently drop the email.
+* Constant-time OTP comparison — hmac.compare_digest prevents timing attacks.
+* Secure OTP generation — secrets module (CSPRNG), not random (Mersenne Twister).
 """
+
 import os
 import hmac
+import asyncio
+import hashlib
 import secrets
-import sib_api_v3_sdk
-from sib_api_v3_sdk.rest import ApiException
+import logging
+import traceback
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
-import hashlib
 
+import httpx
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
 # OTP Configuration
+# ---------------------------------------------------------------------------
 OTP_LENGTH = 6
 OTP_EXPIRY_MINUTES = 10
 MAX_OTP_ATTEMPTS = 3
 
-# Email Configuration (from environment variables)
-BREVO_API_KEY = os.getenv("BREVO_API_KEY", "")
-FROM_EMAIL = os.getenv("FROM_EMAIL", "")
-FROM_NAME = os.getenv("FROM_NAME", "BAR Web - Secure File Sharing")
+# Brevo transactional-email REST endpoint (v3)
+BREVO_SMTP_URL = "https://api.brevo.com/v3/smtp/email"
 
-# Configure Brevo API
-if BREVO_API_KEY:
-    configuration = sib_api_v3_sdk.Configuration()
-    configuration.api_key['api-key'] = BREVO_API_KEY
-    api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
-else:
-    api_instance = None
+# Retry policy for transient network / server errors
+_MAX_RETRIES = 3
+_RETRY_BACKOFF_BASE = 0.5  # seconds; doubles on each retry
 
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _get_brevo_credentials() -> tuple[str, str, str]:
+    """
+    Read Brevo credentials from the environment at call time (not import time)
+    so that load_dotenv() in app.py has already populated os.environ.
+
+    Returns (api_key, from_email, from_name).
+    Raises RuntimeError with a clear message if any required value is missing.
+    """
+    api_key = os.getenv("BREVO_API_KEY", "").strip()
+    from_email = os.getenv("FROM_EMAIL", "").strip()
+    from_name = os.getenv("FROM_NAME", "BAR Web - Secure File Sharing").strip()
+
+    missing: list[str] = []
+    if not api_key:
+        missing.append("BREVO_API_KEY")
+    if not from_email:
+        missing.append("FROM_EMAIL")
+
+    if missing:
+        raise RuntimeError(
+            f"Email service misconfigured — missing env vars: {', '.join(missing)}. "
+            "Set them in your .env (local) or Render dashboard (production)."
+        )
+
+    return api_key, from_email, from_name
+
+
+async def _send_with_retry(
+    payload: dict,
+    api_key: str,
+    *,
+    max_retries: int = _MAX_RETRIES,
+    backoff_base: float = _RETRY_BACKOFF_BASE,
+) -> httpx.Response:
+    """
+    POST *payload* to the Brevo REST API with exponential-backoff retry.
+
+    Retries on:
+      * httpx network-level errors (connection refused, timeout, …)
+      * HTTP 5xx responses from Brevo (transient server errors)
+
+    Does NOT retry on 4xx (bad request / auth failure — fix the payload/key).
+    """
+    headers = {
+        "api-key": api_key,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
+    last_exc: Optional[Exception] = None
+    last_response: Optional[httpx.Response] = None
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        for attempt in range(1, max_retries + 1):
+            try:
+                response = await client.post(BREVO_SMTP_URL, json=payload, headers=headers)
+                last_response = response
+
+                if response.status_code < 500:
+                    # 2xx = success; 4xx = caller error — don't retry either
+                    return response
+
+                # 5xx → Brevo-side transient error; retry
+                logger.warning(
+                    "Brevo returned %s on attempt %d/%d — %s",
+                    response.status_code, attempt, max_retries, response.text,
+                )
+
+            except httpx.TransportError as exc:
+                last_exc = exc
+                logger.warning(
+                    "Network error on attempt %d/%d: %s", attempt, max_retries, exc
+                )
+
+            if attempt < max_retries:
+                wait = backoff_base * (2 ** (attempt - 1))
+                logger.info("Retrying in %.1fs…", wait)
+                await asyncio.sleep(wait)
+
+    # All retries exhausted
+    if last_response is not None:
+        return last_response
+    raise last_exc or RuntimeError("All Brevo send attempts failed with network errors.")
+
+
+# ---------------------------------------------------------------------------
+# OTPService
+# ---------------------------------------------------------------------------
 
 class OTPService:
-    """Handles OTP generation, storage, and validation"""
-    
-    def __init__(self):
-        self.otp_storage: Dict[str, Dict[str, Any]] = {}
-    
-    def generate_otp(self) -> str:
-        """Generate a cryptographically secure random numeric OTP.
+    """Handles OTP generation, in-memory storage, validation, and delivery."""
 
-        Uses `secrets.randbelow` (backed by os.urandom / CSPRNG) instead of
-        Python's Mersenne Twister `random` module, which is NOT suitable for
-        security-sensitive token generation (CWE-338).
+    def __init__(self) -> None:
+        # token → session dict
+        self.otp_storage: Dict[str, Dict[str, Any]] = {}
+
+    # ------------------------------------------------------------------
+    # Generation
+    # ------------------------------------------------------------------
+
+    def generate_otp(self) -> str:
         """
-        return ''.join(str(secrets.randbelow(10)) for _ in range(OTP_LENGTH))
-    
+        Generate a cryptographically secure random numeric OTP.
+
+        Uses ``secrets.randbelow`` (os.urandom / CSPRNG) — NOT
+        Python's Mersenne-Twister ``random`` module (CWE-338).
+        """
+        return "".join(str(secrets.randbelow(10)) for _ in range(OTP_LENGTH))
+
+    # ------------------------------------------------------------------
+    # Session management
+    # ------------------------------------------------------------------
+
     def create_otp_session(self, token: str, email: str) -> str:
-        """
-        Create an OTP session for a file access token
-        Returns: OTP code
-        """
+        """Create (or replace) an OTP session for *token*. Returns the OTP code."""
         otp_code = self.generate_otp()
-        
-        # Hash the OTP for storage (security best practice)
         otp_hash = hashlib.sha256(otp_code.encode()).hexdigest()
-        
-        # Store OTP with metadata
+
         self.otp_storage[token] = {
-            'otp_hash': otp_hash,
-            'email': email,
-            'created_at': datetime.now(timezone.utc),
-            'expires_at': datetime.now(timezone.utc) + timedelta(minutes=OTP_EXPIRY_MINUTES),
-            'attempts': 0,
-            'verified': False
+            "otp_hash": otp_hash,
+            "email": email,
+            "created_at": datetime.now(timezone.utc),
+            "expires_at": datetime.now(timezone.utc) + timedelta(minutes=OTP_EXPIRY_MINUTES),
+            "attempts": 0,
+            "verified": False,
         }
-        
-        print(f"✅ OTP created for token {token[:8]}... (expires in {OTP_EXPIRY_MINUTES} min)")
+
+        logger.info("OTP session created for token %.8s… (expires in %d min)", token, OTP_EXPIRY_MINUTES)
         return otp_code
-    
+
     def verify_otp(self, token: str, otp_code: str) -> tuple[bool, str]:
         """
-        Verify OTP code for a token
-        Returns: (is_valid, error_message)
+        Verify *otp_code* for *token*.
+        Returns (is_valid, error_message).
         """
-        # Check if OTP session exists
         if token not in self.otp_storage:
             return False, "OTP session not found. Please request a new OTP."
-        
+
         session = self.otp_storage[token]
-        
-        # Check if already verified
-        if session['verified']:
+
+        if session["verified"]:
             return False, "OTP already used. Please request a new OTP."
-        
-        # Check expiry
-        if datetime.now(timezone.utc) > session['expires_at']:
+
+        if datetime.now(timezone.utc) > session["expires_at"]:
             del self.otp_storage[token]
             return False, "OTP has expired. Please request a new OTP."
-        
-        # Check max attempts
-        if session['attempts'] >= MAX_OTP_ATTEMPTS:
-            del self.otp_storage[token]
-            return False, f"Maximum OTP attempts ({MAX_OTP_ATTEMPTS}) exceeded. Please request a new OTP."
-        
-        # Increment attempt counter
-        session['attempts'] += 1
-        
-        # Verify OTP — use hmac.compare_digest for constant-time comparison to
-        # prevent timing side-channel attacks (CWE-208).  Both operands are
-        # hex digests (ASCII str), satisfying compare_digest's type constraint.
-        otp_hash = hashlib.sha256(otp_code.encode()).hexdigest()
 
-        if hmac.compare_digest(otp_hash, session['otp_hash']):
-            session['verified'] = True
-            print(f"✅ OTP verified successfully for token {token[:8]}...")
+        if session["attempts"] >= MAX_OTP_ATTEMPTS:
+            del self.otp_storage[token]
+            return False, (
+                f"Maximum OTP attempts ({MAX_OTP_ATTEMPTS}) exceeded. "
+                "Please request a new OTP."
+            )
+
+        session["attempts"] += 1
+
+        # Constant-time comparison — prevents timing side-channel (CWE-208)
+        provided_hash = hashlib.sha256(otp_code.encode()).hexdigest()
+        if hmac.compare_digest(provided_hash, session["otp_hash"]):
+            session["verified"] = True
+            logger.info("OTP verified for token %.8s…", token)
             return True, ""
-        else:
-            remaining_attempts = MAX_OTP_ATTEMPTS - session['attempts']
-            return False, f"Invalid OTP code. {remaining_attempts} attempts remaining."
-    
+
+        remaining = MAX_OTP_ATTEMPTS - session["attempts"]
+        return False, f"Invalid OTP code. {remaining} attempt(s) remaining."
+
     def is_verified(self, token: str) -> bool:
-        """Check if token has been verified with OTP"""
-        if token not in self.otp_storage:
-            return False
-        return self.otp_storage[token].get('verified', False)
-    
+        """Return True if *token* has a live, verified OTP session."""
+        return self.otp_storage.get(token, {}).get("verified", False)
+
     def clear_verification(self, token: str) -> None:
-        """Clear OTP verification for a token (after successful file access)"""
+        """Remove the OTP session for *token* after successful file access."""
         if token in self.otp_storage:
             del self.otp_storage[token]
-            print(f"🔒 OTP verification cleared for token {token[:8]}... (requires new OTP for next access)")
-    
-    def cleanup_expired_otps(self):
-        """Remove expired OTP sessions"""
+            logger.info("OTP verification cleared for token %.8s…", token)
+
+    def cleanup_expired_otps(self) -> None:
+        """Prune stale OTP sessions (called by the background cleanup loop)."""
         now = datetime.now(timezone.utc)
-        expired_tokens = [
-            token for token, session in self.otp_storage.items()
-            if now > session['expires_at']
-        ]
-        
-        for token in expired_tokens:
-            del self.otp_storage[token]
-        
-        if expired_tokens:
-            print(f"🧹 Cleaned up {len(expired_tokens)} expired OTP sessions")
-    
-    def send_otp_email(self, email: str, otp_code: str, filename: str) -> tuple[bool, str]:
+        expired = [t for t, s in self.otp_storage.items() if now > s["expires_at"]]
+        for t in expired:
+            del self.otp_storage[t]
+        if expired:
+            logger.info("Cleaned up %d expired OTP session(s).", len(expired))
+
+    # ------------------------------------------------------------------
+    # Email delivery  (fully async — never blocks the event loop)
+    # ------------------------------------------------------------------
+
+    async def send_otp_email(
+        self, email: str, otp_code: str, filename: str
+    ) -> tuple[bool, str]:
         """
-        Send OTP code via email using Brevo
-        Returns: (success, error_message)
+        Send *otp_code* to *email* via the Brevo transactional-email REST API.
+
+        This method is **async** and uses httpx.AsyncClient so it never blocks
+        the uvicorn event loop (unlike the old sib-api-v3-sdk which was
+        synchronous and caused silent email timeouts).
+
+        Returns (success: bool, error_message: str).
         """
-        # Check if Brevo is configured
-        if not BREVO_API_KEY or not FROM_EMAIL:
-            error_msg = "Email service not configured. Set BREVO_API_KEY and FROM_EMAIL environment variables."
-            print(f"⚠️ {error_msg}")
-            print(f"BREVO_API_KEY: {'SET' if BREVO_API_KEY else 'NOT SET'}")
-            print(f"FROM_EMAIL: {'SET' if FROM_EMAIL else 'NOT SET'}")
-            return False, error_msg
-        
-        if not api_instance:
-            error_msg = "Brevo API not initialized"
-            print(f"⚠️ {error_msg}")
-            return False, error_msg
-        
+        # --- credential validation (lazy — env is definitely loaded by now) --
         try:
-            
-            # Create HTML email body
-            html_body = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <style>
-                    body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-                    .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-                    .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                              color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0; }}
-                    .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }}
-                    .otp-code {{ background: #fff; border: 2px dashed #667eea; padding: 20px; 
-                                text-align: center; font-size: 32px; font-weight: bold; 
-                                letter-spacing: 8px; margin: 20px 0; border-radius: 8px; }}
-                    .warning {{ background: #fff3cd; border-left: 4px solid #ffc107; 
-                               padding: 12px; margin: 20px 0; border-radius: 4px; }}
-                    .footer {{ text-align: center; color: #666; font-size: 12px; margin-top: 20px; }}
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <div class="header">
-                        <h1>🔐 Two-Factor Authentication</h1>
-                    </div>
-                    <div class="content">
-                        <h2>Access Verification Required</h2>
-                        <p>Someone is attempting to access the file: <strong>{filename}</strong></p>
-                        <p>Use the following One-Time Password (OTP) to verify access:</p>
-                        
-                        <div class="otp-code">{otp_code}</div>
-                        
-                        <div class="warning">
-                            <strong>⏰ Important:</strong>
-                            <ul>
-                                <li>This code expires in <strong>{OTP_EXPIRY_MINUTES} minutes</strong></li>
-                                <li>You have <strong>{MAX_OTP_ATTEMPTS} attempts</strong> to enter it correctly</li>
-                                <li>Do not share this code with anyone</li>
-                            </ul>
-                        </div>
-                        
-                        <p>If you didn't request this access, you can safely ignore this email.</p>
-                    </div>
-                    <div class="footer">
-                        <p>BAR Web - Burn After Reading File Sharing</p>
-                        <p>This is an automated message, please do not reply.</p>
-                    </div>
-                </div>
-            </body>
-            </html>
-            """
-            
-            # Send email using Brevo
-            print(f"📧 Attempting to send OTP email to {email} via Brevo...")
-            
-            # Create email using Brevo API
-            send_smtp_email = sib_api_v3_sdk.SendSmtpEmail(
-                to=[{"email": email}],
-                sender={"name": FROM_NAME, "email": FROM_EMAIL},
-                subject="Your One-Time Password - BAR Web",
-                html_content=html_body
-            )
-            
-            # Send the email
-            api_response = api_instance.send_transac_email(send_smtp_email)
-            
-            print(f"✅ OTP email sent successfully to {email}")
-            print(f"Brevo Message ID: {api_response.message_id}")
+            api_key, from_email, from_name = _get_brevo_credentials()
+        except RuntimeError as exc:
+            logger.error("Email service not configured: %s", exc)
+            return False, str(exc)
+
+        # --- build HTML body ------------------------------------------------
+        html_body = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BAR Web — One-Time Password</title>
+  <style>
+    body {{ margin: 0; padding: 0; background: #0d0d0d; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #e0e0e0; }}
+    .wrapper {{ max-width: 560px; margin: 40px auto; padding: 0 16px; }}
+    .card {{ background: #181818; border: 1px solid #2a2a2a; border-radius: 12px; overflow: hidden; }}
+    .header {{ background: linear-gradient(135deg, #1a1a1a 0%, #111 100%); border-bottom: 1px solid #2a2a2a; padding: 32px; text-align: center; }}
+    .header h1 {{ margin: 0; font-size: 20px; font-weight: 600; color: #fff; letter-spacing: -0.3px; }}
+    .header p {{ margin: 6px 0 0; font-size: 13px; color: #666; }}
+    .body {{ padding: 32px; }}
+    .body p {{ margin: 0 0 16px; font-size: 14px; color: #aaa; line-height: 1.6; }}
+    .body strong {{ color: #e0e0e0; }}
+    .otp-block {{ background: #0d0d0d; border: 1px dashed #333; border-radius: 10px; padding: 28px 16px; text-align: center; margin: 24px 0; }}
+    .otp-block .otp {{ font-size: 40px; font-weight: 700; letter-spacing: 14px; color: #fff; font-feature-settings: "tnum"; font-variant-numeric: tabular-nums; }}
+    .otp-block .hint {{ font-size: 12px; color: #555; margin-top: 8px; }}
+    .notice {{ background: #1a1500; border: 1px solid #3a2f00; border-radius: 8px; padding: 14px 16px; margin-top: 4px; }}
+    .notice ul {{ margin: 8px 0 0; padding-left: 18px; }}
+    .notice li {{ font-size: 13px; color: #aaa; margin-bottom: 4px; }}
+    .footer {{ border-top: 1px solid #2a2a2a; padding: 20px 32px; text-align: center; }}
+    .footer p {{ margin: 0; font-size: 11px; color: #444; }}
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="card">
+      <div class="header">
+        <h1>🔐 Two-Factor Authentication</h1>
+        <p>BAR Web — Burn After Reading</p>
+      </div>
+      <div class="body">
+        <p>Someone is attempting to access a protected file:</p>
+        <p><strong>{filename}</strong></p>
+        <p>Use the one-time password below to verify access:</p>
+        <div class="otp-block">
+          <div class="otp">{otp_code}</div>
+          <div class="hint">Enter this code exactly as shown</div>
+        </div>
+        <div class="notice">
+          <strong style="color:#e0b800;">⚠ Important</strong>
+          <ul>
+            <li>Code expires in <strong style="color:#e0e0e0;">{OTP_EXPIRY_MINUTES} minutes</strong></li>
+            <li>You have <strong style="color:#e0e0e0;">{MAX_OTP_ATTEMPTS} attempts</strong> to enter it correctly</li>
+            <li>Do not share this code with anyone</li>
+          </ul>
+        </div>
+        <p style="margin-top:24px;">If you did not request this, you can safely ignore this email.</p>
+      </div>
+      <div class="footer">
+        <p>BAR Web · Secure File Sharing · This is an automated message — do not reply.</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>"""
+
+        payload = {
+            "sender": {"name": from_name, "email": from_email},
+            "to": [{"email": email}],
+            "subject": "Your One-Time Password — BAR Web",
+            "htmlContent": html_body,
+        }
+
+        logger.info("Sending OTP email to %s via Brevo REST API…", email)
+
+        try:
+            response = await _send_with_retry(payload, api_key)
+        except Exception as exc:
+            error_msg = f"Network error sending OTP email: {exc}"
+            logger.error("%s\n%s", error_msg, traceback.format_exc())
+            return False, error_msg
+
+        if response.status_code in (200, 201):
+            try:
+                msg_id = response.json().get("messageId", "n/a")
+            except Exception:
+                msg_id = "n/a"
+            logger.info("OTP email sent successfully to %s (messageId=%s)", email, msg_id)
             return True, ""
-            
-        except ApiException as e:
-            error_msg = f"Brevo API error: {e.status} - {e.reason}"
-            print(f"❌ {error_msg}")
-            print(f"Response body: {e.body}")
-            return False, error_msg
-        except Exception as e:
-            import traceback
-            error_msg = f"Failed to send email: {str(e)}"
-            print(f"❌ {error_msg}")
-            print(f"Full traceback:\n{traceback.format_exc()}")
-            return False, error_msg
+
+        # Non-2xx response
+        error_msg = (
+            f"Brevo API error {response.status_code}: {response.text[:400]}"
+        )
+        logger.error("Failed to send OTP email: %s", error_msg)
+        return False, error_msg
 
 
-# Global OTP service instance
+# ---------------------------------------------------------------------------
+# Module-level singleton
+# ---------------------------------------------------------------------------
+
 otp_service = OTPService()
 
 
 def get_otp_service() -> OTPService:
-    """Get the global OTP service instance"""
+    """Return the global OTPService singleton."""
     return otp_service
