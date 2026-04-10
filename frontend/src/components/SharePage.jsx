@@ -64,14 +64,24 @@ const SharePage = ({ token }) => {
 
       const response = await axios.post(`/verify-otp/${token}`, formData);
 
+      // Mark verified in state so the UI updates,
+      // then immediately fire handleDownload() in the SAME warm-process
+      // window — avoids the race where a cold-start between verify and
+      // a manual second-click wipes the in-memory OTP session on Render.
       setOtpVerified(true);
-      setSuccessMessage(response.data.message);
+      setShowOtpUI(false);
+      setSuccessMessage('✅ OTP verified — loading your file...');
+
+      // Small tick to let React flush state before the axios call
+      await new Promise(r => setTimeout(r, 100));
+      await handleDownload();
     } catch (err) {
       console.error('OTP verification error:', err);
       setError(err.response?.data?.detail || 'OTP verification failed');
-    } finally {
       setIsLoading(false);
     }
+    // NOTE: do NOT call setIsLoading(false) here — handleDownload() owns
+    // its own finally block and will reset it after the file response.
   };
 
   const handleDownload = async () => {

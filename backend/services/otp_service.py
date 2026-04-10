@@ -319,7 +319,7 @@ class OTPService:
         payload = {
             "sender": {"name": from_name, "email": from_email},
             "to": [{"email": email}],
-            "subject": "Your One-Time Password — BAR Web",
+            "subject": "Your One-Time Password - BAR Web",
             "htmlContent": html_body,
         }
 
