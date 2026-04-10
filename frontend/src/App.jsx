@@ -122,7 +122,7 @@ function MainApp() {
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
       const sealData = {
-        filename: fileInfo.filename,
+        temp_filename: fileInfo.temp_filename,
         max_views: rules.maxViews,
         expiry_minutes: rules.expiryMinutes,
         password: rules.password || null,
