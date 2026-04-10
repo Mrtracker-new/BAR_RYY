@@ -1,6 +1,7 @@
 """Share endpoints for server-side files with 2FA support."""
 import os
 import json
+import hmac
 import hashlib
 import asyncio
 import traceback
@@ -242,7 +243,7 @@ async def share_file(
             if stored_hash:
                 provided_hash = hashlib.sha256(password.strip().encode()).hexdigest()
                 
-                if provided_hash != stored_hash:
+                if not hmac.compare_digest(provided_hash, stored_hash):
                     security.record_password_attempt(client_ip, False, token)
                     
                     # Send access denied webhook
