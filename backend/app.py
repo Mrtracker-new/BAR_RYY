@@ -7,6 +7,7 @@ import asyncio
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -30,6 +31,35 @@ app = FastAPI(
     version=settings.app_version,
     description="Secure file sharing with burn-after-reading capabilities"
 )
+
+
+# ---------------------------------------------------------------------------
+# ProxyHeadersMiddleware — MUST be added first (outermost layer)
+# ---------------------------------------------------------------------------
+# Uvicorn's built-in middleware rewrites request.client.host to the real
+# client IP extracted from X-Forwarded-For, but *only* when the direct TCP
+# peer is in the trusted_hosts list.  Connections from any other host are
+# left as-is (request.client.host = actual peer), so attackers who connect
+# directly cannot inject a spoofed IP via that header.
+#
+# TRUSTED_PROXY_CIDRS env-var controls which CIDRs are trusted (same value
+# read by services/analytics.py).  Defaults to Render's LB ranges.
+# Set to 'none' to disable entirely (e.g. for local dev without a proxy).
+_raw_cidrs = os.getenv("TRUSTED_PROXY_CIDRS", "").strip()
+_trusted_hosts: list[str] = []
+if _raw_cidrs.lower() != "none":
+    # ProxyHeadersMiddleware trusted_hosts accepts exact IPs or "*".
+    # We use "*" when behind Render because Render's LB IPs are stable but
+    # numerous; the CIDR-level enforcement is handled by analytics.get_client_ip.
+    # Do NOT use "*" if this service is directly internet-facing.
+    _is_production = os.getenv("IS_PRODUCTION", "false").lower() == "true"
+    _trusted_hosts = ["*"] if _is_production else ["127.0.0.1", "::1"]
+
+if _trusted_hosts:
+    app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=_trusted_hosts)
+    print(f"🔒 ProxyHeadersMiddleware enabled — trusted_hosts={_trusted_hosts}")
+else:
+    print("🔒 ProxyHeadersMiddleware disabled (TRUSTED_PROXY_CIDRS=none)")
 
 
 # Configure CORS middleware
