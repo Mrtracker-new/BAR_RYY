@@ -71,7 +71,7 @@ async def request_otp(
         # Generate and send OTP
         otp_code = otp_service.create_otp_session(token, otp_email)
         
-        success, error_msg = otp_service.send_otp_email(
+        success, error_msg = await otp_service.send_otp_email(
             email=otp_email,
             otp_code=otp_code,
             filename=file_record['filename']
