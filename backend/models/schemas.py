@@ -1,13 +1,28 @@
 """Pydantic models for request/response validation."""
 import re
 from typing import Optional
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, Field, validator
 from core import security
+
+# Format produced by save_uploaded_file: "<uuid4>__<safe_filename>"
+_TEMP_FILENAME_RE = re.compile(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}'
+    r'__[^/\\\x00]{1,200}$',
+    re.IGNORECASE,
+)
 
 
 class SealRequest(BaseModel):
-    """Request model for sealing a file into a BAR container."""
-    filename: str
+    """Request model for sealing a file into a BAR container.
+
+    Security note: callers must supply ``temp_filename`` — the opaque
+    ``<uuid>__<safe_filename>`` token returned by the /upload endpoint.
+    The server resolves it to an exact filesystem path; no directory
+    scan or user-controlled filename matching is performed.
+    """
+    # The full UUID-prefixed temp name from /upload (e.g. "abc...__report.pdf").
+    # The original display name is derived server-side from this token.
+    temp_filename: str
     max_views: int = 1
     expiry_minutes: int = 0
     password: Optional[str] = None
@@ -19,11 +34,23 @@ class SealRequest(BaseModel):
     view_refresh_minutes: int = 0  # Time threshold for view refresh control (0 = disabled)
     auto_refresh_seconds: int = 0  # Auto-refresh interval in seconds (0 = disabled)
 
-    @validator('filename')
-    def validate_filename(cls, v):
-        if not v or len(v) > 255:
-            raise ValueError('Invalid filename')
-        if not security.validate_file_extension(v):
+    @validator('temp_filename')
+    def validate_temp_filename(cls, v: str) -> str:
+        """Enforce that the token matches the exact format produced by /upload.
+
+        Format: <UUID4>__<safe_filename>
+        Rejects path traversal sequences, null bytes, and any value that
+        does not carry a valid UUID4 prefix.
+        """
+        if not v:
+            raise ValueError('temp_filename is required')
+        if not _TEMP_FILENAME_RE.match(v):
+            raise ValueError(
+                'Invalid temp_filename: must be the token returned by /upload'
+            )
+        # Derive the original safe filename (the part after the first "__")
+        safe_name = v.split('__', 1)[1]
+        if not security.validate_file_extension(safe_name):
             raise ValueError('File type not allowed')
         return v
 
