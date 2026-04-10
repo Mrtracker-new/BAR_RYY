@@ -370,30 +370,57 @@ class Database:
                 """)
                 
                 # ── Migration: analytics_key (plaintext) → analytics_key_hash ─
-                # Phase 1 — ensure the hashed column exists.
+                # This block is fully idempotent — safe to run on every startup.
+                #
+                # Phase 1 — ensure the hashed column exists (no-op if already
+                # present; the initial CREATE TABLE already includes it for new
+                # deployments).
                 await conn.execute("""
                     ALTER TABLE bar_files
                     ADD COLUMN IF NOT EXISTS analytics_key_hash TEXT
                 """)
 
-                # Phase 2 — back-fill SHA-256 hash for rows that still carry
-                # the plaintext key.  PostgreSQL's sha256() returns bytea;
-                # encode(..., 'hex') converts it to a lowercase hex string.
-                await conn.execute("""
-                    UPDATE bar_files
-                    SET analytics_key_hash =
-                        encode(sha256(analytics_key::bytea), 'hex')
-                    WHERE analytics_key IS NOT NULL
-                      AND analytics_key_hash IS NULL
+                # Phase 2 — back-fill SHA-256 hash ONLY if the legacy plaintext
+                # column still exists.
+                #
+                # Critical guard: the CREATE TABLE above never includes
+                # `analytics_key`, so fresh databases never have it.
+                # Running UPDATE … SET … = sha256(analytics_key::bytea) on a
+                # table without that column raises
+                #   "column analytics_key does not exist"
+                # which previously crashed _init_postgres() and caused the
+                # SQLite fallback.  We query information_schema first to decide
+                # whether the back-fill is needed at all.
+                legacy_col_exists: bool = await conn.fetchval("""
+                    SELECT EXISTS (
+                        SELECT 1
+                        FROM   information_schema.columns
+                        WHERE  table_name  = 'bar_files'
+                          AND  column_name = 'analytics_key'
+                    )
                 """)
 
-                # Phase 3 — drop the old plaintext column.
-                # We confirm the hash column is populated before dropping to
-                # prevent any data loss on a partial migration.
-                await conn.execute("""
-                    ALTER TABLE bar_files
-                    DROP COLUMN IF EXISTS analytics_key
-                """)
+                if legacy_col_exists:
+                    # Back-fill rows that have the plaintext key but no hash yet.
+                    await conn.execute("""
+                        UPDATE bar_files
+                        SET    analytics_key_hash =
+                                   encode(sha256(analytics_key::bytea), 'hex')
+                        WHERE  analytics_key      IS NOT NULL
+                          AND  analytics_key_hash IS NULL
+                    """)
+                    print("✅ Migration: back-filled analytics_key_hash from plaintext column")
+
+                    # Phase 3 — drop the old plaintext column now that every row
+                    # has a hash.  DROP COLUMN IF EXISTS is a no-op if it was
+                    # already removed by a prior run.
+                    await conn.execute("""
+                        ALTER TABLE bar_files
+                        DROP COLUMN IF EXISTS analytics_key
+                    """)
+                    print("✅ Migration: dropped plaintext analytics_key column")
+                # If legacy_col_exists is False the table was created fresh with
+                # only analytics_key_hash — no migration work needed.
 
             print("✅ PostgreSQL database initialized")
         except Exception as e:
