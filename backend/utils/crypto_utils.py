@@ -311,10 +311,9 @@ def unpack_bar_file(bar_data: bytes, password: str = None) -> tuple:
         # Verify password FIRST if password_hash exists (before key derivation)
         # This prevents false "tampering detected" errors when password is wrong
         if "password_hash" in metadata:
-            import hashlib
             provided_hash = hashlib.sha256(password.encode()).hexdigest()
             stored_hash = metadata["password_hash"]
-            if provided_hash != stored_hash:
+            if not hmac.compare_digest(provided_hash, stored_hash):
                 raise ValueError("Invalid password")
         
         # Get salt from file
