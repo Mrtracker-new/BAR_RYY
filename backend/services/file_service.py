@@ -116,22 +116,47 @@ class FileService:
         
         return None
     
-    def find_uploaded_file(self, filename: str) -> Optional[str]:
+    def resolve_temp_file(self, temp_filename: str) -> Optional[str]:
         """
-        Find an uploaded file by its original filename.
-        
+        Resolve a temp_filename token to an absolute filesystem path.
+
+        This is the secure replacement for the old ``find_uploaded_file``
+        method.  Instead of scanning the upload directory and doing a
+        suffix match (which is vulnerable to filename collision / confused
+        deputy), we construct the path directly from the UUID-prefixed token
+        and verify two invariants:
+
+        1. **Path containment** — the resolved path must reside inside
+           ``upload_dir``; this prevents path-traversal attacks even if a
+           malformed token somehow survived Pydantic validation.
+        2. **File existence** — the file must actually be present on disk;
+           this avoids leaking information about whether a path exists
+           anywhere outside the upload directory.
+
         Args:
-            filename: Original filename to search for
-            
+            temp_filename: The full ``<uuid>__<safe_filename>`` token
+                           returned by /upload and validated by
+                           ``SealRequest.validate_temp_filename``.
+
         Returns:
-            Full path to the file or None if not found
+            Absolute path string if the file exists inside upload_dir,
+            ``None`` otherwise.
         """
-        # Look for file that ends with __{original_filename}
-        for file in os.listdir(self.upload_dir):
-            if file.endswith(f"__{filename}"):
-                return os.path.join(self.upload_dir, file)
-        
-        return None
+        # Construct the candidate path without any directory traversal.
+        # os.path.join + os.path.realpath ensures symlinks are resolved too.
+        candidate = os.path.realpath(
+            os.path.join(self.upload_dir, temp_filename)
+        )
+        # Containment check: the resolved path must start with the real
+        # upload directory.  os.sep suffix avoids a prefix-collision where
+        # upload_dir="/uploads" incorrectly allows "/uploads_evil/...".
+        real_upload_dir = os.path.realpath(self.upload_dir)
+        if not candidate.startswith(real_upload_dir + os.sep) and \
+                candidate != real_upload_dir:
+            return None
+        if not os.path.isfile(candidate):
+            return None
+        return candidate
     
     def get_bar_file_path(self, bar_id: str) -> Optional[str]:
         """
