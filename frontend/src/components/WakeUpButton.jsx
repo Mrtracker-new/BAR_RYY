@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Loader, CheckCircle, XCircle, Power, Clock } from "lucide-react";
 
-const WakeUpButton = () => {
+const WakeUpButton = ({ compact = false }) => {
     const [status, setStatus] = useState("idle"); // idle, loading, success, error, cooldown
     const [cooldownTime, setCooldownTime] = useState(0);
 
@@ -157,20 +157,21 @@ const WakeUpButton = () => {
     };
 
     const getButtonStyles = () => {
-        const baseStyles =
-            "relative w-full sm:w-auto sm:min-w-[180px] px-8 py-3.5 rounded-xl font-semibold text-lg transition-all duration-500 flex items-center justify-center overflow-hidden group";
+    const baseStyles = compact
+        ? "relative flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all duration-200 overflow-hidden"
+        : "relative w-full sm:w-auto sm:min-w-[160px] px-6 py-3.5 rounded-xl font-semibold text-sm transition-all duration-200 flex items-center justify-center overflow-hidden";
 
         switch (status) {
             case "loading":
-                return `${baseStyles} bg-amber-500/10 border border-amber-500/30 text-amber-400 backdrop-blur-md shadow-lg shadow-amber-500/10 animate-pulse cursor-wait`;
+                return `${baseStyles} bg-amber-500/8 border border-amber-500/25 text-amber-400 backdrop-blur-md cursor-wait animate-pulse`;
             case "success":
-                return `${baseStyles} bg-green-500/10 border border-green-500/30 text-green-400 backdrop-blur-md shadow-lg shadow-green-500/10 cursor-default`;
+                return `${baseStyles} bg-green-500/8 border border-green-500/25 text-green-400 backdrop-blur-md cursor-default`;
             case "error":
-                return `${baseStyles} bg-red-500/10 border border-red-500/30 text-red-400 backdrop-blur-md shadow-lg shadow-red-500/10 hover:bg-red-500/20`;
+                return `${baseStyles} bg-red-500/8 border border-red-500/25 text-red-400 backdrop-blur-md hover:bg-red-500/12`;
             case "cooldown":
-                return `${baseStyles} bg-blue-500/10 border border-blue-500/30 text-blue-400 backdrop-blur-md shadow-lg shadow-blue-500/10 cursor-not-allowed`;
+                return `${baseStyles} bg-white/3 border border-white/8 text-zinc-500 backdrop-blur-md cursor-not-allowed`;
             default:
-                return `${baseStyles} bg-white/5 border border-white/10 text-white backdrop-blur-md hover:bg-white/10 hover:border-white/20 hover:shadow-lg hover:shadow-white/5`;
+                return `${baseStyles} bg-white/3 border border-white/8 text-zinc-400 backdrop-blur-md hover:bg-white/6 hover:border-white/12 hover:text-white`;
         }
     };
 

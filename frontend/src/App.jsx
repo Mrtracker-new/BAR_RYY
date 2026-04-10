@@ -14,6 +14,10 @@ import {
   Clock,
   Zap,
   Loader,
+  CheckCircle2,
+  ArrowLeft,
+  Github,
+  ExternalLink,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import FileUpload from "./components/FileUpload";
@@ -28,19 +32,545 @@ import SEOContent from "./components/SEOContent";
 import LandingPage from "./components/LandingPage";
 import ErrorModal from "./components/ErrorModal";
 
-// Wrapper component for share page route
+/* ─────────────────────────────────────────────
+   Constants
+───────────────────────────────────────────── */
+const EASE = [0.16, 1, 0.3, 1];
+
+/* ─────────────────────────────────────────────
+   Route wrapper
+───────────────────────────────────────────── */
 const SharePageWrapper = () => {
   const { token } = useParams();
   return <SharePage token={token} />;
 };
 
-// Main app component
+/* ─────────────────────────────────────────────
+   Shared Navbar
+───────────────────────────────────────────── */
+function AppNav({ showDecrypt, onToggleDecrypt }) {
+  return (
+    <nav className="navbar">
+      <div
+        className="container-app"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          width: "100%",
+          margin: "0 auto",
+        }}
+      >
+        {/* Logo */}
+        <a
+          href="/"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.625rem",
+            textDecoration: "none",
+            color: "inherit",
+          }}
+          className="group"
+        >
+          <div
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: "0.5rem",
+              background: "rgba(232,160,32,0.1)",
+              border: "1px solid rgba(232,160,32,0.2)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "background 0.25s ease",
+            }}
+            className="group-hover:bg-amber-500/20"
+          >
+            <PackageOpen size={16} style={{ color: "#E8A020" }} />
+          </div>
+          <span
+            style={{
+              fontSize: "0.9375rem",
+              fontWeight: 600,
+              letterSpacing: "-0.02em",
+              color: "#d0d0d0",
+            }}
+          >
+            BAR Web
+          </span>
+        </a>
+
+        {/* Actions */}
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <button
+            onClick={onToggleDecrypt}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.375rem",
+              padding: "0.375rem 0.875rem",
+              fontSize: "0.8125rem",
+              fontWeight: 500,
+              color: showDecrypt ? "#E8A020" : "#888888",
+              background: showDecrypt ? "rgba(232,160,32,0.08)" : "transparent",
+              border: `1px solid ${showDecrypt ? "rgba(232,160,32,0.25)" : "rgba(255,255,255,0.07)"}`,
+              borderRadius: "0.5rem",
+              cursor: "pointer",
+              transition: "all 0.2s ease",
+            }}
+            className="hover:text-white hover:bg-white/5 hover:border-white/10"
+          >
+            {showDecrypt ? (
+              <>
+                <ArrowLeft size={13} />
+                Create
+              </>
+            ) : (
+              <>
+                <Lock size={13} />
+                Decrypt
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </nav>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   Section label
+───────────────────────────────────────────── */
+function SectionLabel({ icon: Icon, label, color = "#E8A020" }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "0.5rem",
+        marginBottom: "1rem",
+      }}
+    >
+      <div
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: "0.375rem",
+          background: `${color}14`,
+          border: `1px solid ${color}22`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Icon size={13} style={{ color }} />
+      </div>
+      <span
+        style={{
+          fontSize: "0.8125rem",
+          fontWeight: 600,
+          color: "#888888",
+          letterSpacing: "-0.01em",
+        }}
+      >
+        {label}
+      </span>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   Preview / container info card
+───────────────────────────────────────────── */
+function ContainerPreview({ uploadedFile, rules }) {
+  const rows = [
+    {
+      label: "Status",
+      value: <span style={{ color: "#22C55E", fontWeight: 600, fontSize: "0.8125rem" }}>Ready to seal</span>,
+    },
+    { label: "File", value: uploadedFile?.name, truncate: true },
+    {
+      label: "Storage",
+      value: rules.storageMode === "server" ? "Server-Side" : "Client-Side",
+    },
+    {
+      label: "Expiry",
+      value:
+        rules.expiryMinutes > 0
+          ? `${rules.expiryValue} ${rules.expiryUnit}`
+          : "Never",
+    },
+    {
+      label: "Password",
+      value: rules.password ? "Protected ✓" : "None",
+    },
+    ...(rules.storageMode === "server"
+      ? [
+          {
+            label: "Max Views",
+            value: rules.maxViews,
+          },
+        ]
+      : []),
+  ];
+
+  return (
+    <div
+      style={{
+        borderRadius: "0.875rem",
+        border: "1px solid rgba(255,255,255,0.07)",
+        background: "#0f0f0f",
+        overflow: "hidden",
+        marginTop: "1rem",
+      }}
+    >
+      <div
+        style={{
+          padding: "0.875rem 1rem",
+          borderBottom: "1px solid rgba(255,255,255,0.05)",
+          display: "flex",
+          alignItems: "center",
+          gap: "0.5rem",
+        }}
+      >
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            background: "#22C55E",
+            boxShadow: "0 0 6px #22C55E",
+            animation: "pulse 2s infinite",
+          }}
+        />
+        <span
+          style={{
+            fontSize: "0.75rem",
+            fontWeight: 600,
+            color: "#666666",
+            letterSpacing: "0.04em",
+            textTransform: "uppercase",
+          }}
+        >
+          Container Preview
+        </span>
+      </div>
+      <div style={{ padding: "0.625rem 0" }}>
+        {rows.map(({ label, value, truncate }) => (
+          <div
+            key={label}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "0.4375rem 1rem",
+              gap: "0.5rem",
+            }}
+          >
+            <span style={{ fontSize: "0.75rem", color: "#444444", flexShrink: 0 }}>
+              {label}
+            </span>
+            <span
+              style={{
+                fontSize: "0.8125rem",
+                color: "#aaaaaa",
+                fontFamily: "'JetBrains Mono', monospace",
+                ...(truncate
+                  ? {
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      maxWidth: "60%",
+                    }
+                  : {}),
+              }}
+            >
+              {value}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   Seal button
+───────────────────────────────────────────── */
+function SealButton({ onClick, disabled, isSealing }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="btn-primary"
+      style={{
+        width: "100%",
+        padding: "0.875rem",
+        fontSize: "0.9375rem",
+        borderRadius: "0.75rem",
+        justifyContent: "center",
+        marginTop: "1.25rem",
+        opacity: disabled ? 0.4 : 1,
+        cursor: disabled ? "not-allowed" : "pointer",
+        transform: "none",
+      }}
+    >
+      {isSealing ? (
+        <>
+          <Loader size={16} style={{ animation: "spin 1s linear infinite" }} />
+          Sealing container…
+        </>
+      ) : (
+        <>
+          <Lock size={16} />
+          Seal &amp; Generate .BAR
+        </>
+      )}
+    </button>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   Success / result card
+───────────────────────────────────────────── */
+function ResultCard({ barResult, onDownload, onAnalytics, onReset, showToast }) {
+  const isServer = barResult.storage_mode === "server";
+  const shareUrl = `${window.location.origin}/share/${barResult.access_token}`;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.97 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.5, ease: EASE }}
+      style={{
+        maxWidth: 520,
+        margin: "0 auto",
+        borderRadius: "1rem",
+        border: "1px solid rgba(34,197,94,0.15)",
+        background: "#0f0f0f",
+        overflow: "hidden",
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          padding: "1.75rem 1.5rem 1.25rem",
+          textAlign: "center",
+          borderBottom: "1px solid rgba(255,255,255,0.05)",
+        }}
+      >
+        <div
+          style={{
+            width: 52,
+            height: 52,
+            borderRadius: "50%",
+            background: "rgba(34,197,94,0.1)",
+            border: "1px solid rgba(34,197,94,0.25)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            margin: "0 auto 1rem",
+          }}
+        >
+          <CheckCircle2 size={22} style={{ color: "#22C55E" }} />
+        </div>
+        <h2
+          style={{
+            fontSize: "1.125rem",
+            fontWeight: 700,
+            letterSpacing: "-0.02em",
+            color: "#e0e0e0",
+            marginBottom: "0.25rem",
+          }}
+        >
+          Container sealed
+        </h2>
+        <p style={{ fontSize: "0.8125rem", color: "#555555" }}>
+          {isServer
+            ? "Your file is secured on the server. Share the link below."
+            : "Download your .BAR file and send it to the recipient."}
+        </p>
+      </div>
+
+      {/* Metadata */}
+      <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem 1.5rem" }}>
+          <div>
+            <p style={{ fontSize: "0.6875rem", color: "#444444", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>
+              Mode
+            </p>
+            <p style={{ fontSize: "0.8125rem", color: isServer ? "#22C55E" : "#E8A020", fontWeight: 600 }}>
+              {isServer ? "Server-Side" : "Client-Side"}
+            </p>
+          </div>
+          <div>
+            <p style={{ fontSize: "0.6875rem", color: "#444444", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>
+              Created
+            </p>
+            <p style={{ fontSize: "0.8125rem", color: "#888888", fontFamily: "'JetBrains Mono', monospace" }}>
+              {new Date(barResult.metadata.created_at).toLocaleString()}
+            </p>
+          </div>
+          {isServer && (
+            <div>
+              <p style={{ fontSize: "0.6875rem", color: "#444444", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>
+                Max Views
+              </p>
+              <p style={{ fontSize: "0.8125rem", color: "#aaaaaa", fontFamily: "'JetBrains Mono', monospace" }}>
+                {barResult.metadata.max_views}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div style={{ padding: "1.125rem 1.25rem", display: "flex", flexDirection: "column", gap: "0.625rem" }}>
+        {isServer ? (
+          <>
+            {/* Share link */}
+            <div
+              style={{
+                borderRadius: "0.625rem",
+                border: "1px solid rgba(255,255,255,0.07)",
+                background: "#0c0c0c",
+                overflow: "hidden",
+              }}
+            >
+              <p
+                style={{
+                  fontSize: "0.6875rem",
+                  fontWeight: 600,
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
+                  color: "#444444",
+                  padding: "0.625rem 0.875rem 0.375rem",
+                }}
+              >
+                Shareable Link
+              </p>
+              <div style={{ display: "flex", alignItems: "center", padding: "0 0.875rem 0.625rem", gap: "0.5rem" }}>
+                <input
+                  readOnly
+                  value={shareUrl}
+                  style={{
+                    flex: 1,
+                    background: "transparent",
+                    border: "none",
+                    outline: "none",
+                    fontSize: "0.8125rem",
+                    color: "#888888",
+                    fontFamily: "'JetBrains Mono', monospace",
+                    minWidth: 0,
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(shareUrl);
+                    showToast("Link copied!", "success");
+                  }}
+                  style={{
+                    flexShrink: 0,
+                    width: 30,
+                    height: 30,
+                    borderRadius: "0.375rem",
+                    background: "rgba(232,160,32,0.1)",
+                    border: "1px solid rgba(232,160,32,0.2)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    color: "#E8A020",
+                    transition: "background 0.2s ease",
+                  }}
+                  className="hover:bg-amber-500/20"
+                >
+                  <Copy size={13} />
+                </button>
+              </div>
+            </div>
+
+            {/* QR Code */}
+            {barResult.qr_code && (
+              <div style={{ display: "flex", justifyContent: "center", paddingTop: "0.25rem" }}>
+                <img
+                  src={barResult.qr_code}
+                  alt="QR Code"
+                  style={{
+                    width: 100,
+                    height: 100,
+                    borderRadius: "0.5rem",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    background: "#fff",
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Analytics */}
+            <button
+              onClick={onAnalytics}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "0.5rem",
+                padding: "0.6875rem",
+                borderRadius: "0.625rem",
+                border: "1px solid rgba(139,92,246,0.2)",
+                background: "rgba(139,92,246,0.06)",
+                color: "#A78BFA",
+                fontSize: "0.875rem",
+                fontWeight: 500,
+                cursor: "pointer",
+                transition: "background 0.2s ease",
+              }}
+              className="hover:bg-violet-500/10"
+            >
+              <BarChart3 size={15} />
+              View Analytics
+            </button>
+          </>
+        ) : (
+          <button onClick={onDownload} className="btn-primary" style={{ padding: "0.8125rem", justifyContent: "center" }}>
+            <Download size={16} />
+            Download .BAR File
+          </button>
+        )}
+
+        {/* Reset */}
+        <button
+          onClick={onReset}
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            color: "#444444",
+            fontSize: "0.8125rem",
+            fontWeight: 500,
+            padding: "0.5rem",
+            transition: "color 0.2s ease",
+            textAlign: "center",
+          }}
+          className="hover:text-zinc-300"
+        >
+          Seal another file
+        </button>
+      </div>
+    </motion.div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   Main App
+───────────────────────────────────────────── */
 function MainApp() {
   const [uploadedFile, setUploadedFile] = useState(null);
   const [fileInfo, setFileInfo] = useState(null);
   const [filePreview, setFilePreview] = useState(null);
   const [rules, setRules] = useState({
-    storageMode: "client", // 'client' or 'server'
+    storageMode: "client",
     maxViews: 1,
     expiryMinutes: 0,
     expiryValue: 0,
@@ -48,10 +578,10 @@ function MainApp() {
     password: "",
     webhookUrl: "",
     viewOnly: false,
-    requireOtp: false, // 2FA
-    otpEmail: "", // Recipient's email for OTP
-    viewRefreshMinutes: 0, // View refresh threshold
-    autoRefreshSeconds: 0 // Auto-refresh interval
+    requireOtp: false,
+    otpEmail: "",
+    viewRefreshMinutes: 0,
+    autoRefreshSeconds: 0,
   });
   const [barResult, setBarResult] = useState(null);
   const [isSealing, setIsSealing] = useState(false);
@@ -60,42 +590,29 @@ function MainApp() {
   const [showDecrypt, setShowDecrypt] = useState(false);
   const [error, setError] = useState(null);
 
-  const showToast = (message, type = "success") => {
-    setToast({ message, type });
-  };
+  const showToast = (message, type = "success") => setToast({ message, type });
 
   const handleFileSelect = async (file) => {
     setError(null);
     const formData = new FormData();
     formData.append("file", file);
-
     try {
       const response = await axios.post("/upload", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
-
       setUploadedFile(file);
       setFileInfo(response.data);
       setFilePreview(response.data.preview || null);
     } catch (err) {
       let errorMessage = "Failed to upload file";
-
       if (err.response?.data?.detail) {
         const detail = err.response.data.detail;
-
-        // Pydantic validation errors return an array of error objects
-        if (Array.isArray(detail)) {
-          errorMessage = detail
-            .map(error => error.msg)
-            .join("; ");
-        } else {
-          // Simple string error
-          errorMessage = detail;
-        }
+        errorMessage = Array.isArray(detail)
+          ? detail.map((e) => e.msg).join("; ")
+          : detail;
       } else if (err.message) {
         errorMessage += ": " + err.message;
       }
-
       setError(errorMessage);
     }
   };
@@ -109,18 +626,11 @@ function MainApp() {
   };
 
   const handleSealContainer = async () => {
-    if (!fileInfo) {
-      setError("No file uploaded");
-      return;
-    }
-
+    if (!fileInfo) { setError("No file uploaded"); return; }
     setIsSealing(true);
     setError(null);
-
     try {
-      // Simulate sealing delay for better UX
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
+      await new Promise((r) => setTimeout(r, 1800));
       const sealData = {
         temp_filename: fileInfo.temp_filename,
         max_views: rules.maxViews,
@@ -132,34 +642,22 @@ function MainApp() {
         require_otp: rules.requireOtp || false,
         otp_email: (rules.otpEmail && rules.otpEmail.trim()) || null,
         view_refresh_minutes: rules.viewRefreshMinutes || 0,
-        auto_refresh_seconds: rules.autoRefreshSeconds || 0
+        auto_refresh_seconds: rules.autoRefreshSeconds || 0,
       };
-
       const response = await axios.post("/seal", sealData);
       setBarResult(response.data);
-
-      // Clear uploaded file state after successful seal
       setUploadedFile(null);
       setFileInfo(null);
     } catch (err) {
       let errorMessage = "Failed to seal container";
-
       if (err.response?.data?.detail) {
         const detail = err.response.data.detail;
-
-        // Pydantic validation errors return an array of error objects
-        if (Array.isArray(detail)) {
-          errorMessage = detail
-            .map(error => error.msg)
-            .join("; ");
-        } else {
-          // Simple string error
-          errorMessage = detail;
-        }
+        errorMessage = Array.isArray(detail)
+          ? detail.map((e) => e.msg).join("; ")
+          : detail;
       } else if (err.message) {
         errorMessage += ": " + err.message;
       }
-
       setError(errorMessage);
     } finally {
       setIsSealing(false);
@@ -167,15 +665,12 @@ function MainApp() {
   };
 
   const handleDownloadBar = () => {
-    if (barResult && barResult.bar_data) {
-      // Decode base64 bar data
+    if (barResult?.bar_data) {
       const binaryString = atob(barResult.bar_data);
       const bytes = new Uint8Array(binaryString.length);
       for (let i = 0; i < binaryString.length; i++) {
         bytes[i] = binaryString.charCodeAt(i);
       }
-
-      // Create blob and download
       const blob = new Blob([bytes], { type: "application/octet-stream" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -205,68 +700,144 @@ function MainApp() {
       requireOtp: false,
       otpEmail: "",
       viewRefreshMinutes: 0,
-      autoRefreshSeconds: 0
+      autoRefreshSeconds: 0,
     });
   };
 
   return (
-    <div className="min-h-screen bg-dark-900 text-white font-sans selection:bg-gold-500/30 selection:text-gold-200 overflow-x-hidden relative">
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "#080808",
+        color: "#f0f0f0",
+        overflowX: "hidden",
+        position: "relative",
+      }}
+    >
       <SEO />
       <ContainerAnimation isSealing={isSealing} />
 
-      {/* Modern Subtle Background */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-0 left-0 w-full h-[500px] bg-gradient-to-b from-amber-500/5 to-transparent opacity-60" />
+      {/* Subtle ambient background */}
+      <div
+        aria-hidden="true"
+        style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0 }}
+      >
+        <div
+          className="bg-grid"
+          style={{ position: "absolute", inset: 0, opacity: 0.5 }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: "80vw",
+            height: "40vh",
+            background:
+              "radial-gradient(ellipse at top, rgba(232,160,32,0.04) 0%, transparent 60%)",
+          }}
+        />
       </div>
-      <div className="fixed inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none z-0"></div>
 
-      {/* Header */}
-      <header className="fixed top-0 w-full z-50 border-b border-white/5 bg-[#0d0d0d]/80 backdrop-blur-md">
-        <div className="container mx-auto px-4 sm:px-6 py-4">
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center space-x-3 cursor-pointer group" onClick={() => window.location.href = '/'}>
-              <div className="p-2 bg-amber-500/10 rounded-lg group-hover:bg-amber-500/20 transition-colors">
-                <PackageOpen className="text-amber-500" size={24} />
-              </div>
-              <div>
-                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-white">
-                  BAR Web
-                </h1>
-              </div>
+      {/* Navbar */}
+      <AppNav
+        showDecrypt={showDecrypt}
+        onToggleDecrypt={() => setShowDecrypt((v) => !v)}
+      />
+
+      {/* Error modal */}
+      <ErrorModal error={error} onClose={() => setError(null)} />
+
+      {/* Main */}
+      <main
+        style={{
+          position: "relative",
+          zIndex: 1,
+          paddingTop: "5rem",
+          paddingBottom: "4rem",
+        }}
+      >
+        <div className="container-app" style={{ margin: "0 auto" }}>
+          {showDecrypt ? (
+            <DecryptPage onBack={() => setShowDecrypt(false)} />
+          ) : barResult ? (
+            /* ── SUCCESS STATE ── */
+            <div style={{ paddingTop: "2rem" }}>
+              <ResultCard
+                barResult={barResult}
+                onDownload={handleDownloadBar}
+                onAnalytics={() => setShowAnalytics(true)}
+                onReset={handleReset}
+                showToast={showToast}
+              />
             </div>
-            <button
-              onClick={() => setShowDecrypt(!showDecrypt)}
-              className="px-4 py-2 text-sm font-medium bg-white/5 hover:bg-white/10 text-amber-500 border border-amber-500/20 hover:border-amber-500/50 rounded-lg transition-all"
+          ) : (
+            /* ── MAIN FORM ── */
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, ease: EASE }}
             >
-              {showDecrypt ? "📦 Create New" : "🔓 Decrypt File"}
-            </button>
-          </div>
-        </div>
-      </header>
+              {/* Page title row */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-end",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: "0.5rem",
+                  marginBottom: "1.75rem",
+                  paddingTop: "1rem",
+                }}
+              >
+                <div>
+                  <p
+                    style={{
+                      fontSize: "0.75rem",
+                      fontWeight: 600,
+                      letterSpacing: "0.06em",
+                      textTransform: "uppercase",
+                      color: "#E8A020",
+                      marginBottom: "0.25rem",
+                    }}
+                  >
+                    Encrypt &amp; Seal
+                  </p>
+                  <h1
+                    style={{
+                      fontSize: "clamp(1.25rem, 3vw, 1.75rem)",
+                      fontWeight: 700,
+                      letterSpacing: "-0.03em",
+                      color: "#d0d0d0",
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    Create a sealed container
+                  </h1>
+                </div>
+              </div>
 
-      {/* Main Content */}
-      <main className="container relative z-10 mx-auto px-4 sm:px-6 lg:px-8 py-24 sm:py-32">
-        {showDecrypt ? (
-          <DecryptPage onBack={() => setShowDecrypt(false)} />
-        ) : (
-          <div className="relative">
-            {/* Error Modal - Glassmorphic Popup */}
-            <ErrorModal error={error} onClose={() => setError(null)} />
-
-            {!barResult ? (
-              <div className="grid lg:grid-cols-5 gap-6 sm:gap-8 max-w-7xl mx-auto">
-                {/* Left Column */}
-                <div className="lg:col-span-3 space-y-6">
-                  <div className="bg-zinc-900/50 backdrop-blur-sm rounded-2xl p-6 border border-white/5 relative">
-                    <div className="flex items-center space-x-3 mb-5">
-                      <div className="p-2 bg-amber-500/10 rounded-lg border border-amber-500/20">
-                        <Upload className="text-amber-500" size={20} />
-                      </div>
-                      <h2 className="text-lg font-semibold text-white">
-                        Encrypted Upload
-                      </h2>
-                    </div>
-
+              {/* Two-column layout */}
+              <div
+                style={{
+                  display: "grid",
+                  gap: "1rem",
+                }}
+                className="grid-cols-1 lg:grid-cols-[3fr_2fr]"
+              >
+                {/* ── Left column ── */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                  {/* Upload card */}
+                  <div
+                    style={{
+                      borderRadius: "0.875rem",
+                      border: "1px solid rgba(255,255,255,0.07)",
+                      background: "#0f0f0f",
+                      padding: "1.25rem",
+                    }}
+                  >
+                    <SectionLabel icon={Upload} label="File Upload" />
                     <FileUpload
                       onFileSelect={handleFileSelect}
                       uploadedFile={uploadedFile}
@@ -275,240 +846,57 @@ function MainApp() {
                     />
                   </div>
 
-                  {!uploadedFile && (
-                    <div className="bg-zinc-900/30 rounded-2xl p-6 border border-white/5">
-                      <h3 className="text-lg font-semibold text-zinc-300 mb-4">
-                        Key Features
-                      </h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="flex items-start space-x-3 p-3 bg-white/5 rounded-lg border border-white/5">
-                          <Shield className="text-green-500/80 flex-shrink-0 mt-0.5" size={20} />
-                          <div>
-                            <h4 className="font-medium text-zinc-200 text-sm">AES-256 Encryption</h4>
-                            <p className="text-zinc-500 text-xs mt-1">Military-grade protection</p>
-                          </div>
-                        </div>
-                        <div className="flex items-start space-x-3 p-3 bg-white/5 rounded-lg border border-white/5">
-                          <Zap className="text-amber-500/80 flex-shrink-0 mt-0.5" size={20} />
-                          <div>
-                            <h4 className="font-medium text-zinc-200 text-sm">Self-Destruct</h4>
-                            <p className="text-zinc-500 text-xs mt-1">Auto-delete after viewing</p>
-                          </div>
-                        </div>
-                        <div className="flex items-start space-x-3 p-3 bg-white/5 rounded-lg border border-white/5">
-                          <Lock className="text-purple-500/80 flex-shrink-0 mt-0.5" size={20} />
-                          <div>
-                            <h4 className="font-medium text-zinc-200 text-sm">Pass Protection</h4>
-                            <p className="text-zinc-500 text-xs mt-1">Zero-knowledge access</p>
-                          </div>
-                        </div>
-                        <div className="flex items-start space-x-3 p-3 bg-white/5 rounded-lg border border-white/5">
-                          <Clock className="text-blue-500/80 flex-shrink-0 mt-0.5" size={20} />
-                          <div>
-                            <h4 className="font-medium text-zinc-200 text-sm">Time Expiry</h4>
-                            <p className="text-zinc-500 text-xs mt-1">Set custom time limits</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {uploadedFile && (
-                    <div className="bg-zinc-900/50 rounded-2xl p-6 border border-amber-500/20 shadow-lg shadow-amber-500/5">
-                      <div className="flex items-center space-x-2 mb-5">
-                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                        <h3 className="text-base font-bold text-amber-500">
-                          Container Preview
-                        </h3>
-                      </div>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between py-1 border-b border-white/5">
-                          <span className="text-zinc-500">Status</span>
-                          <span className="text-green-500 font-medium">Ready to Seal</span>
-                        </div>
-                        <div className="flex justify-between py-1 border-b border-white/5">
-                          <span className="text-zinc-500">Storage</span>
-                          <span className="text-zinc-200">
-                            {rules.storageMode === "server" ? "Server-Side" : "Client-Side"}
-                          </span>
-                        </div>
-                        <div className="flex justify-between py-1 border-b border-white/5">
-                          <span className="text-zinc-500">File</span>
-                          <span className="text-zinc-200 truncate max-w-[200px]">{uploadedFile.name}</span>
-                        </div>
-                        {rules.storageMode === "server" && (
-                          <div className="flex justify-between py-1 border-b border-white/5">
-                            <span className="text-zinc-500">Max Views</span>
-                            <span className="text-zinc-200">{rules.maxViews}</span>
-                          </div>
-                        )}
-                        <div className="flex justify-between py-1 border-b border-white/5">
-                          <span className="text-zinc-500">Expiry</span>
-                          <span className="text-zinc-200">
-                            {rules.expiryMinutes > 0 ? `${rules.expiryValue} ${rules.expiryUnit}` : "Never"}
-                          </span>
-                        </div>
-                        <div className="flex justify-between py-1 border-b border-white/5">
-                          <span className="text-zinc-500">Pass Protected</span>
-                          <span className="text-zinc-200">{rules.password ? "Yes" : "No"}</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Right Column - Rules */}
-                <div className="lg:col-span-2 bg-zinc-900/50 backdrop-blur-sm rounded-2xl p-6 border border-white/5 h-fit">
-                  <div className="flex items-center space-x-3 mb-5">
-                    <div className="p-2 bg-purple-500/10 rounded-lg">
-                      <AlertCircle className="text-purple-400" size={20} />
-                    </div>
-                    <h2 className="text-lg font-semibold text-white">
-                      Control Center
-                    </h2>
-                  </div>
-
-                  <RulesPanel
-                    rules={rules}
-                    onRulesChange={setRules}
-                  />
-
-                  <div className="mt-8 pt-6 border-t border-white/5">
-                    <button
-                      onClick={handleSealContainer}
-                      disabled={isSealing || !uploadedFile}
-                      className="w-full bg-amber-500 hover:bg-amber-400 text-black font-bold py-3.5 rounded-xl shadow-lg shadow-amber-500/10 transform transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
-                    >
-                      {isSealing ? (
-                        <>
-                          <Loader className="animate-spin" size={18} />
-                          <span>Sealing...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Lock size={18} />
-                          <span>Seal & Generate .BAR</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="max-w-2xl mx-auto">
-                <div className="border border-amber-500/30 rounded-2xl p-8 bg-zinc-900/80 backdrop-blur-sm shadow-2xl">
-                  <div className="text-center space-y-6">
-                    <div className="inline-block p-4 bg-amber-500/10 rounded-full mb-2">
-                      <PackageOpen className="text-amber-500" size={48} />
-                    </div>
-
-                    <h2 className="text-2xl font-bold text-white">
-                      Container Sealed Successfully!
-                    </h2>
-
-                    <div className="bg-black/40 rounded-xl p-6 space-y-3 border border-white/5 text-left">
-                      {barResult.storage_mode === "server" ? (
-                        <>
-                          <div className="flex justify-between items-center text-sm">
-                            <span className="text-zinc-500">Storage Mode</span>
-                            <span className="text-green-500 font-medium bg-green-500/10 px-2 py-0.5 rounded text-xs">Server-Side</span>
-                          </div>
-                          <div className="flex justify-between items-center text-sm">
-                            <span className="text-zinc-500">Max Views</span>
-                            <span className="text-zinc-200 font-mono">{barResult.metadata.max_views}</span>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div className="flex justify-between items-center text-sm">
-                            <span className="text-zinc-500">Storage Mode</span>
-                            <span className="text-amber-500 font-medium bg-amber-500/10 px-2 py-0.5 rounded text-xs">Client-Side</span>
-                          </div>
-                          <div className="flex justify-between items-center text-sm">
-                            <span className="text-zinc-500">Filename</span>
-                            <span className="text-zinc-200 font-mono text-xs">{barResult.bar_filename}</span>
-                          </div>
-                        </>
-                      )}
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-zinc-500">Created At</span>
-                        <span className="text-zinc-400 text-xs">
-                          {new Date(barResult.metadata.created_at).toLocaleString()}
-                        </span>
-                      </div>
-                    </div>
-
-                    {barResult.storage_mode === "server" ? (
-                      <>
-                        <div className="bg-zinc-800/50 border border-white/10 rounded-xl p-4 text-left">
-                          <label className="text-xs text-zinc-500 mb-2 block font-medium uppercase tracking-wider">
-                            Shareable Link
-                          </label>
-                          <div className="flex items-center space-x-2">
-                            <input
-                              type="text"
-                              value={`${window.location.origin}/share/${barResult.access_token}`}
-                              readOnly
-                              className="flex-1 px-3 py-2 bg-black/50 border border-white/10 rounded text-zinc-300 text-sm font-mono focus:outline-none focus:border-amber-500/50"
-                            />
-                            <button
-                              onClick={() => {
-                                navigator.clipboard.writeText(`${window.location.origin}/share/${barResult.access_token}`);
-                                showToast("Link copied to clipboard!", "success");
-                              }}
-                              className="p-2 bg-amber-500 hover:bg-amber-400 text-black rounded transition-colors"
-                            >
-                              <Copy size={18} />
-                            </button>
-                          </div>
-
-                          {barResult.qr_code && (
-                            <div className="mt-4 flex justify-center">
-                              <img src={barResult.qr_code} alt="QR Code" className="w-32 h-32 rounded-lg border border-white/10" />
-                            </div>
-                          )}
-                        </div>
-
-                        <button
-                          onClick={() => setShowAnalytics(true)}
-                          className="w-full py-3 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 text-purple-400 font-medium rounded-xl transition-all flex items-center justify-center space-x-2"
-                        >
-                          <BarChart3 size={18} />
-                          <span>View Analytics</span>
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        onClick={handleDownloadBar}
-                        className="w-full py-3.5 bg-amber-500 hover:bg-amber-400 text-black font-bold text-lg rounded-xl transition-all shadow-lg flex items-center justify-center space-x-2"
+                  {/* Container preview — shows when file is selected */}
+                  <AnimatePresence>
+                    {uploadedFile && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -8 }}
+                        transition={{ duration: 0.4, ease: EASE }}
                       >
-                        <Download size={20} />
-                        <span>Download .BAR File</span>
-                      </button>
+                        <ContainerPreview uploadedFile={uploadedFile} rules={rules} />
+                      </motion.div>
                     )}
+                  </AnimatePresence>
+                </div>
 
-                    <button
-                      onClick={handleReset}
-                      className="w-full py-3 text-zinc-500 hover:text-white transition-colors"
-                    >
-                      Create Another Container
-                    </button>
-                  </div>
+                {/* ── Right column ── */}
+                <div
+                  style={{
+                    borderRadius: "0.875rem",
+                    border: "1px solid rgba(255,255,255,0.07)",
+                    background: "#0f0f0f",
+                    padding: "1.25rem",
+                    height: "fit-content",
+                    position: "sticky",
+                    top: "4.5rem",
+                  }}
+                >
+                  <SectionLabel icon={Shield} label="Security Configuration" color="#8B5CF6" />
+                  <RulesPanel rules={rules} onRulesChange={setRules} />
+
+                  {/* Seal button */}
+                  <SealButton
+                    onClick={handleSealContainer}
+                    disabled={isSealing || !uploadedFile}
+                    isSealing={isSealing}
+                  />
                 </div>
               </div>
-            )}
 
-            {/* SEO Content Section - Only show when not in sealed state */}
-            {!barResult && !showDecrypt && (
-              <div className="mt-20 opacity-60 hover:opacity-100 transition-opacity duration-500">
-                <SEOContent />
-              </div>
-            )}
-          </div>
-        )}
+              {/* SEO content */}
+              {!barResult && (
+                <div style={{ marginTop: "4rem", opacity: 0.5 }}>
+                  <SEOContent />
+                </div>
+              )}
+            </motion.div>
+          )}
+        </div>
       </main>
 
-      {/* Toast Notifications */}
+      {/* Toast */}
       {toast && (
         <Toast
           message={toast.message}
@@ -517,8 +905,8 @@ function MainApp() {
         />
       )}
 
-      {/* Analytics Dashboard */}
-      {showAnalytics && barResult && barResult.access_token && barResult.analytics_key && (
+      {/* Analytics */}
+      {showAnalytics && barResult?.access_token && barResult?.analytics_key && (
         <AnalyticsDashboard
           token={barResult.access_token}
           analyticsKey={barResult.analytics_key}
@@ -527,19 +915,31 @@ function MainApp() {
       )}
 
       {/* Footer */}
-      <footer className="border-t border-dark-700 mt-12 sm:mt-20">
-        <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-6 text-center text-gray-500 text-xs sm:text-sm">
-          <p>BAR Web - Burn After Reading © 2025</p>
-          <p className="mt-1 sm:mt-2">
-            Secure file encryption with self-destruct capabilities
-          </p>
-        </div>
+      <footer
+        style={{
+          borderTop: "1px solid rgba(255,255,255,0.04)",
+          padding: "1.25rem",
+          textAlign: "center",
+          position: "relative",
+          zIndex: 1,
+        }}
+      >
+        <p
+          style={{
+            fontSize: "0.8125rem",
+            color: "#2a2a2a",
+          }}
+        >
+          BAR Web © 2025 — Secure file encryption with self-destruct
+        </p>
       </footer>
     </div>
   );
 }
 
-// App with routing
+/* ─────────────────────────────────────────────
+   App with routing
+───────────────────────────────────────────── */
 function App() {
   return (
     <Routes>

@@ -1,10 +1,41 @@
 import React from 'react';
 import { Eye, Clock, Lock, Webhook, Server, Download } from 'lucide-react';
 
+/* ─────────────────────────────────────────────
+   Small label above form sections
+───────────────────────────────────────────── */
+function FieldLabel({ children }) {
+  return (
+    <p
+      style={{
+        fontSize: '0.6875rem',
+        fontWeight: 600,
+        letterSpacing: '0.06em',
+        textTransform: 'uppercase',
+        color: '#555555',
+        marginBottom: '0.625rem',
+      }}
+    >
+      {children}
+    </p>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   Divider
+───────────────────────────────────────────── */
+function Divider() {
+  return (
+    <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', margin: '1.25rem 0' }} />
+  );
+}
+
+/* ─────────────────────────────────────────────
+   Main
+───────────────────────────────────────────── */
 const RulesPanel = ({ rules, onRulesChange }) => {
-  const handleMaxViewsChange = (value) => {
+  const handleMaxViewsChange = (value) =>
     onRulesChange({ ...rules, maxViews: parseInt(value) || 1 });
-  };
 
   const handleExpiryChange = (value, unit) => {
     const multipliers = { minutes: 1, hours: 60, days: 1440 };
@@ -12,79 +43,89 @@ const RulesPanel = ({ rules, onRulesChange }) => {
     onRulesChange({ ...rules, expiryMinutes: minutes, expiryUnit: unit, expiryValue: value });
   };
 
-  const handlePasswordChange = (value) => {
-    onRulesChange({ ...rules, password: value });
-  };
-
-  const handleWebhookChange = (value) => {
-    onRulesChange({ ...rules, webhookUrl: value });
-  };
-
   return (
-    <div className="space-y-6">
-      <div className="flex items-center space-x-3 mb-6">
-        <div className="h-6 w-1 bg-amber-500 rounded-full"></div>
-        <h2 className="text-lg font-semibold text-white tracking-wide">
-          Security Protocols
-        </h2>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
 
-      {/* Storage Mode */}
-      <div className="space-y-3">
-        <label className="text-xs font-medium text-amber-500 uppercase tracking-wider ml-1">Storage Configuration</label>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label className={`relative p-4 rounded-xl border transition-all cursor-pointer ${rules.storageMode === 'client'
-            ? 'bg-amber-500/10 border-amber-500/30'
-            : 'bg-white/5 border-white/5 hover:bg-white/10'
-            }`}>
-            <input
-              type="radio"
-              name="storageMode"
-              value="client"
-              checked={rules.storageMode === 'client' || !rules.storageMode}
-              onChange={(e) => onRulesChange({ ...rules, storageMode: 'client' })}
-              className="absolute opacity-0"
-            />
-            <div className="flex items-center space-x-3 mb-1">
-              <Download size={18} className={rules.storageMode === 'client' ? 'text-amber-500' : 'text-zinc-500'} />
-              <span className={`font-medium text-sm ${rules.storageMode === 'client' ? 'text-white' : 'text-zinc-400'}`}>Client-Side</span>
-            </div>
-            <p className="text-xs text-zinc-500">Download .bar file. View limits not guaranteed.</p>
-          </label>
-
-          <label className={`relative p-4 rounded-xl border transition-all cursor-pointer ${rules.storageMode === 'server'
-            ? 'bg-amber-500/10 border-amber-500/30'
-            : 'bg-white/5 border-white/5 hover:bg-white/10'
-            }`}>
-            <input
-              type="radio"
-              name="storageMode"
-              value="server"
-              checked={rules.storageMode === 'server'}
-              onChange={(e) => onRulesChange({ ...rules, storageMode: 'server' })}
-              className="absolute opacity-0"
-            />
-            <div className="flex items-center space-x-3 mb-1">
-              <Server size={18} className={rules.storageMode === 'server' ? 'text-amber-500' : 'text-zinc-500'} />
-              <span className={`font-medium text-sm ${rules.storageMode === 'server' ? 'text-white' : 'text-zinc-400'}`}>Server-Side</span>
-            </div>
-            <p className="text-xs text-zinc-500">Shareable link. Strict view limits & auto-delete.</p>
-          </label>
+      {/* ── Storage Mode ── */}
+      <div style={{ marginBottom: '1.25rem' }}>
+        <FieldLabel>Storage Mode</FieldLabel>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+          {[
+            {
+              value: 'client',
+              label: 'Client-Side',
+              sub: 'Download .bar file',
+              Icon: Download,
+            },
+            {
+              value: 'server',
+              label: 'Server-Side',
+              sub: 'Shareable link',
+              Icon: Server,
+            },
+          ].map(({ value, label, sub, Icon }) => {
+            const active = rules.storageMode === value || (!rules.storageMode && value === 'client');
+            return (
+              <label
+                key={value}
+                className={`radio-card${active ? ' active' : ''}`}
+                style={{ cursor: 'pointer' }}
+              >
+                <input
+                  type="radio"
+                  name="storageMode"
+                  value={value}
+                  checked={active}
+                  onChange={() => onRulesChange({ ...rules, storageMode: value })}
+                  style={{ display: 'none' }}
+                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                  <Icon
+                    size={13}
+                    style={{ color: active ? '#E8A020' : '#555555', flexShrink: 0 }}
+                  />
+                  <span
+                    style={{
+                      fontSize: '0.8125rem',
+                      fontWeight: 600,
+                      color: active ? '#e0e0e0' : '#666666',
+                    }}
+                  >
+                    {label}
+                  </span>
+                </div>
+                <p style={{ fontSize: '0.7rem', color: '#444444', lineHeight: 1.4 }}>
+                  {sub}
+                </p>
+              </label>
+            );
+          })}
         </div>
       </div>
 
-      <div className="border-t border-white/5 my-6"></div>
+      <Divider />
 
-      {/* Max Views - Only for Server-Side */}
+      {/* ── Max Views (server only) ── */}
       {rules.storageMode === 'server' ? (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <Eye className="text-zinc-500" size={16} />
-              <label className="text-sm font-medium text-zinc-300">Self-Destruct Limit</label>
+        <div style={{ marginBottom: '1.25rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+              <Eye size={13} style={{ color: '#555555' }} />
+              <FieldLabel>Self-Destruct Limit</FieldLabel>
             </div>
-            <span className="px-2 py-0.5 bg-amber-500/10 text-amber-500 text-xs font-mono rounded border border-amber-500/20">
-              {rules.maxViews} VIEW{rules.maxViews > 1 ? 'S' : ''}
+            <span
+              style={{
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                fontFamily: "'JetBrains Mono', monospace",
+                color: '#E8A020',
+                background: 'rgba(232,160,32,0.08)',
+                border: '1px solid rgba(232,160,32,0.18)',
+                borderRadius: '0.375rem',
+                padding: '0.125rem 0.5rem',
+              }}
+            >
+              {rules.maxViews} {rules.maxViews > 1 ? 'views' : 'view'}
             </span>
           </div>
           <input
@@ -93,120 +134,129 @@ const RulesPanel = ({ rules, onRulesChange }) => {
             max="10"
             value={rules.maxViews}
             onChange={(e) => handleMaxViewsChange(e.target.value)}
-            className="w-full h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-500"
+            style={{ width: '100%', marginBottom: 0 }}
           />
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.25rem' }}>
+            <span style={{ fontSize: '0.625rem', color: '#333333' }}>1</span>
+            <span style={{ fontSize: '0.625rem', color: '#333333' }}>10</span>
+          </div>
         </div>
       ) : (
-        <div className="p-3 rounded-lg bg-zinc-900 border border-white/5 text-center">
-          <p className="text-xs text-zinc-500">
-            Switch to Server-Side for <span className="text-zinc-300">Self-Destruct</span> limits.
+        <div
+          style={{
+            marginBottom: '1.25rem',
+            padding: '0.75rem',
+            borderRadius: '0.5rem',
+            background: 'rgba(255,255,255,0.02)',
+            border: '1px solid rgba(255,255,255,0.04)',
+            textAlign: 'center',
+          }}
+        >
+          <p style={{ fontSize: '0.75rem', color: '#444444' }}>
+            Switch to <span style={{ color: '#aaaaaa' }}>Server-Side</span> to set view limits
           </p>
         </div>
       )}
 
-      {/* Expiry Time */}
-      <div className="space-y-4 mt-6">
-        <label className="text-xs font-medium text-amber-500 uppercase tracking-wider ml-1">Auto-Expiration</label>
-        <div className="flex space-x-2">
+      {/* ── Auto-Expiry ── */}
+      <div style={{ marginBottom: '1.25rem' }}>
+        <FieldLabel>Auto-Expiration</FieldLabel>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
           <input
             type="number"
             min="0"
             value={rules.expiryValue || 0}
             onChange={(e) => handleExpiryChange(e.target.value, rules.expiryUnit || 'minutes')}
-            className="w-24 bg-zinc-900 border border-white/10 rounded-lg px-3 py-2 text-center text-white font-medium focus:border-amber-500/50 focus:outline-none focus:ring-1 focus:ring-amber-500/50 transition-all placeholder-zinc-700 sm:text-sm"
+            className="input-field"
+            style={{ width: '5rem', textAlign: 'center', flexShrink: 0 }}
             placeholder="0"
           />
           <select
             value={rules.expiryUnit || 'minutes'}
             onChange={(e) => handleExpiryChange(rules.expiryValue || 0, e.target.value)}
-            className="flex-1 bg-zinc-900 border border-white/10 rounded-lg px-3 py-2 text-zinc-300 text-sm focus:border-amber-500/50 focus:outline-none transition-all cursor-pointer"
+            className="input-field"
+            style={{ flex: 1, cursor: 'pointer' }}
           >
             <option value="minutes">Minutes</option>
             <option value="hours">Hours</option>
             <option value="days">Days</option>
           </select>
         </div>
+        {(rules.expiryMinutes || 0) === 0 && (
+          <p style={{ fontSize: '0.7rem', color: '#444444', marginTop: '0.375rem' }}>
+            Set to 0 to disable expiry
+          </p>
+        )}
       </div>
 
-      {/* Refresh Control - Only for Server-Side */}
+      {/* ── Refresh Control (server only) ── */}
       {rules.storageMode === 'server' && (
-        <div className="space-y-4 mt-6">
-          <label className="text-xs font-medium text-amber-500 uppercase tracking-wider ml-1">
-            Refresh Control
-          </label>
+        <>
+          <Divider />
+          <div style={{ marginBottom: '1.25rem' }}>
+            <FieldLabel>Refresh Control</FieldLabel>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.625rem' }}>
+              {[
+                {
+                  id: 'threshold',
+                  label: 'View Threshold',
+                  sub: 'Prevents rapid refresh',
+                  isActive:
+                    (rules.viewRefreshMinutes || 0) > 0 || !(rules.autoRefreshSeconds || 0),
+                  onSelect: () =>
+                    onRulesChange({
+                      ...rules,
+                      viewRefreshMinutes: rules.viewRefreshMinutes || 5,
+                      autoRefreshSeconds: 0,
+                    }),
+                },
+                {
+                  id: 'auto',
+                  label: 'Auto-Refresh',
+                  sub: 'Forces page reload',
+                  isActive: (rules.autoRefreshSeconds || 0) > 0,
+                  onSelect: () =>
+                    onRulesChange({
+                      ...rules,
+                      viewRefreshMinutes: 0,
+                      autoRefreshSeconds: rules.autoRefreshSeconds || 30,
+                    }),
+                },
+              ].map(({ id, label, sub, isActive, onSelect }) => (
+                <label
+                  key={id}
+                  className={`radio-card${isActive ? ' active' : ''}`}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <input
+                    type="radio"
+                    name="refreshControl"
+                    checked={isActive}
+                    onChange={onSelect}
+                    style={{ display: 'none' }}
+                  />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginBottom: '0.25rem' }}>
+                    <Clock size={12} style={{ color: isActive ? '#E8A020' : '#555555' }} />
+                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: isActive ? '#e0e0e0' : '#666666' }}>
+                      {label}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: '0.675rem', color: '#444444' }}>{sub}</p>
+                </label>
+              ))}
+            </div>
 
-          {/* Radio button selection */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <label className={`relative p-4 rounded-xl border transition-all cursor-pointer ${(rules.viewRefreshMinutes || 0) > 0 || !(rules.autoRefreshSeconds || 0)
-                ? 'bg-amber-500/10 border-amber-500/30'
-                : 'bg-white/5 border-white/5 hover:bg-white/10'
-              }`}>
-              <input
-                type="radio"
-                name="refreshControl"
-                checked={(rules.viewRefreshMinutes || 0) > 0 || !(rules.autoRefreshSeconds || 0)}
-                onChange={() => onRulesChange({
-                  ...rules,
-                  viewRefreshMinutes: (rules.viewRefreshMinutes || 5),
-                  autoRefreshSeconds: 0
-                })}
-                className="absolute opacity-0"
-              />
-              <div className="flex items-center space-x-3 mb-1">
-                <Clock size={18} className={
-                  (rules.viewRefreshMinutes || 0) > 0 || !(rules.autoRefreshSeconds || 0)
-                    ? 'text-amber-500'
-                    : 'text-zinc-500'
-                } />
-                <span className={`font-medium text-sm ${(rules.viewRefreshMinutes || 0) > 0 || !(rules.autoRefreshSeconds || 0)
-                    ? 'text-white'
-                    : 'text-zinc-400'
-                  }`}>View Refresh Threshold</span>
-              </div>
-              <p className="text-xs text-zinc-500">Prevents rapid refreshes from consuming views</p>
-            </label>
-
-            <label className={`relative p-4 rounded-xl border transition-all cursor-pointer ${(rules.autoRefreshSeconds || 0) > 0
-                ? 'bg-amber-500/10 border-amber-500/30'
-                : 'bg-white/5 border-white/5 hover:bg-white/10'
-              }`}>
-              <input
-                type="radio"
-                name="refreshControl"
-                checked={(rules.autoRefreshSeconds || 0) > 0}
-                onChange={() => onRulesChange({
-                  ...rules,
-                  viewRefreshMinutes: 0,
-                  autoRefreshSeconds: (rules.autoRefreshSeconds || 30)
-                })}
-                className="absolute opacity-0"
-              />
-              <div className="flex items-center space-x-3 mb-1">
-                <Clock size={18} className={
-                  (rules.autoRefreshSeconds || 0) > 0
-                    ? 'text-amber-500'
-                    : 'text-zinc-500'
-                } />
-                <span className={`font-medium text-sm ${(rules.autoRefreshSeconds || 0) > 0
-                    ? 'text-white'
-                    : 'text-zinc-400'
-                  }`}>Auto-Refresh Interval</span>
-              </div>
-              <p className="text-xs text-zinc-500">Forces automatic page reload</p>
-            </label>
-          </div>
-
-          {/* Show settings for selected option */}
-          {(rules.viewRefreshMinutes || 0) > 0 || !(rules.autoRefreshSeconds || 0) ? (
-            <div className="space-y-2">
+            {(rules.viewRefreshMinutes || 0) > 0 || !(rules.autoRefreshSeconds || 0) ? (
               <select
                 value={rules.viewRefreshMinutes || 0}
-                onChange={(e) => onRulesChange({
-                  ...rules,
-                  viewRefreshMinutes: parseInt(e.target.value),
-                  autoRefreshSeconds: 0
-                })}
-                className="w-full bg-zinc-900 border border-white/10 rounded-lg px-3 py-2 text-zinc-300 text-sm focus:border-amber-500/50 focus:outline-none transition-all cursor-pointer"
+                onChange={(e) =>
+                  onRulesChange({
+                    ...rules,
+                    viewRefreshMinutes: parseInt(e.target.value),
+                    autoRefreshSeconds: 0,
+                  })
+                }
+                className="input-field"
               >
                 <option value="0">Every access counts (default)</option>
                 <option value="1">1 minute</option>
@@ -215,112 +265,116 @@ const RulesPanel = ({ rules, onRulesChange }) => {
                 <option value="30">30 minutes</option>
                 <option value="60">1 hour</option>
               </select>
-              <p className="text-xs text-zinc-500 ml-1">
-                Same user within this window = counts as one view
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2">
+            ) : (
               <select
                 value={rules.autoRefreshSeconds || 0}
-                onChange={(e) => onRulesChange({
-                  ...rules,
-                  viewRefreshMinutes: 0,
-                  autoRefreshSeconds: parseInt(e.target.value)
-                })}
-                className="w-full bg-zinc-900 border border-white/10 rounded-lg px-3 py-2 text-zinc-300 text-sm focus:border-amber-500/50 focus:outline-none transition-all cursor-pointer"
+                onChange={(e) =>
+                  onRulesChange({
+                    ...rules,
+                    viewRefreshMinutes: 0,
+                    autoRefreshSeconds: parseInt(e.target.value),
+                  })
+                }
+                className="input-field"
               >
-                <option value="10">10 seconds (very strict)</option>
+                <option value="10">10 seconds (strict)</option>
                 <option value="30">30 seconds (recommended)</option>
                 <option value="60">1 minute</option>
                 <option value="120">2 minutes</option>
                 <option value="300">5 minutes</option>
               </select>
-              <p className="text-xs text-zinc-500 ml-1">
-                Page reloads automatically to ensure file disappears when expired
-              </p>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        </>
       )}
 
-      <div className="border-t border-white/5 my-6"></div>
+      <Divider />
 
-      {/* Advanced Options */}
-      <div className="space-y-5">
-        <div className="space-y-2">
-          <label className="flex items-center space-x-2 text-sm text-zinc-300 font-medium">
-            <Lock size={14} className="text-amber-500" />
-            <span>Password Protection</span>
-          </label>
+      {/* ── Advanced Options ── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+        {/* Password */}
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginBottom: '0.5rem' }}>
+            <Lock size={12} style={{ color: '#E8A020' }} />
+            <FieldLabel>Password Protection</FieldLabel>
+          </div>
           <input
             type="password"
             value={rules.password || ''}
-            onChange={(e) => handlePasswordChange(e.target.value)}
-            className="w-full bg-zinc-900 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-zinc-700 focus:border-amber-500/50 focus:outline-none transition-all text-sm"
-            placeholder="Optional access password..."
+            onChange={(e) => onRulesChange({ ...rules, password: e.target.value })}
+            className="input-field"
+            placeholder="Leave blank for no password"
             autoComplete="new-password"
           />
         </div>
 
-        <div className="space-y-2">
-          <label className="flex items-center space-x-2 text-sm text-zinc-300 font-medium">
-            <Webhook size={14} className="text-amber-500" />
-            <span>Tamper Prevention Webhook</span>
-          </label>
+        {/* Webhook */}
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginBottom: '0.5rem' }}>
+            <Webhook size={12} style={{ color: '#E8A020' }} />
+            <FieldLabel>Tamper Webhook</FieldLabel>
+          </div>
           <input
             type="url"
             value={rules.webhookUrl || ''}
-            onChange={(e) => handleWebhookChange(e.target.value)}
-            className="w-full bg-zinc-900 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-zinc-700 focus:border-amber-500/50 focus:outline-none transition-all text-sm"
-            placeholder="https://discord.com/api/webhooks/..."
+            onChange={(e) => onRulesChange({ ...rules, webhookUrl: e.target.value })}
+            className="input-field"
+            placeholder="https://discord.com/api/webhooks/…"
           />
         </div>
 
+        {/* Server-only toggles */}
         {rules.storageMode === 'server' && (
           <>
-            <label className="flex items-center space-x-3 p-3 rounded-lg bg-zinc-900 hover:bg-zinc-800 transition-colors cursor-pointer border border-transparent hover:border-white/5">
+            <label className="toggle-row">
               <input
                 type="checkbox"
                 checked={rules.viewOnly || false}
                 onChange={(e) => onRulesChange({ ...rules, viewOnly: e.target.checked })}
-                className="w-4 h-4 rounded border-zinc-600 bg-transparent text-amber-500 focus:ring-amber-500 focus:ring-offset-0"
+                style={{ marginTop: 1 }}
               />
-              <div className="flex flex-col">
-                <span className="text-sm text-zinc-300 font-medium">View Only Mode</span>
-                <span className="text-xs text-zinc-500">Recipients can view the file but cannot download it.</span>
+              <div>
+                <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#cccccc', marginBottom: '0.125rem' }}>
+                  View Only Mode
+                </p>
+                <p style={{ fontSize: '0.7rem', color: '#555555', lineHeight: 1.4 }}>
+                  Recipients can view but cannot download the file
+                </p>
               </div>
             </label>
 
-            <label className="flex items-center space-x-3 p-3 rounded-lg bg-zinc-900 hover:bg-zinc-800 transition-colors cursor-pointer border border-transparent hover:border-white/5">
+            <label className="toggle-row">
               <input
                 type="checkbox"
                 checked={rules.requireOtp || false}
                 onChange={(e) => onRulesChange({ ...rules, requireOtp: e.target.checked })}
-                className="w-4 h-4 rounded border-zinc-600 bg-transparent text-amber-500 focus:ring-amber-500 focus:ring-offset-0"
+                style={{ marginTop: 1 }}
               />
-              <span className="text-sm text-zinc-300">Require Email OTP (2FA)</span>
+              <div>
+                <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#cccccc', marginBottom: '0.125rem' }}>
+                  Require Email OTP (2FA)
+                </p>
+                <p style={{ fontSize: '0.7rem', color: '#555555', lineHeight: 1.4 }}>
+                  A 6-digit code sent to recipient's email
+                </p>
+              </div>
             </label>
 
             {rules.requireOtp && (
-              <div className="mt-2 ml-1">
+              <div style={{ marginTop: '-0.25rem' }}>
                 <input
                   type="email"
                   value={rules.otpEmail || ''}
                   onChange={(e) => onRulesChange({ ...rules, otpEmail: e.target.value })}
-                  className="w-full bg-zinc-900 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-zinc-700 focus:border-amber-500/50 focus:outline-none transition-all text-sm"
+                  className="input-field"
                   placeholder="recipient@example.com"
                   required={rules.requireOtp}
                 />
-                <p className="text-xs text-zinc-500 mt-1.5 ml-1">
-                  A 6-digit code will be sent to this email.
-                </p>
               </div>
             )}
           </>
         )}
       </div>
-
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import {
@@ -7,193 +7,563 @@ import {
   Lock,
   Clock,
   PackageOpen,
-  ChevronRight,
-  Sparkles,
+  ArrowRight,
+  Github,
+  ExternalLink,
+  Power,
 } from "lucide-react";
 import WakeUpButton from "./WakeUpButton";
 
+/* ─────────────────────────────────────────────
+   Animation variants
+───────────────────────────────────────────── */
+const EASE = [0.16, 1, 0.3, 1];
+
+const fadeUp = (delay = 0) => ({
+  initial: { opacity: 0, y: 20 },
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.65, ease: EASE, delay },
+});
+
+const fadeIn = (delay = 0) => ({
+  initial: { opacity: 0 },
+  animate: { opacity: 1 },
+  transition: { duration: 0.5, ease: EASE, delay },
+});
+
+/* ─────────────────────────────────────────────
+   Feature data
+───────────────────────────────────────────── */
+const FEATURES = [
+  {
+    icon: Shield,
+    accentColor: "#22C55E",
+    title: "AES-256 Encryption",
+    description:
+      "Military-grade symmetric encryption. Your data is sealed before it ever leaves your browser.",
+  },
+  {
+    icon: Zap,
+    accentColor: "#E8A020",
+    title: "Self-Destruct",
+    description:
+      "Files vanish permanently after the view limit or expiry window is reached. No traces remain.",
+  },
+  {
+    icon: Lock,
+    accentColor: "#8B5CF6",
+    title: "Zero Knowledge",
+    description:
+      "We never see your data. Only the recipient possesses the decryption key.",
+  },
+  {
+    icon: Clock,
+    accentColor: "#38BDF8",
+    title: "Custom Expiry",
+    description:
+      "Define exact time-to-live windows. Minutes, hours, or days — your rules.",
+  },
+];
+
+const STATS = [
+  { label: "AES-256 Encrypted" },
+  { label: "Zero Server Logs" },
+  { label: "Self-Destructing" },
+  { label: "Open Source" },
+];
+
+/* ─────────────────────────────────────────────
+   Sub-components
+───────────────────────────────────────────── */
+
+function Navbar({ onLaunch }) {
+  return (
+    <nav className="navbar">
+      <div className="container-app w-full flex items-center justify-between mx-auto">
+        {/* Logo */}
+        <button
+          onClick={onLaunch}
+          className="flex items-center gap-2.5 group"
+          style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
+        >
+          <div
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: "0.5rem",
+              background: "rgba(232,160,32,0.1)",
+              border: "1px solid rgba(232,160,32,0.2)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "background 0.25s ease",
+            }}
+            className="group-hover:bg-amber-500/20"
+          >
+            <PackageOpen size={16} style={{ color: "#E8A020" }} />
+          </div>
+          <span
+            style={{
+              fontSize: "0.9375rem",
+              fontWeight: 600,
+              letterSpacing: "-0.02em",
+              color: "#f0f0f0",
+              transition: "color 0.25s ease",
+            }}
+            className="group-hover:text-white"
+          >
+            BAR Web
+          </span>
+        </button>
+
+        {/* Nav links */}
+        <div style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
+          <a
+            href="https://github.com/Mrtracker-new/BAR_RYY"
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.375rem",
+              padding: "0.375rem 0.75rem",
+              fontSize: "0.8125rem",
+              fontWeight: 500,
+              color: "#666666",
+              borderRadius: "0.5rem",
+              transition: "color 0.2s ease, background 0.2s ease",
+              textDecoration: "none",
+            }}
+            className="hover:text-white hover:bg-white/5"
+          >
+            <Github size={14} />
+            GitHub
+          </a>
+          <a
+            href="https://rolan-rnr.netlify.app"
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.375rem",
+              padding: "0.375rem 0.75rem",
+              fontSize: "0.8125rem",
+              fontWeight: 500,
+              color: "#666666",
+              borderRadius: "0.5rem",
+              transition: "color 0.2s ease, background 0.2s ease",
+              textDecoration: "none",
+            }}
+            className="hover:text-white hover:bg-white/5"
+          >
+            <ExternalLink size={14} />
+            Portfolio
+          </a>
+        </div>
+      </div>
+    </nav>
+  );
+}
+
+function HeroBadge() {
+  return (
+    <motion.div {...fadeIn(0.1)} style={{ display: "flex", justifyContent: "center", marginBottom: "2rem" }}>
+      <div
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.5rem",
+          padding: "0.3125rem 0.875rem",
+          borderRadius: "999px",
+          background: "rgba(232,160,32,0.08)",
+          border: "1px solid rgba(232,160,32,0.18)",
+          fontSize: "0.75rem",
+          fontWeight: 600,
+          letterSpacing: "0.06em",
+          textTransform: "uppercase",
+          color: "#E8A020",
+        }}
+      >
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            background: "#22C55E",
+            boxShadow: "0 0 6px #22C55E",
+            animation: "pulse 2s infinite",
+          }}
+        />
+        Secure File Transmission
+      </div>
+    </motion.div>
+  );
+}
+
+function HeroTitle() {
+  return (
+    <motion.div {...fadeUp(0.2)} style={{ textAlign: "center", marginBottom: "1.5rem" }}>
+      <h1
+        style={{
+          fontSize: "clamp(3rem, 9vw, 7rem)",
+          fontWeight: 800,
+          letterSpacing: "-0.05em",
+          lineHeight: 0.92,
+          color: "#f0f0f0",
+        }}
+      >
+        <span
+          className="glow-text"
+          style={{
+            display: "block",
+            background: "linear-gradient(135deg, #FBBF24 0%, #E8A020 45%, #D08000 100%)",
+            WebkitBackgroundClip: "text",
+            backgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+          }}
+        >
+          Burn After
+        </span>
+        <span style={{ display: "block", color: "#333333", marginTop: "0.05em" }}>
+          Reading
+        </span>
+      </h1>
+    </motion.div>
+  );
+}
+
+function HeroSubtitle() {
+  return (
+    <motion.p
+      {...fadeUp(0.3)}
+      style={{
+        textAlign: "center",
+        fontSize: "clamp(1rem, 2.5vw, 1.125rem)",
+        fontWeight: 400,
+        lineHeight: 1.7,
+        color: "#666666",
+        maxWidth: "26rem",
+        margin: "0 auto 2.5rem",
+      }}
+    >
+      The most secure way to share sensitive documents.{" "}
+      <span style={{ color: "#999999" }}>Encrypted, anonymous, designed to disappear.</span>
+    </motion.p>
+  );
+}
+
+function HeroCTA({ onLaunch }) {
+  return (
+    <motion.div
+      {...fadeUp(0.4)}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: "1rem",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "0.625rem",
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        <motion.button
+          onClick={onLaunch}
+          className="btn-primary"
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          style={{ padding: "0.8125rem 2rem", fontSize: "0.9375rem" }}
+        >
+          Start Sealing
+          <ArrowRight size={16} />
+        </motion.button>
+        {/* WakeUpButton — wrapped to control sizing */}
+        <div style={{ flexShrink: 0 }}>
+          <WakeUpButton compact />
+        </div>
+      </div>
+
+      <p
+        style={{
+          fontSize: "0.7188rem",
+          color: "#3a3a3a",
+          textAlign: "center",
+          maxWidth: "24rem",
+          lineHeight: 1.5,
+        }}
+      >
+        💤 Server may be sleeping (free tier). "Wake Server" takes ~50s.
+      </p>
+    </motion.div>
+  );
+}
+
+function StatsBar() {
+  return (
+    <motion.div
+      {...fadeIn(0.5)}
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        justifyContent: "center",
+        gap: "0.25rem 1.5rem",
+        marginTop: "4rem",
+        paddingTop: "3rem",
+        borderTop: "1px solid rgba(255,255,255,0.04)",
+      }}
+    >
+      {STATS.map((s, i) => (
+        <React.Fragment key={i}>
+          {i > 0 && (
+            <span
+              style={{
+                width: 3,
+                height: 3,
+                borderRadius: "50%",
+                background: "#2a2a2a",
+                alignSelf: "center",
+                display: "none",
+              }}
+              className="hidden sm:block"
+            />
+          )}
+          <span
+            style={{
+              fontSize: "0.8125rem",
+              fontWeight: 500,
+              color: "#444444",
+              letterSpacing: "-0.01em",
+            }}
+          >
+            {s.label}
+          </span>
+        </React.Fragment>
+      ))}
+    </motion.div>
+  );
+}
+
+function FeatureCard({ icon: Icon, title, description, accentColor, index }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 24 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-40px" }}
+      transition={{ duration: 0.6, ease: EASE, delay: index * 0.08 }}
+      className="feature-card"
+      style={{ "--accent": accentColor }}
+    >
+      {/* Icon */}
+      <div
+        style={{
+          width: 40,
+          height: 40,
+          borderRadius: "0.625rem",
+          background: `${accentColor}14`,
+          border: `1px solid ${accentColor}25`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          marginBottom: "1.125rem",
+          transition: "background 0.3s ease, border-color 0.3s ease",
+        }}
+      >
+        <Icon size={18} style={{ color: accentColor }} />
+      </div>
+
+      <h3
+        style={{
+          fontSize: "0.9375rem",
+          fontWeight: 600,
+          letterSpacing: "-0.01em",
+          color: "#dedede",
+          marginBottom: "0.5rem",
+        }}
+      >
+        {title}
+      </h3>
+      <p
+        style={{
+          fontSize: "0.8125rem",
+          lineHeight: 1.65,
+          color: "#555555",
+        }}
+      >
+        {description}
+      </p>
+    </motion.div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   Main LandingPage
+───────────────────────────────────────────── */
 const LandingPage = () => {
   const navigate = useNavigate();
 
-  const features = [
-    {
-      icon: Shield,
-      title: "AES-256 Encryption",
-      description: "Military-grade encryption used by governments.",
-      gradient: "from-emerald-500 to-green-600",
-      borderColor: "group-hover:border-emerald-500/30",
-      iconBg: "bg-emerald-500/10 group-hover:bg-emerald-500/20",
-      iconColor: "text-emerald-400",
-    },
-    {
-      icon: Zap,
-      title: "Self-Destruct",
-      description: "Files vanish automatically after viewing.",
-      gradient: "from-amber-500 to-orange-600",
-      borderColor: "group-hover:border-amber-500/30",
-      iconBg: "bg-amber-500/10 group-hover:bg-amber-500/20",
-      iconColor: "text-amber-400",
-    },
-    {
-      icon: Lock,
-      title: "Zero Knowledge",
-      description: "We cannot see your data. Only you have the key.",
-      gradient: "from-purple-500 to-violet-600",
-      borderColor: "group-hover:border-purple-500/30",
-      iconBg: "bg-purple-500/10 group-hover:bg-purple-500/20",
-      iconColor: "text-purple-400",
-    },
-    {
-      icon: Clock,
-      title: "Custom Expiry",
-      description: "Set exact time limits for file availability.",
-      gradient: "from-blue-500 to-cyan-600",
-      borderColor: "group-hover:border-blue-500/30",
-      iconBg: "bg-blue-500/10 group-hover:bg-blue-500/20",
-      iconColor: "text-blue-400",
-    },
-  ];
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0a0a0a] via-[#0d0d0d] to-[#121212] text-white font-sans selection:bg-amber-500/30 selection:text-amber-200 overflow-x-hidden">
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "#080808",
+        color: "#f0f0f0",
+        overflowX: "hidden",
+        position: "relative",
+      }}
+    >
+      {/* Ambient background */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "fixed",
+          inset: 0,
+          pointerEvents: "none",
+          zIndex: 0,
+        }}
+      >
+        {/* Grid */}
+        <div
+          className="bg-grid"
+          style={{ position: "absolute", inset: 0, opacity: 0.6 }}
+        />
 
-      {/* Enhanced Background Elements - Minimal & Subtle */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        {/* Gradient Orbs - Static, just for depth */}
-        <div className="absolute top-0 right-1/4 w-96 h-96 bg-amber-500/10 rounded-full blur-[120px] opacity-40" />
-        <div className="absolute bottom-0 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-[120px] opacity-30" />
+        {/* Radial amber glow — top center */}
+        <div
+          style={{
+            position: "absolute",
+            top: "-20%",
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: "60vw",
+            height: "60vw",
+            maxWidth: 800,
+            maxHeight: 800,
+            borderRadius: "50%",
+            background:
+              "radial-gradient(circle, rgba(232,160,32,0.07) 0%, transparent 65%)",
+            animation: "glow-pulse 5s ease-in-out infinite",
+          }}
+        />
 
-        {/* Gradient overlay */}
-        <div className="absolute inset-0 bg-gradient-to-b from-amber-500/5 via-transparent to-purple-500/5" />
+        {/* Soft violet — bottom left */}
+        <div
+          style={{
+            position: "absolute",
+            bottom: "10%",
+            left: "-10%",
+            width: "40vw",
+            height: "40vw",
+            maxWidth: 600,
+            maxHeight: 600,
+            borderRadius: "50%",
+            background:
+              "radial-gradient(circle, rgba(139,92,246,0.05) 0%, transparent 65%)",
+          }}
+        />
       </div>
 
-      {/* Modern Grid Overlay */}
-      <div className="fixed inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:50px_50px] pointer-events-none z-0" />
+      {/* Navbar */}
+      <Navbar onLaunch={() => navigate("/app")} />
 
-      {/* Glassmorphic Navbar */}
-      <nav className="fixed top-0 w-full z-50 glass-navbar">
-        <div className="container mx-auto px-6 h-16 sm:h-20 flex items-center justify-between">
-          <div className="flex items-center space-x-3 cursor-pointer group" onClick={() => navigate('/')}>
-            <div className="p-2.5 bg-gradient-to-br from-amber-500/10 to-amber-600/10 rounded-xl group-hover:from-amber-500/20 group-hover:to-amber-600/20 transition-all duration-300 border border-amber-500/20">
-              <PackageOpen className="text-amber-500 w-5 h-5 sm:w-6 sm:h-6" />
-            </div>
-            <span className="text-lg sm:text-xl font-bold tracking-tight text-white group-hover:text-amber-400 transition-colors">BAR Web</span>
+      {/* Main content */}
+      <main style={{ position: "relative", zIndex: 1 }}>
+        {/* ── Hero ─────────────── */}
+        <section
+          style={{
+            minHeight: "100vh",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "7rem 1.25rem 4rem",
+          }}
+        >
+          <div style={{ width: "100%", maxWidth: "42rem", margin: "0 auto" }}>
+            <HeroBadge />
+            <HeroTitle />
+            <HeroSubtitle />
+            <HeroCTA onLaunch={() => navigate("/app")} />
+            <StatsBar />
           </div>
-          <div className="flex items-center space-x-4 sm:space-x-6">
-            <a href="https://rolan-rnr.netlify.app" target="_blank" rel="noreferrer" className="text-sm text-zinc-400 hover:text-amber-400 transition-colors duration-300">Portfolio</a>
-            <a href="https://github.com/Mrtracker-new/BAR_RYY" target="_blank" rel="noreferrer" className="text-sm text-zinc-400 hover:text-amber-400 transition-colors duration-300">GitHub</a>
-          </div>
-        </div>
-      </nav>
+        </section>
 
-      <main className="relative pt-32 pb-20 z-10">
-
-        {/* Hero Section with Glassmorphism */}
-        <section className="container mx-auto px-6 text-center min-h-[65vh] flex flex-col items-center justify-center mb-20">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, ease: "easeOut" }}
-            className="max-w-5xl mx-auto"
-          >
-            {/* Status Badge */}
+        {/* ── Features ─────────── */}
+        <section
+          style={{
+            padding: "5rem 1.25rem 7rem",
+            borderTop: "1px solid rgba(255,255,255,0.04)",
+          }}
+        >
+          <div className="container-app" style={{ margin: "0 auto" }}>
+            {/* Section header */}
             <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.2, duration: 0.5 }}
-              className="inline-flex items-center space-x-2 px-4 py-2 rounded-full border border-white/20 glass-card text-zinc-300 text-xs font-medium mb-8"
+              initial={{ opacity: 0, y: 16 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6, ease: EASE }}
+              style={{ textAlign: "center", marginBottom: "3rem" }}
             >
-              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-lg shadow-green-500/50" />
-              <Sparkles className="w-3 h-3 text-amber-400" />
-              <span>Secure File Transmission Protocol</span>
+              <p
+                style={{
+                  fontSize: "0.75rem",
+                  fontWeight: 600,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: "#E8A020",
+                  marginBottom: "0.75rem",
+                }}
+              >
+                Why BAR Web
+              </p>
+              <h2
+                style={{
+                  fontSize: "clamp(1.5rem, 3.5vw, 2.25rem)",
+                  fontWeight: 700,
+                  letterSpacing: "-0.03em",
+                  color: "#d0d0d0",
+                  lineHeight: 1.15,
+                }}
+              >
+                Built for security-first sharing
+              </h2>
             </motion.div>
 
-            {/* Glass Hero Card */}
-            <div className="glass-hero rounded-3xl p-8 sm:p-12 mb-8">
-              <h1 className="text-6xl sm:text-7xl md:text-8xl lg:text-9xl font-black tracking-tighter mb-6 leading-[0.9]">
-                <span className="block gradient-text-amber glow-text">Burn After</span>
-                <span className="block text-zinc-400 mt-2">Reading</span>
-              </h1>
-
-              <p className="text-xl md:text-2xl text-zinc-300 max-w-2xl mx-auto leading-relaxed text-balance font-light">
-                The most secure way to send sensitive documents.
-                <br />
-                <span className="text-amber-400/80">Encrypted, anonymous, and designed to disappear.</span>
-              </p>
+            {/* Cards grid */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(2, 1fr)",
+                gap: "1rem",
+              }}
+              className="sm:grid-cols-2 lg:grid-cols-4"
+            >
+              {FEATURES.map((f, i) => (
+                <FeatureCard key={i} {...f} index={i} />
+              ))}
             </div>
-
-            {/* CTA Section */}
-            <div className="flex flex-col items-center justify-center gap-4 pt-4">
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => navigate('/app')}
-                  className="group w-full sm:w-auto px-10 py-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-bold text-lg rounded-2xl transition-all duration-300 flex items-center justify-center space-x-2 shadow-xl shadow-amber-500/20 hover:shadow-2xl hover:shadow-amber-500/30 border border-amber-400/50"
-                >
-                  <span>Start Sealing</span>
-                  <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                </motion.button>
-                <WakeUpButton />
-              </div>
-
-              <p className="text-xs text-zinc-500 max-w-md text-center mt-3 px-4 py-2 glass-card rounded-lg">
-                💤 Server sleeps after inactivity (free tier). Click "Wake Server" if idle (~50s wake time).
-              </p>
-            </div>
-          </motion.div>
-        </section>
-
-        {/* Features Grid with Glass Cards */}
-        <section className="container mx-auto px-6 py-20">
-          <motion.h2
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-3xl sm:text-4xl font-bold text-center mb-12 gradient-text-primary"
-          >
-            Security Features
-          </motion.h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {features.map((feature, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: index * 0.1 }}
-                whileHover={{ y: -8, transition: { duration: 0.3 } }}
-                className={`group relative p-8 glass-card rounded-3xl transition-all duration-300 border-2 border-white/5 ${feature.borderColor}`}
-              >
-                {/* Top accent line - clean with subtle glow */}
-                <div className={`absolute -top-px left-4 right-4 h-1 bg-gradient-to-r ${feature.gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-full shadow-lg`} />
-
-                <div className={`w-14 h-14 rounded-2xl ${feature.iconBg} flex items-center justify-center mb-6 transition-all duration-300`}>
-                  <feature.icon className={`w-6 h-6 ${feature.iconColor}`} />
-                </div>
-
-                <h3 className="text-xl font-bold text-white mb-3 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:bg-clip-text group-hover:from-white group-hover:to-zinc-300 transition-all duration-300">
-                  {feature.title}
-                </h3>
-
-                <p className="text-base text-zinc-400 leading-relaxed group-hover:text-zinc-300 transition-colors duration-300">
-                  {feature.description}
-                </p>
-              </motion.div>
-            ))}
           </div>
         </section>
 
-        {/* Footer */}
-        <div className="container mx-auto px-6 pt-20 mt-12 border-t border-white/10 text-center">
-          <div className="glass-card inline-block px-6 py-3 rounded-full">
-            <p className="text-zinc-400 text-sm">
-              &copy; 2025 <span className="text-amber-400 font-semibold">BAR Web</span>. Built for privacy.
-            </p>
-          </div>
-        </div>
-
+        {/* ── Footer ───────────── */}
+        <footer
+          style={{
+            borderTop: "1px solid rgba(255,255,255,0.04)",
+            padding: "1.75rem 1.25rem",
+            textAlign: "center",
+          }}
+        >
+          <p style={{ fontSize: "0.8125rem", color: "#333333" }}>
+            © 2025{" "}
+            <span style={{ color: "#E8A020", fontWeight: 600 }}>BAR Web</span>
+            {" "}— Built for privacy.
+          </p>
+        </footer>
       </main>
     </div>
   );
