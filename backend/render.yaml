@@ -7,6 +7,8 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
+      - key: IS_PRODUCTION
+        value: "true"  # Enables ProxyHeadersMiddleware and CIDR-validated IP extraction
       - key: DATABASE_URL
         sync: false  # Add your Supabase PostgreSQL URL manually
       - key: FRONTEND_URL
@@ -17,6 +19,10 @@ services:
         value: barweb.noreply@gmail.com
       - key: FROM_NAME
         value: BAR Web - Secure File Sharing
+      # Optional: override the trusted-proxy CIDR list if Render's LB IPs change.
+      # Leave unset to use the built-in Render defaults (10.0.0.0/8 etc.).
+      # - key: TRUSTED_PROXY_CIDRS
+      #   value: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,35.160.0.0/13,52.32.0.0/11,54.148.0.0/15"
     disk:
       name: bar-data
       mountPath: /opt/render/project/src
