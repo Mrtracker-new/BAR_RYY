@@ -216,7 +216,7 @@ async def share_file(
             
             # Check brute force protection
             try:
-                failed_count = security.check_and_delay_password_attempt(client_ip, token)
+                failed_count = await security.check_and_delay_password_attempt(client_ip, token)
                 if failed_count > 0:
                     print(f"⚠️ Previous failed attempts: {failed_count}")
             except HTTPException:

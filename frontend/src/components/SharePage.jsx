@@ -33,8 +33,9 @@ const SharePage = ({ token }) => {
     setError(null);
 
     try {
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-      const response = await axios.post(`${backendUrl}/request-otp/${token}`);
+      // Use relative path so Vite proxy handles it in dev.
+      // In prod, axios.defaults.baseURL is set to VITE_BACKEND_URL via config/axios.js.
+      const response = await axios.post(`/request-otp/${token}`);
 
       setOtpSent(true);
       setOtpInfo(response.data);
@@ -57,11 +58,11 @@ const SharePage = ({ token }) => {
     setError(null);
 
     try {
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+      // Use relative path so Vite proxy handles it in dev.
       const formData = new FormData();
       formData.append('otp_code', otpCode);
 
-      const response = await axios.post(`${backendUrl}/verify-otp/${token}`, formData);
+      const response = await axios.post(`/verify-otp/${token}`, formData);
 
       setOtpVerified(true);
       setSuccessMessage(response.data.message);
@@ -93,9 +94,9 @@ const SharePage = ({ token }) => {
         }
       }, 300);
 
-      // Call backend API with POST (axios config will add base URL in production)
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-      const response = await axios.post(`${backendUrl}/share/${token}`,
+      // Use relative path so Vite proxy handles it in dev.
+      // In prod, axios.defaults.baseURL is set to VITE_BACKEND_URL via config/axios.js.
+      const response = await axios.post(`/share/${token}`,
         { password: password || null },
         { responseType: 'arraybuffer' }
       );

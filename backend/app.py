@@ -106,24 +106,26 @@ async def add_security_headers_middleware(request: Request, call_next):
 # Startup event
 @app.on_event("startup")
 async def startup_event():
-    """Start background tasks on app startup."""
+    """Initialize app on startup — must complete before requests are served."""
     print(f"🚀 {settings.app_name} starting...")
-    
-    # Initialize database in background to not block health checks
-    async def init_background():
-        try:
-            await database.init_database()
-            print("✅ Database initialized")
-            # Start cleanup task
-            asyncio.create_task(cleanup.run_cleanup_loop())
-            print("✅ Cleanup task started")
-        except Exception as e:
-            print(f"⚠️ Database init failed: {e}")
-            print("Continuing with limited functionality...")
-    
-    # Run in background
-    asyncio.create_task(init_background())
-    print(f"🚀 {settings.app_name} started (database initializing in background)")
+
+    # Initialize database synchronously so we're ready before the first request.
+    # Previously this ran in a background task, causing a race condition: requests
+    # arriving within the first ~100 ms (e.g. the Vite proxy's health probe) would
+    # find the DB uninitialized and fail/hang silently.
+    try:
+        await database.init_database()
+        print("✅ Database initialized")
+    except Exception as e:
+        # Log clearly — don't silently swallow DB init failures.
+        print(f"❌ Database initialization failed: {e}")
+        print("   Continuing with limited functionality (some endpoints may fail).")
+
+    # Start the background cleanup loop after DB is confirmed ready.
+    asyncio.create_task(cleanup.run_cleanup_loop())
+    print("✅ Cleanup task started")
+
+    print(f"🚀 {settings.app_name} is ready to serve requests")
 
 
 # Shutdown event

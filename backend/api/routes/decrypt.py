@@ -83,7 +83,7 @@ async def decrypt_bar(
         client_ip = analytics.get_client_ip(req)
 
         try:
-            failed_count = security.check_and_delay_password_attempt(client_ip, bar_id)
+            failed_count = await security.check_and_delay_password_attempt(client_ip, bar_id)
             if failed_count > 0:
                 print(f"⚠️ [{bar_id}] IP {client_ip} has {failed_count} previous failed attempt(s) — delay applied")
         except HTTPException as lockout_exc:
@@ -261,7 +261,7 @@ async def decrypt_uploaded_bar_file(
         
         # Check brute force protection
         try:
-            failed_count = security.check_and_delay_password_attempt(client_ip, file_token)
+            failed_count = await security.check_and_delay_password_attempt(client_ip, file_token)
             if failed_count > 0:
                 print(f"⚠️ Previous failed attempts: {failed_count} - applying delay")
         except HTTPException as e:

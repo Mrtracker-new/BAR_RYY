@@ -234,24 +234,20 @@ class Database:
                 pass  # Column already exists — safe to ignore
 
             # Phase 2 — back-fill SHA-256 hash for rows that still have the
-            # plaintext key.  We detect the SQLite version to decide whether
-            # the built-in sha256() SQL function is available (≥ 3.38) or
-            # whether we must fall back to a Python-side loop.
+            # plaintext key.  We always use a Python-side loop here because
+            # SQLite's sha256() SQL function belongs to the optional crypto
+            # extension and is NOT present in Python's bundled SQLite build,
+            # regardless of the SQLite version number.
+            #
+            # Guard: if analytics_key was already dropped by a prior migration
+            # run, skip back-fill entirely (the column won't exist to SELECT).
             import sqlite3 as _sqlite3
             _sqlite_version = tuple(
                 int(x) for x in _sqlite3.sqlite_version.split(".")
             )
-            if _sqlite_version >= (3, 38, 0):
-                # Built-in sha256() available — single SQL UPDATE.
-                await db.execute("""
-                    UPDATE bar_files
-                    SET analytics_key_hash = lower(hex(sha256(analytics_key)))
-                    WHERE analytics_key IS NOT NULL
-                      AND analytics_key != ''
-                      AND analytics_key_hash IS NULL
-                """)
-            else:
-                # Python-loop fallback for SQLite < 3.38.
+            async with db.execute("PRAGMA table_info(bar_files)") as _ci:
+                _cols = {row[1] for row in await _ci.fetchall()}
+            if "analytics_key" in _cols:
                 async with db.execute(
                     "SELECT token, analytics_key FROM bar_files "
                     "WHERE analytics_key IS NOT NULL "
@@ -265,7 +261,7 @@ class Database:
                         "UPDATE bar_files SET analytics_key_hash = ? WHERE token = ?",
                         (_key_hash, _token_val),
                     )
-            await db.commit()
+                await db.commit()
 
             # Phase 3 — drop the old plaintext column.
             # ALTER TABLE … DROP COLUMN requires SQLite 3.35+.

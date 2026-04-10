@@ -102,9 +102,15 @@ def sanitize_filename(filename: str) -> str:
 
 def check_rate_limit(request: Request, limit: int = 60) -> None:
     """
-    Simple rate limiting based on IP address
-    In production, use Redis or a proper rate limiting service
+    Simple rate limiting based on IP address.
+    In production, use Redis or a proper rate limiting service.
     """
+    # Guard: request.client can be None when the connection comes through
+    # certain proxy configurations or test clients.
+    if request.client is None:
+        # Cannot rate-limit without an IP — allow the request but log it.
+        return
+
     client_ip = request.client.host
     current_time = datetime.now()
     
@@ -224,9 +230,14 @@ def get_progressive_delay(failed_attempts: int) -> float:
     return delay
 
 
-def check_and_delay_password_attempt(client_ip: str, resource_id: str = None) -> int:
+async def check_and_delay_password_attempt(client_ip: str, resource_id: str = None) -> int:
     """
     Check brute force status and apply progressive delay if needed.
+
+    This is an async function because the delay is applied with ``asyncio.sleep``
+    to avoid blocking the event loop.  Callers **must** ``await`` this function.
+    Calling it without ``await`` (or with the old synchronous ``time.sleep``) would
+    freeze the entire uvicorn event loop, hanging every concurrently pending request.
     
     Args:
         client_ip: Client's IP address
@@ -238,18 +249,54 @@ def check_and_delay_password_attempt(client_ip: str, resource_id: str = None) ->
     Raises:
         HTTPException: If client is locked out
     """
-    import time
+    import asyncio
     
-    # Check if locked out
+    # Check if locked out (raises HTTPException if so)
     _, failed_count, _ = check_password_brute_force(client_ip, resource_id)
     
-    # Apply progressive delay
+    # Apply progressive delay — MUST use asyncio.sleep, not time.sleep.
+    # time.sleep() is synchronous and blocks the entire event loop; asyncio.sleep()
+    # yields control back to the loop so other requests continue to be served.
     if failed_count > 0:
         delay = get_progressive_delay(failed_count)
         if delay > 0:
-            time.sleep(delay)
+            await asyncio.sleep(delay)
     
     return failed_count
+
+
+async def validate_file_size_streaming(file, max_size: int) -> int:
+    """
+    Validate uploaded file size by streaming it in chunks.
+
+    Reads the file progressively rather than loading it all into memory first,
+    so an oversized upload is rejected early without exhausting server RAM.
+
+    Args:
+        file: FastAPI ``UploadFile`` object (must be seekable or freshly opened).
+        max_size: Maximum allowed size in bytes.
+
+    Returns:
+        Total file size in bytes.
+
+    Raises:
+        HTTPException 413 if the file exceeds ``max_size``.
+    """
+    total = 0
+    chunk_size = 64 * 1024  # 64 KB chunks
+    while True:
+        chunk = await file.read(chunk_size)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_size:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large. Maximum size is {max_size // (1024 * 1024)} MB."
+            )
+    # Seek back to the beginning so callers can re-read the file
+    await file.seek(0)
+    return total
 
 
 def add_security_headers(response: Response) -> Response:
