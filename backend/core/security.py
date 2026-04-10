@@ -40,9 +40,13 @@ ALLOWED_FILE_EXTENSIONS = {
 }
 
 # Rate limits (requests per minute)
+# These values are the *intended* per-IP budgets.  Enforcement is done at the
+# route level via check_rate_limit(); this dict serves as a single source of
+# truth for auditing and documentation purposes.
 RATE_LIMITS = {
     "/upload": 10,
     "/seal": 10,
+    "/decrypt/": 10,   # client-side decrypt — kept low: each hit triggers PBKDF2
     "/decrypt-upload": 20,
     "/share/": 30,
 }

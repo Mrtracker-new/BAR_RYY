@@ -350,4 +350,38 @@ def unpack_bar_file(bar_data: bytes, password: str = None) -> tuple:
     return encrypted_data, metadata, key
 
 
+def peek_bar_metadata(bar_data: bytes) -> dict:
+    """
+    Extract the plaintext metadata header from a .bar file **without** performing
+    key derivation, HMAC verification, or decryption.
+
+    This is intentionally a *read-only, best-effort* function.  It is only used
+    to retrieve ``webhook_url`` and ``filename`` for alerting purposes when full
+    decryption is unavailable (e.g. wrong password, tamper event).  It raises
+    ``ValueError`` on malformed input rather than swallowing it, but callers
+    should always wrap it in a try/except.
+
+    Args:
+        bar_data: Raw .bar file bytes (may be password-protected or legacy).
+
+    Returns:
+        The ``metadata`` dict embedded in the BAR structure.
+
+    Raises:
+        ValueError: If the data is not a valid BAR file.
+    """
+    if not bar_data.startswith(b"BAR_FILE_V1\n"):
+        raise ValueError("Invalid BAR file format")
+
+    obfuscated_data = bar_data[12:]  # Strip the fixed header
+    bar_json = base64.b64decode(obfuscated_data)
+    bar_structure = json.loads(bar_json.decode("utf-8"))
+
+    metadata = bar_structure.get("metadata")
+    if metadata is None:
+        raise ValueError("BAR file is missing metadata field")
+
+    return metadata
+
+
 # DEPRECATED: Use client_storage.validate_client_access() or server_storage.validate_server_access() instead
