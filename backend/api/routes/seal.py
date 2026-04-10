@@ -28,15 +28,22 @@ async def seal_container(
         # Rate limit
         security.check_rate_limit(req, limit=10)
         
-        # Find uploaded file
-        uploaded_file = file_service.find_uploaded_file(request.filename)
+        # Resolve the uploaded file by its opaque temp_filename token.
+        # This is an exact-path lookup — no directory scan, no suffix match.
+        # The token was issued by /upload and validated by SealRequest before
+        # we ever reach this line, so no user-controlled string hits the FS.
+        uploaded_file = file_service.resolve_temp_file(request.temp_filename)
         
-        if not uploaded_file or not os.path.exists(uploaded_file):
-            available_files = os.listdir(file_service.upload_dir)
+        if not uploaded_file:
             raise HTTPException(
                 status_code=404,
-                detail=f"Uploaded file not found for: {request.filename}. Available files: {available_files}"
+                detail="Uploaded file not found. It may have already been sealed "
+                       "or the session has expired."
             )
+        
+        # Derive the original safe display filename from the token.
+        # Format: "<uuid4>__<safe_filename>"  (produced by save_uploaded_file)
+        display_filename = request.temp_filename.split('__', 1)[1]
         
         # Read file data
         with open(uploaded_file, "rb") as f:
@@ -45,7 +52,7 @@ async def seal_container(
         # Create BAR file
         bar_result = await encryption_service.create_bar_file(
             file_data=file_data,
-            filename=request.filename,
+            filename=display_filename,
             max_views=request.max_views,
             expiry_minutes=request.expiry_minutes,
             password=request.password,
@@ -80,7 +87,7 @@ async def seal_container(
             # Process server-side file
             server_result = await encryption_service.create_server_side_file(
                 bar_result=bar_result,
-                filename=request.filename,
+                filename=display_filename,
                 require_otp=request.require_otp,
                 otp_email=request.otp_email,
                 frontend_base_url=base_url
