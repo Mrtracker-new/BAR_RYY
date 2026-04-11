@@ -183,26 +183,39 @@ class EncryptionService:
         self,
         bar_data: bytes,
         password: Optional[str] = None
-    ) -> Tuple[bytes, Dict[str, Any], bytes]:
+    ) -> Tuple[bytes, Dict[str, Any], bytes, bytes, Optional[bytes]]:
         """
         Decrypt a BAR file.
-        
+
         Args:
             bar_data: Encrypted BAR file bytes
             password: Optional password for decryption
-            
+
         Returns:
-            Tuple of (decrypted_data, metadata, key)
-            
+            5-tuple of ``(decrypted_data, metadata, key, encrypted_data, salt)``
+            where:
+
+            * ``decrypted_data``  – the raw, plaintext file bytes.
+            * ``metadata``        – the plaintext metadata dict (mutable copy).
+            * ``key``             – the Fernet encryption key.
+            * ``encrypted_data``  – the **original** ciphertext blob straight from
+              the .bar file.  Callers that persist the updated file **must**
+              pass this back to :func:`pack_bar_file` unchanged so the HMAC
+              remains valid on every subsequent access.
+            * ``salt``            – the PBKDF2 salt (``bytes``) for
+              ``password_derived`` files, ``None`` for ``key_stored`` files.
+              Required by :func:`pack_bar_file` when re-packing a
+              password-protected file.
+
         Raises:
             HTTPException: If decryption fails or file integrity check fails
         """
         # Unpack BAR file
         password_to_use = password.strip() if password and password.strip() else None
-        
+
         try:
-            encrypted_data, metadata, key = crypto_utils.unpack_bar_file(
-                bar_data, 
+            encrypted_data, metadata, key, salt = crypto_utils.unpack_bar_file(
+                bar_data,
                 password=password_to_use
             )
         except ValueError as e:
@@ -215,28 +228,30 @@ class EncryptionService:
                 raise HTTPException(status_code=403, detail="Decryption failed")
         except crypto_utils.TamperDetectedException as e:
             raise HTTPException(
-                status_code=403, 
+                status_code=403,
                 detail="File integrity check failed - possible tampering"
             )
-        
-        # Decrypt file
+
+        # Decrypt file content
         try:
             decrypted_data = crypto_utils.decrypt_file(encrypted_data, key)
         except Exception as e:
             raise HTTPException(
-                status_code=500, 
+                status_code=500,
                 detail="Decryption failed - invalid key or corrupted file"
             )
-        
-        # Verify file integrity
+
+        # Verify file integrity via payload hash
         file_hash = crypto_utils.calculate_file_hash(decrypted_data)
         if file_hash != metadata.get("file_hash"):
             raise HTTPException(
-                status_code=500, 
+                status_code=500,
                 detail="File integrity check failed - possible tampering"
             )
-        
-        return decrypted_data, metadata, key
+
+        # Return the original encrypted_data and salt so the caller can
+        # re-pack the file without introducing a new Fernet token.
+        return decrypted_data, metadata, key, encrypted_data, salt
 
 
 # Singleton instance
