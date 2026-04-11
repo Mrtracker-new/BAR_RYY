@@ -18,6 +18,7 @@ import {
   ArrowLeft,
   Github,
   ExternalLink,
+  FileCheck,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import FileUpload from "./components/FileUpload";
@@ -32,258 +33,235 @@ import SEOContent from "./components/SEOContent";
 import LandingPage from "./components/LandingPage";
 import ErrorModal from "./components/ErrorModal";
 
-/* ─────────────────────────────────────────────
-   Constants
-───────────────────────────────────────────── */
+/*──────────────────────────────────────────────
+  Constants
+──────────────────────────────────────────────*/
 const EASE = [0.16, 1, 0.3, 1];
 
-/* ─────────────────────────────────────────────
-   Route wrapper
-───────────────────────────────────────────── */
+/*──────────────────────────────────────────────
+  Design tokens (single source of truth)
+──────────────────────────────────────────────*/
+const T = {
+  gold:   "#E8A020",
+  goldM:  "#C8893A",
+  green:  "#22C55E",
+  bg:     "#070707",
+  s0:     "#0d0d0d",
+  s1:     "#111111",
+  s2:     "#161616",
+  border: "rgba(255,255,255,0.06)",
+  borderH:"rgba(255,255,255,0.11)",
+  text:   "#efefef",
+  textS:  "#888888",
+  textT:  "#404040",
+  textD:  "#292929",
+  mono:   "'JetBrains Mono', monospace",
+};
+
+const shadow = "0 2px 8px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.5)";
+
+/*──────────────────────────────────────────────
+  Route wrapper
+──────────────────────────────────────────────*/
 const SharePageWrapper = () => {
   const { token } = useParams();
   return <SharePage token={token} />;
 };
 
-/* ─────────────────────────────────────────────
-   Shared Navbar
-───────────────────────────────────────────── */
+/*──────────────────────────────────────────────
+  Navbar
+──────────────────────────────────────────────*/
 function AppNav({ showDecrypt, onToggleDecrypt }) {
   return (
-    <nav className="navbar">
+    <nav
+      style={{
+        position: "fixed",
+        top: 0, left: 0, right: 0,
+        zIndex: 100,
+        height: 52,
+        display: "flex",
+        alignItems: "center",
+        background: "rgba(7,7,7,0.92)",
+        backdropFilter: "blur(20px) saturate(160%)",
+        WebkitBackdropFilter: "blur(20px) saturate(160%)",
+        borderBottom: `1px solid ${T.border}`,
+      }}
+    >
       <div
-        className="container-app"
         style={{
-          display: "flex",
-          alignItems: "center",
+          maxWidth: 1100, margin: "0 auto", padding: "0 1.5rem",
+          width: "100%", display: "flex", alignItems: "center",
           justifyContent: "space-between",
-          width: "100%",
-          margin: "0 auto",
         }}
       >
         {/* Logo */}
         <a
           href="/"
           style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.625rem",
+            display: "flex", alignItems: "center", gap: "0.5rem",
             textDecoration: "none",
-            color: "inherit",
           }}
-          className="group"
         >
           <div
             style={{
-              width: 32,
-              height: 32,
-              borderRadius: "0.5rem",
-              background: "rgba(232,160,32,0.1)",
-              border: "1px solid rgba(232,160,32,0.2)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              transition: "background 0.25s ease",
+              width: 26, height: 26,
+              borderRadius: "0.4rem",
+              background: `rgba(232,160,32,0.1)`,
+              border: `1px solid rgba(232,160,32,0.20)`,
+              display: "flex", alignItems: "center", justifyContent: "center",
             }}
-            className="group-hover:bg-amber-500/20"
           >
-            <PackageOpen size={16} style={{ color: "#E8A020" }} />
+            <PackageOpen size={12} style={{ color: T.gold }} />
           </div>
-          <span
-            style={{
-              fontSize: "0.9375rem",
-              fontWeight: 600,
-              letterSpacing: "-0.02em",
-              color: "#d0d0d0",
-            }}
-          >
-            BAR Web
+          <span style={{ fontSize: "0.9rem", fontWeight: 600, letterSpacing: "-0.025em", color: "#d0d0d0" }}>
+            BAR<span style={{ color: "#303030", fontWeight: 400 }}>.web</span>
           </span>
         </a>
 
-        {/* Actions */}
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <button
-            onClick={onToggleDecrypt}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.375rem",
-              padding: "0.375rem 0.875rem",
-              fontSize: "0.8125rem",
-              fontWeight: 500,
-              color: showDecrypt ? "#E8A020" : "#888888",
-              background: showDecrypt ? "rgba(232,160,32,0.08)" : "transparent",
-              border: `1px solid ${showDecrypt ? "rgba(232,160,32,0.25)" : "rgba(255,255,255,0.07)"}`,
-              borderRadius: "0.5rem",
-              cursor: "pointer",
-              transition: "all 0.2s ease",
-            }}
-            className="hover:text-white hover:bg-white/5 hover:border-white/10"
-          >
-            {showDecrypt ? (
-              <>
-                <ArrowLeft size={13} />
-                Create
-              </>
-            ) : (
-              <>
-                <Lock size={13} />
-                Decrypt
-              </>
-            )}
-          </button>
-        </div>
+        {/* Nav button */}
+        <button
+          onClick={onToggleDecrypt}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: "0.375rem",
+            padding: "0.3125rem 0.75rem",
+            fontSize: "0.8125rem", fontWeight: 500,
+            color: showDecrypt ? T.gold : T.textS,
+            background: showDecrypt ? "rgba(232,160,32,0.08)" : "transparent",
+            border: `1px solid ${showDecrypt ? "rgba(232,160,32,0.20)" : T.border}`,
+            borderRadius: "var(--r-full)",
+            cursor: "pointer",
+            transition: "all 0.2s ease",
+            letterSpacing: "-0.01em",
+          }}
+        >
+          {showDecrypt ? (
+            <><ArrowLeft size={11} /> Create</>
+          ) : (
+            <><Lock size={11} /> Decrypt</>
+          )}
+        </button>
       </div>
     </nav>
   );
 }
 
-/* ─────────────────────────────────────────────
-   Section label
-───────────────────────────────────────────── */
-function SectionLabel({ icon: Icon, label, color = "#E8A020" }) {
+/*──────────────────────────────────────────────
+  Card: unified surface component
+──────────────────────────────────────────────*/
+function Card({ children, accentColor, style = {} }) {
   return (
     <div
       style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "0.5rem",
-        marginBottom: "1rem",
+        borderRadius: "1rem",
+        border: `1px solid ${T.border}`,
+        background: T.s0,
+        overflow: "hidden",
+        boxShadow: shadow,
+        ...style,
       }}
     >
-      <div
-        style={{
-          width: 28,
-          height: 28,
-          borderRadius: "0.375rem",
-          background: `${color}14`,
-          border: `1px solid ${color}22`,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <Icon size={13} style={{ color }} />
-      </div>
-      <span
-        style={{
-          fontSize: "0.8125rem",
-          fontWeight: 600,
-          color: "#888888",
-          letterSpacing: "-0.01em",
-        }}
-      >
-        {label}
-      </span>
+      {accentColor && (
+        <div style={{
+          height: "1px",
+          background: `linear-gradient(90deg, ${accentColor}55 0%, ${accentColor}18 55%, transparent 100%)`,
+        }} />
+      )}
+      {children}
     </div>
   );
 }
 
-/* ─────────────────────────────────────────────
-   Preview / container info card
-───────────────────────────────────────────── */
-function ContainerPreview({ uploadedFile, rules }) {
-  const rows = [
-    {
-      label: "Status",
-      value: <span style={{ color: "#22C55E", fontWeight: 600, fontSize: "0.8125rem" }}>Ready to seal</span>,
-    },
-    { label: "File", value: uploadedFile?.name, truncate: true },
-    {
-      label: "Storage",
-      value: rules.storageMode === "server" ? "Server-Side" : "Client-Side",
-    },
-    {
-      label: "Expiry",
-      value:
-        rules.expiryMinutes > 0
-          ? `${rules.expiryValue} ${rules.expiryUnit}`
-          : "Never",
-    },
-    {
-      label: "Password",
-      value: rules.password ? "Protected ✓" : "None",
-    },
-    ...(rules.storageMode === "server"
-      ? [
-          {
-            label: "Max Views",
-            value: rules.maxViews,
-          },
-        ]
-      : []),
-  ];
-
+/*──────────────────────────────────────────────
+  Card header
+──────────────────────────────────────────────*/
+function CardHeader({ icon: Icon, label, color = T.gold, children }) {
   return (
     <div
       style={{
-        borderRadius: "0.875rem",
-        border: "1px solid rgba(255,255,255,0.07)",
-        background: "#0f0f0f",
-        overflow: "hidden",
-        marginTop: "1rem",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "0.875rem 1.25rem",
+        borderBottom: `1px solid ${T.border}`,
       }}
     >
-      <div
-        style={{
-          padding: "0.875rem 1rem",
-          borderBottom: "1px solid rgba(255,255,255,0.05)",
-          display: "flex",
-          alignItems: "center",
-          gap: "0.5rem",
-        }}
-      >
-        <span
+      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <div
           style={{
-            width: 6,
-            height: 6,
-            borderRadius: "50%",
-            background: "#22C55E",
-            boxShadow: "0 0 6px #22C55E",
-            animation: "pulse 2s infinite",
-          }}
-        />
-        <span
-          style={{
-            fontSize: "0.75rem",
-            fontWeight: 600,
-            color: "#666666",
-            letterSpacing: "0.04em",
-            textTransform: "uppercase",
+            width: 26, height: 26, borderRadius: "0.375rem",
+            background: `${color}14`,
+            border: `1px solid ${color}20`,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0,
           }}
         >
-          Container Preview
+          <Icon size={12} style={{ color }} />
+        </div>
+        <span
+          style={{
+            fontSize: "0.8125rem", fontWeight: 600,
+            color: "#c0c0c0", letterSpacing: "-0.02em",
+          }}
+        >
+          {label}
         </span>
       </div>
-      <div style={{ padding: "0.625rem 0" }}>
-        {rows.map(({ label, value, truncate }) => (
+      {children}
+    </div>
+  );
+}
+
+/*──────────────────────────────────────────────
+  Container preview card
+──────────────────────────────────────────────*/
+function ContainerPreview({ uploadedFile, rules }) {
+  const rows = [
+    { label: "File",     value: uploadedFile?.name, truncate: true },
+    { label: "Storage",  value: rules.storageMode === "server" ? "Server-Side" : "Client-Side" },
+    { label: "Expiry",   value: rules.expiryMinutes > 0 ? `${rules.expiryValue} ${rules.expiryUnit}` : "None" },
+    { label: "Password", value: rules.password ? "Set ✓" : "None" },
+    ...(rules.storageMode === "server" ? [{ label: "Max Views", value: String(rules.maxViews) }] : []),
+  ];
+
+  return (
+    <Card accentColor={T.green}>
+      <CardHeader icon={FileCheck} label="Container Preview" color={T.green}>
+        <span
+          style={{
+            display: "inline-flex", alignItems: "center", gap: "0.3rem",
+            fontSize: "0.6875rem", fontWeight: 600, color: T.green,
+            background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.18)",
+            borderRadius: "var(--r-full)", padding: "0.15rem 0.5rem",
+          }}
+        >
+          <span
+            style={{
+              width: 5, height: 5, borderRadius: "50%", background: T.green,
+              animation: "bar-pulse 2s ease-in-out infinite",
+            }}
+          />
+          Ready
+        </span>
+      </CardHeader>
+      <div>
+        {rows.map(({ label, value, truncate }, i) => (
           <div
             key={label}
             style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              padding: "0.4375rem 1rem",
-              gap: "0.5rem",
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              padding: "0.5625rem 1.25rem",
+              background: i % 2 === 1 ? "rgba(255,255,255,0.015)" : "transparent",
+              borderBottom: i < rows.length - 1 ? `1px solid rgba(255,255,255,0.035)` : "none",
             }}
           >
-            <span style={{ fontSize: "0.75rem", color: "#444444", flexShrink: 0 }}>
+            <span style={{ fontSize: "0.6875rem", fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: T.textT }}>
               {label}
             </span>
             <span
               style={{
-                fontSize: "0.8125rem",
-                color: "#aaaaaa",
-                fontFamily: "'JetBrains Mono', monospace",
-                ...(truncate
-                  ? {
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      maxWidth: "60%",
-                    }
-                  : {}),
+                fontSize: "0.8125rem", color: T.textS, fontFamily: T.mono,
+                ...(truncate ? {
+                  whiteSpace: "nowrap", overflow: "hidden",
+                  textOverflow: "ellipsis", maxWidth: "58%",
+                } : {}),
               }}
             >
               {value}
@@ -291,284 +269,254 @@ function ContainerPreview({ uploadedFile, rules }) {
           </div>
         ))}
       </div>
+    </Card>
+  );
+}
+
+/*──────────────────────────────────────────────
+  Seal button
+──────────────────────────────────────────────*/
+function SealButton({ onClick, disabled, isSealing }) {
+  return (
+    <div style={{ padding: "1rem 1.25rem", borderTop: `1px solid ${T.border}` }}>
+      <button
+        onClick={onClick}
+        disabled={disabled}
+        className="btn-primary"
+        style={{
+          width: "100%",
+          padding: "0.875rem 1.25rem",
+          fontSize: "0.9375rem",
+          fontWeight: 700,
+          borderRadius: "0.625rem",
+          justifyContent: "center",
+          letterSpacing: "-0.015em",
+          opacity: disabled ? 0.3 : 1,
+          cursor: disabled ? "not-allowed" : "pointer",
+          transition: "opacity 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease",
+        }}
+      >
+        {isSealing ? (
+          <>
+            <Loader size={14} style={{ animation: "bar-spin 0.8s linear infinite" }} />
+            Sealing container…
+          </>
+        ) : (
+          <>
+            <Lock size={13} />
+            Seal & Generate .BAR
+          </>
+        )}
+      </button>
+      {!isSealing && (
+        <p
+          style={{
+            marginTop: "0.5rem", textAlign: "center",
+            fontSize: "0.6875rem", color: T.textD, letterSpacing: "0.02em",
+          }}
+        >
+          {disabled ? "Upload a file to continue" : "End-to-end encrypted · Zero-knowledge"}
+        </p>
+      )}
     </div>
   );
 }
 
-/* ─────────────────────────────────────────────
-   Seal button
-───────────────────────────────────────────── */
-function SealButton({ onClick, disabled, isSealing }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className="btn-primary"
-      style={{
-        width: "100%",
-        padding: "0.875rem",
-        fontSize: "0.9375rem",
-        borderRadius: "0.75rem",
-        justifyContent: "center",
-        marginTop: "1.25rem",
-        opacity: disabled ? 0.4 : 1,
-        cursor: disabled ? "not-allowed" : "pointer",
-        transform: "none",
-      }}
-    >
-      {isSealing ? (
-        <>
-          <Loader size={16} style={{ animation: "spin 1s linear infinite" }} />
-          Sealing container…
-        </>
-      ) : (
-        <>
-          <Lock size={16} />
-          Seal &amp; Generate .BAR
-        </>
-      )}
-    </button>
-  );
-}
-
-/* ─────────────────────────────────────────────
-   Success / result card
-───────────────────────────────────────────── */
+/*──────────────────────────────────────────────
+  Result card (success state)
+──────────────────────────────────────────────*/
 function ResultCard({ barResult, onDownload, onAnalytics, onReset, showToast }) {
   const isServer = barResult.storage_mode === "server";
   const shareUrl = `${window.location.origin}/share/${barResult.access_token}`;
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.97 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.5, ease: EASE }}
-      style={{
-        maxWidth: 520,
-        margin: "0 auto",
-        borderRadius: "1rem",
-        border: "1px solid rgba(34,197,94,0.15)",
-        background: "#0f0f0f",
-        overflow: "hidden",
-      }}
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: EASE }}
+      style={{ maxWidth: 480, margin: "3rem auto 0" }}
     >
-      {/* Header */}
-      <div
-        style={{
-          padding: "1.75rem 1.5rem 1.25rem",
-          textAlign: "center",
-          borderBottom: "1px solid rgba(255,255,255,0.05)",
-        }}
-      >
+      <Card accentColor={T.green}>
+        {/* Success header */}
+        <div style={{ padding: "2rem 1.5rem 1.5rem", textAlign: "center" }}>
+          {/* Pulse ring icon */}
+          <div style={{ position: "relative", width: 52, height: 52, margin: "0 auto 1.25rem" }}>
+            <div
+              style={{
+                position: "absolute", inset: 0, borderRadius: "50%",
+                border: "2px solid rgba(34,197,94,0.3)",
+                animation: "pulse-ring 2.5s ease-out infinite",
+              }}
+            />
+            <div
+              style={{
+                width: 52, height: 52, borderRadius: "50%",
+                background: "rgba(34,197,94,0.08)",
+                border: "1px solid rgba(34,197,94,0.18)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}
+            >
+              <CheckCircle2 size={20} style={{ color: T.green }} />
+            </div>
+          </div>
+          <h2
+            style={{
+              fontSize: "1.125rem", fontWeight: 700,
+              letterSpacing: "-0.03em", color: T.text, marginBottom: "0.375rem",
+            }}
+          >
+            Container sealed
+          </h2>
+          <p style={{ fontSize: "0.8125rem", color: T.textS, lineHeight: 1.6 }}>
+            {isServer
+              ? "Your file is secured on the server. Share the link below."
+              : "Download your .BAR file and share it with the recipient."}
+          </p>
+        </div>
+
+        {/* Metadata row */}
         <div
           style={{
-            width: 52,
-            height: 52,
-            borderRadius: "50%",
-            background: "rgba(34,197,94,0.1)",
-            border: "1px solid rgba(34,197,94,0.25)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            margin: "0 auto 1rem",
+            padding: "0.875rem 1.5rem",
+            borderTop: `1px solid rgba(255,255,255,0.04)`,
+            borderBottom: `1px solid rgba(255,255,255,0.04)`,
+            display: "flex", gap: "2rem",
+            background: "rgba(255,255,255,0.015)",
           }}
         >
-          <CheckCircle2 size={22} style={{ color: "#22C55E" }} />
-        </div>
-        <h2
-          style={{
-            fontSize: "1.125rem",
-            fontWeight: 700,
-            letterSpacing: "-0.02em",
-            color: "#e0e0e0",
-            marginBottom: "0.25rem",
-          }}
-        >
-          Container sealed
-        </h2>
-        <p style={{ fontSize: "0.8125rem", color: "#555555" }}>
-          {isServer
-            ? "Your file is secured on the server. Share the link below."
-            : "Download your .BAR file and send it to the recipient."}
-        </p>
-      </div>
-
-      {/* Metadata */}
-      <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem 1.5rem" }}>
           <div>
-            <p style={{ fontSize: "0.6875rem", color: "#444444", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>
-              Mode
-            </p>
-            <p style={{ fontSize: "0.8125rem", color: isServer ? "#22C55E" : "#E8A020", fontWeight: 600 }}>
+            <p style={{ fontSize: "0.6875rem", fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: T.textT, marginBottom: 4 }}>Mode</p>
+            <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: isServer ? T.green : T.gold }}>
               {isServer ? "Server-Side" : "Client-Side"}
             </p>
           </div>
           <div>
-            <p style={{ fontSize: "0.6875rem", color: "#444444", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>
-              Created
-            </p>
-            <p style={{ fontSize: "0.8125rem", color: "#888888", fontFamily: "'JetBrains Mono', monospace" }}>
+            <p style={{ fontSize: "0.6875rem", fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: T.textT, marginBottom: 4 }}>Created</p>
+            <p style={{ fontSize: "0.8125rem", color: T.textS, fontFamily: T.mono }}>
               {new Date(barResult.metadata.created_at).toLocaleString()}
             </p>
           </div>
           {isServer && (
             <div>
-              <p style={{ fontSize: "0.6875rem", color: "#444444", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>
-                Max Views
-              </p>
-              <p style={{ fontSize: "0.8125rem", color: "#aaaaaa", fontFamily: "'JetBrains Mono', monospace" }}>
-                {barResult.metadata.max_views}
-              </p>
+              <p style={{ fontSize: "0.6875rem", fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: T.textT, marginBottom: 4 }}>Max Views</p>
+              <p style={{ fontSize: "0.8125rem", color: T.textS, fontFamily: T.mono }}>{barResult.metadata.max_views}</p>
             </div>
           )}
         </div>
-      </div>
 
-      {/* Actions */}
-      <div style={{ padding: "1.125rem 1.25rem", display: "flex", flexDirection: "column", gap: "0.625rem" }}>
-        {isServer ? (
-          <>
-            {/* Share link */}
-            <div
-              style={{
-                borderRadius: "0.625rem",
-                border: "1px solid rgba(255,255,255,0.07)",
-                background: "#0c0c0c",
-                overflow: "hidden",
-              }}
-            >
-              <p
+        {/* Actions */}
+        <div style={{ padding: "1.25rem 1.5rem", display: "flex", flexDirection: "column", gap: "0.625rem" }}>
+          {isServer ? (
+            <>
+              {/* Share link */}
+              <div
                 style={{
-                  fontSize: "0.6875rem",
-                  fontWeight: 600,
-                  letterSpacing: "0.06em",
-                  textTransform: "uppercase",
-                  color: "#444444",
-                  padding: "0.625rem 0.875rem 0.375rem",
+                  borderRadius: "0.625rem",
+                  border: `1px solid ${T.border}`,
+                  background: T.s2,
+                  overflow: "hidden",
                 }}
               >
-                Shareable Link
-              </p>
-              <div style={{ display: "flex", alignItems: "center", padding: "0 0.875rem 0.625rem", gap: "0.5rem" }}>
-                <input
-                  readOnly
-                  value={shareUrl}
+                <p
                   style={{
-                    flex: 1,
-                    background: "transparent",
-                    border: "none",
-                    outline: "none",
-                    fontSize: "0.8125rem",
-                    color: "#888888",
-                    fontFamily: "'JetBrains Mono', monospace",
-                    minWidth: 0,
+                    fontSize: "0.625rem", fontWeight: 700, letterSpacing: "0.08em",
+                    textTransform: "uppercase", color: T.textT,
+                    padding: "0.5625rem 0.875rem 0.25rem",
                   }}
-                />
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(shareUrl);
-                    showToast("Link copied!", "success");
-                  }}
-                  style={{
-                    flexShrink: 0,
-                    width: 30,
-                    height: 30,
-                    borderRadius: "0.375rem",
-                    background: "rgba(232,160,32,0.1)",
-                    border: "1px solid rgba(232,160,32,0.2)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    cursor: "pointer",
-                    color: "#E8A020",
-                    transition: "background 0.2s ease",
-                  }}
-                  className="hover:bg-amber-500/20"
                 >
-                  <Copy size={13} />
-                </button>
+                  Shareable Link
+                </p>
+                <div style={{ display: "flex", alignItems: "center", padding: "0 0.875rem 0.625rem", gap: "0.5rem" }}>
+                  <input
+                    readOnly
+                    value={shareUrl}
+                    style={{
+                      flex: 1, background: "transparent", border: "none", outline: "none",
+                      fontSize: "0.8125rem", color: T.textS, fontFamily: T.mono, minWidth: 0,
+                    }}
+                  />
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(shareUrl); showToast("Link copied!", "success"); }}
+                    style={{
+                      flexShrink: 0, width: 28, height: 28,
+                      borderRadius: "0.375rem",
+                      background: "rgba(232,160,32,0.08)",
+                      border: "1px solid rgba(232,160,32,0.16)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      cursor: "pointer", color: T.gold,
+                      transition: "background 0.2s ease",
+                    }}
+                  >
+                    <Copy size={11} />
+                  </button>
+                </div>
               </div>
-            </div>
 
-            {/* QR Code */}
-            {barResult.qr_code && (
-              <div style={{ display: "flex", justifyContent: "center", paddingTop: "0.25rem" }}>
-                <img
-                  src={barResult.qr_code}
-                  alt="QR Code"
-                  style={{
-                    width: 100,
-                    height: 100,
-                    borderRadius: "0.5rem",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    background: "#fff",
-                  }}
-                />
-              </div>
-            )}
+              {/* QR */}
+              {barResult.qr_code && (
+                <div style={{ display: "flex", justifyContent: "center", paddingTop: "0.25rem" }}>
+                  <div
+                    style={{
+                      padding: "0.5rem", borderRadius: "0.625rem",
+                      background: "#fff",
+                      border: `1px solid rgba(255,255,255,0.1)`,
+                    }}
+                  >
+                    <img
+                      src={barResult.qr_code}
+                      alt="QR Code"
+                      style={{ width: 88, height: 88, display: "block", borderRadius: "0.25rem" }}
+                    />
+                  </div>
+                </div>
+              )}
 
-            {/* Analytics */}
-            <button
-              onClick={onAnalytics}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "0.5rem",
-                padding: "0.6875rem",
-                borderRadius: "0.625rem",
-                border: "1px solid rgba(139,92,246,0.2)",
-                background: "rgba(139,92,246,0.06)",
-                color: "#A78BFA",
-                fontSize: "0.875rem",
-                fontWeight: 500,
-                cursor: "pointer",
-                transition: "background 0.2s ease",
-              }}
-              className="hover:bg-violet-500/10"
-            >
-              <BarChart3 size={15} />
-              View Analytics
+              {/* Analytics */}
+              <button
+                onClick={onAnalytics}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",
+                  padding: "0.6875rem", borderRadius: "0.625rem",
+                  border: `1px solid ${T.border}`,
+                  background: "rgba(255,255,255,0.03)",
+                  color: T.textS, fontSize: "0.8125rem", fontWeight: 500,
+                  cursor: "pointer", transition: "all 0.2s ease",
+                }}
+                onMouseOver={e => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.color = T.text; }}
+                onMouseOut={e => { e.currentTarget.style.background = "rgba(255,255,255,0.03)"; e.currentTarget.style.color = T.textS; }}
+              >
+                <BarChart3 size={13} />
+                View Analytics
+              </button>
+            </>
+          ) : (
+            <button onClick={onDownload} className="btn-primary" style={{ padding: "0.8125rem", justifyContent: "center" }}>
+              <Download size={13} />
+              Download .BAR File
             </button>
-          </>
-        ) : (
-          <button onClick={onDownload} className="btn-primary" style={{ padding: "0.8125rem", justifyContent: "center" }}>
-            <Download size={16} />
-            Download .BAR File
-          </button>
-        )}
+          )}
 
-        {/* Reset */}
-        <button
-          onClick={onReset}
-          style={{
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            color: "#444444",
-            fontSize: "0.8125rem",
-            fontWeight: 500,
-            padding: "0.5rem",
-            transition: "color 0.2s ease",
-            textAlign: "center",
-          }}
-          className="hover:text-zinc-300"
-        >
-          Seal another file
-        </button>
-      </div>
+          <button
+            onClick={onReset}
+            className="btn-ghost"
+            style={{ padding: "0.625rem", fontSize: "0.8125rem" }}
+          >
+            <ArrowLeft size={12} />
+            Seal another file
+          </button>
+        </div>
+      </Card>
     </motion.div>
   );
 }
 
-/* ─────────────────────────────────────────────
-   Main App
-───────────────────────────────────────────── */
+/*──────────────────────────────────────────────
+  Main App
+──────────────────────────────────────────────*/
 function MainApp() {
-  const [uploadedFile, setUploadedFile] = useState(null);
-  const [fileInfo, setFileInfo] = useState(null);
-  const [filePreview, setFilePreview] = useState(null);
+  const [uploadedFile, setUploadedFile]   = useState(null);
+  const [fileInfo, setFileInfo]           = useState(null);
+  const [filePreview, setFilePreview]     = useState(null);
   const [rules, setRules] = useState({
     storageMode: "client",
     maxViews: 1,
@@ -583,12 +531,12 @@ function MainApp() {
     viewRefreshMinutes: 0,
     autoRefreshSeconds: 0,
   });
-  const [barResult, setBarResult] = useState(null);
-  const [isSealing, setIsSealing] = useState(false);
-  const [toast, setToast] = useState(null);
+  const [barResult, setBarResult]         = useState(null);
+  const [isSealing, setIsSealing]         = useState(false);
+  const [toast, setToast]                 = useState(null);
   const [showAnalytics, setShowAnalytics] = useState(false);
-  const [showDecrypt, setShowDecrypt] = useState(false);
-  const [error, setError] = useState(null);
+  const [showDecrypt, setShowDecrypt]     = useState(false);
+  const [error, setError]                 = useState(null);
 
   const showToast = (message, type = "success") => setToast({ message, type });
 
@@ -604,33 +552,24 @@ function MainApp() {
       setFileInfo(response.data);
       setFilePreview(response.data.preview || null);
     } catch (err) {
-      let errorMessage = "Failed to upload file";
+      let msg = "Failed to upload file";
       if (err.response?.data?.detail) {
-        const detail = err.response.data.detail;
-        errorMessage = Array.isArray(detail)
-          ? detail.map((e) => e.msg).join("; ")
-          : detail;
-      } else if (err.message) {
-        errorMessage += ": " + err.message;
-      }
-      setError(errorMessage);
+        const d = err.response.data.detail;
+        msg = Array.isArray(d) ? d.map(e => e.msg).join("; ") : d;
+      } else if (err.message) msg += ": " + err.message;
+      setError(msg);
     }
   };
 
   const handleRemoveFile = () => {
-    setUploadedFile(null);
-    setFileInfo(null);
-    setFilePreview(null);
-    setBarResult(null);
-    setError(null);
+    setUploadedFile(null); setFileInfo(null); setFilePreview(null); setBarResult(null); setError(null);
   };
 
   const handleSealContainer = async () => {
     if (!fileInfo) { setError("No file uploaded"); return; }
-    setIsSealing(true);
-    setError(null);
+    setIsSealing(true); setError(null);
     try {
-      await new Promise((r) => setTimeout(r, 1800));
+      await new Promise(r => setTimeout(r, 1800));
       const sealData = {
         temp_filename: fileInfo.temp_filename,
         max_views: rules.maxViews,
@@ -646,214 +585,152 @@ function MainApp() {
       };
       const response = await axios.post("/seal", sealData);
       setBarResult(response.data);
-      setUploadedFile(null);
-      setFileInfo(null);
+      setUploadedFile(null); setFileInfo(null);
     } catch (err) {
-      let errorMessage = "Failed to seal container";
+      let msg = "Failed to seal container";
       if (err.response?.data?.detail) {
-        const detail = err.response.data.detail;
-        errorMessage = Array.isArray(detail)
-          ? detail.map((e) => e.msg).join("; ")
-          : detail;
-      } else if (err.message) {
-        errorMessage += ": " + err.message;
-      }
-      setError(errorMessage);
-    } finally {
-      setIsSealing(false);
-    }
+        const d = err.response.data.detail;
+        msg = Array.isArray(d) ? d.map(e => e.msg).join("; ") : d;
+      } else if (err.message) msg += ": " + err.message;
+      setError(msg);
+    } finally { setIsSealing(false); }
   };
 
   const handleDownloadBar = () => {
     if (barResult?.bar_data) {
       const binaryString = atob(barResult.bar_data);
       const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
+      for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
       const blob = new Blob([bytes], { type: "application/octet-stream" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      link.href = url;
-      link.download = barResult.bar_filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      link.href = url; link.download = barResult.bar_filename;
+      document.body.appendChild(link); link.click();
+      document.body.removeChild(link); URL.revokeObjectURL(url);
     }
   };
 
   const handleReset = () => {
-    setBarResult(null);
-    setUploadedFile(null);
-    setFileInfo(null);
-    setError(null);
+    setBarResult(null); setUploadedFile(null); setFileInfo(null); setError(null);
     setRules({
-      storageMode: "client",
-      maxViews: 1,
-      expiryMinutes: 0,
-      expiryValue: 0,
-      expiryUnit: "minutes",
-      password: "",
-      webhookUrl: "",
-      viewOnly: false,
-      requireOtp: false,
-      otpEmail: "",
-      viewRefreshMinutes: 0,
-      autoRefreshSeconds: 0,
+      storageMode: "client", maxViews: 1, expiryMinutes: 0,
+      expiryValue: 0, expiryUnit: "minutes", password: "", webhookUrl: "",
+      viewOnly: false, requireOtp: false, otpEmail: "", viewRefreshMinutes: 0, autoRefreshSeconds: 0,
     });
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "#080808",
-        color: "#f0f0f0",
-        overflowX: "hidden",
-        position: "relative",
-      }}
-    >
+    <div style={{ minHeight: "100vh", background: T.bg, color: T.text, overflowX: "hidden", position: "relative" }}>
       <SEO />
       <ContainerAnimation isSealing={isSealing} />
 
-      {/* Subtle ambient background */}
-      <div
-        aria-hidden="true"
-        style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0 }}
-      >
-        <div
-          className="bg-grid"
-          style={{ position: "absolute", inset: 0, opacity: 0.5 }}
-        />
+      {/* Fixed ambient background */}
+      <div aria-hidden="true" style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0 }}>
+        <div className="bg-grid" style={{ position: "absolute", inset: 0, opacity: 0.3 }} />
         <div
           style={{
-            position: "absolute",
-            top: 0,
-            left: "50%",
-            transform: "translateX(-50%)",
-            width: "80vw",
-            height: "40vh",
-            background:
-              "radial-gradient(ellipse at top, rgba(232,160,32,0.04) 0%, transparent 60%)",
+            position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)",
+            width: "55vw", height: "24vh",
+            background: "radial-gradient(ellipse at top, rgba(232,160,32,0.05) 0%, transparent 70%)",
           }}
         />
       </div>
 
-      {/* Navbar */}
-      <AppNav
-        showDecrypt={showDecrypt}
-        onToggleDecrypt={() => setShowDecrypt((v) => !v)}
-      />
-
-      {/* Error modal */}
+      <AppNav showDecrypt={showDecrypt} onToggleDecrypt={() => setShowDecrypt(v => !v)} />
       <ErrorModal error={error} onClose={() => setError(null)} />
 
-      {/* Main */}
-      <main
-        style={{
-          position: "relative",
-          zIndex: 1,
-          paddingTop: "5rem",
-          paddingBottom: "4rem",
-        }}
-      >
-        <div className="container-app" style={{ margin: "0 auto" }}>
+      <main style={{ position: "relative", zIndex: 1, paddingTop: "52px" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "0 1.5rem" }}>
           {showDecrypt ? (
-            <DecryptPage onBack={() => setShowDecrypt(false)} />
-          ) : barResult ? (
-            /* ── SUCCESS STATE ── */
-            <div style={{ paddingTop: "2rem" }}>
-              <ResultCard
-                barResult={barResult}
-                onDownload={handleDownloadBar}
-                onAnalytics={() => setShowAnalytics(true)}
-                onReset={handleReset}
-                showToast={showToast}
-              />
+            <div style={{ paddingTop: "2.5rem" }}>
+              <DecryptPage onBack={() => setShowDecrypt(false)} />
             </div>
+          ) : barResult ? (
+            <ResultCard
+              barResult={barResult}
+              onDownload={handleDownloadBar}
+              onAnalytics={() => setShowAnalytics(true)}
+              onReset={handleReset}
+              showToast={showToast}
+            />
           ) : (
-            /* ── MAIN FORM ── */
             <motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, ease: EASE }}
+              transition={{ duration: 0.45, ease: EASE }}
             >
-              {/* Page title row */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "flex-end",
-                  justifyContent: "space-between",
-                  flexWrap: "wrap",
-                  gap: "0.5rem",
-                  marginBottom: "1.75rem",
-                  paddingTop: "1rem",
-                }}
-              >
-                <div>
-                  <p
+              {/* ── Page header ── */}
+              <div style={{ padding: "2.25rem 0 1.75rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
+                  <span
                     style={{
-                      fontSize: "0.75rem",
-                      fontWeight: 600,
-                      letterSpacing: "0.06em",
-                      textTransform: "uppercase",
-                      color: "#E8A020",
-                      marginBottom: "0.25rem",
+                      fontSize: "0.625rem", fontWeight: 700, letterSpacing: "0.08em",
+                      textTransform: "uppercase", color: T.gold,
+                      background: "rgba(232,160,32,0.08)", border: "1px solid rgba(232,160,32,0.16)",
+                      borderRadius: "999px", padding: "0.1875rem 0.625rem",
                     }}
                   >
-                    Encrypt &amp; Seal
-                  </p>
-                  <h1
-                    style={{
-                      fontSize: "clamp(1.25rem, 3vw, 1.75rem)",
-                      fontWeight: 700,
-                      letterSpacing: "-0.03em",
-                      color: "#d0d0d0",
-                      lineHeight: 1.2,
-                    }}
-                  >
-                    Create a sealed container
-                  </h1>
+                    Encrypt & Seal
+                  </span>
                 </div>
+                <h1
+                  style={{
+                    fontSize: "clamp(1.5rem, 2.5vw, 1.875rem)",
+                    fontWeight: 700, letterSpacing: "-0.04em",
+                    color: T.text, lineHeight: 1.15, marginBottom: "0.5rem",
+                  }}
+                >
+                  Create a sealed container
+                </h1>
+                <p style={{ fontSize: "0.875rem", color: T.textS, letterSpacing: "-0.01em", lineHeight: 1.6, maxWidth: "38ch" }}>
+                  Upload any file, configure security rules, generate an encrypted .BAR container.
+                </p>
+                {/* Hairline accent */}
+                <div
+                  style={{
+                    height: "1px", marginTop: "1.5rem",
+                    background: "linear-gradient(90deg, rgba(232,160,32,0.18) 0%, transparent 60%)",
+                  }}
+                />
               </div>
 
-              {/* Two-column layout */}
-              <div
-                style={{
-                  display: "grid",
-                  gap: "1rem",
-                }}
-                className="grid-cols-1 lg:grid-cols-[3fr_2fr]"
-              >
-                {/* ── Left column ── */}
-                <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-                  {/* Upload card */}
-                  <div
-                    style={{
-                      borderRadius: "0.875rem",
-                      border: "1px solid rgba(255,255,255,0.07)",
-                      background: "#0f0f0f",
-                      padding: "1.25rem",
-                    }}
-                  >
-                    <SectionLabel icon={Upload} label="File Upload" />
-                    <FileUpload
-                      onFileSelect={handleFileSelect}
-                      uploadedFile={uploadedFile}
-                      onRemove={handleRemoveFile}
-                      filePreview={filePreview}
-                    />
-                  </div>
+              {/* ── Two-column app grid ── */}
+              <div className="app-grid">
 
-                  {/* Container preview — shows when file is selected */}
+                {/* LEFT: upload + preview */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+
+                  {/* Upload card */}
+                  <Card accentColor={T.gold}>
+                    <CardHeader icon={Upload} label="File Upload" color={T.gold}>
+                      <span
+                        style={{
+                          fontSize: "0.6875rem", fontWeight: 600, letterSpacing: "0.04em",
+                          textTransform: "uppercase", color: T.textT,
+                        }}
+                      >
+                        Any type
+                      </span>
+                    </CardHeader>
+                    <div style={{ padding: "1.125rem" }}>
+                      <FileUpload
+                        onFileSelect={handleFileSelect}
+                        uploadedFile={uploadedFile}
+                        onRemove={handleRemoveFile}
+                        filePreview={filePreview}
+                      />
+                    </div>
+                  </Card>
+
+                  {/* Container preview — animated */}
                   <AnimatePresence>
                     {uploadedFile && (
                       <motion.div
-                        initial={{ opacity: 0, y: 12 }}
+                        key="preview"
+                        initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -8 }}
-                        transition={{ duration: 0.4, ease: EASE }}
+                        exit={{ opacity: 0, y: -6 }}
+                        transition={{ duration: 0.3, ease: EASE }}
                       >
                         <ContainerPreview uploadedFile={uploadedFile} rules={rules} />
                       </motion.div>
@@ -861,22 +738,27 @@ function MainApp() {
                   </AnimatePresence>
                 </div>
 
-                {/* ── Right column ── */}
+                {/* RIGHT: security config + seal */}
                 <div
+                  className="app-grid-sidebar"
                   style={{
-                    borderRadius: "0.875rem",
-                    border: "1px solid rgba(255,255,255,0.07)",
-                    background: "#0f0f0f",
-                    padding: "1.25rem",
-                    height: "fit-content",
-                    position: "sticky",
-                    top: "4.5rem",
+                    borderRadius: "1rem",
+                    border: `1px solid ${T.border}`,
+                    background: T.s0,
+                    overflow: "hidden",
+                    boxShadow: shadow,
                   }}
                 >
-                  <SectionLabel icon={Shield} label="Security Configuration" color="#8B5CF6" />
-                  <RulesPanel rules={rules} onRulesChange={setRules} />
-
-                  {/* Seal button */}
+                  <div
+                    style={{
+                      height: "1px",
+                      background: `linear-gradient(90deg, rgba(232,160,32,0.45) 0%, rgba(232,160,32,0.14) 55%, transparent 100%)`,
+                    }}
+                  />
+                  <CardHeader icon={Shield} label="Security Configuration" color={T.gold} />
+                  <div style={{ padding: "1.125rem" }}>
+                    <RulesPanel rules={rules} onRulesChange={setRules} />
+                  </div>
                   <SealButton
                     onClick={handleSealContainer}
                     disabled={isSealing || !uploadedFile}
@@ -885,27 +767,19 @@ function MainApp() {
                 </div>
               </div>
 
-              {/* SEO content */}
-              {!barResult && (
-                <div style={{ marginTop: "4rem", opacity: 0.5 }}>
-                  <SEOContent />
-                </div>
-              )}
+              {/* SEO section */}
+              <div style={{ marginTop: "5rem", opacity: 0.35 }}>
+                <SEOContent />
+              </div>
             </motion.div>
           )}
         </div>
       </main>
 
       {/* Toast */}
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      {/* Analytics */}
+      {/* Analytics modal */}
       {showAnalytics && barResult?.access_token && barResult?.analytics_key && (
         <AnalyticsDashboard
           token={barResult.access_token}
@@ -917,34 +791,38 @@ function MainApp() {
       {/* Footer */}
       <footer
         style={{
-          borderTop: "1px solid rgba(255,255,255,0.04)",
-          padding: "1.25rem",
-          textAlign: "center",
-          position: "relative",
-          zIndex: 1,
+          borderTop: `1px solid rgba(255,255,255,0.04)`,
+          position: "relative", zIndex: 1, marginTop: "4rem",
         }}
       >
-        <p
+        <div
           style={{
-            fontSize: "0.8125rem",
-            color: "#2a2a2a",
+            maxWidth: 1100, margin: "0 auto", padding: "1.125rem 1.5rem",
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            flexWrap: "wrap", gap: "0.5rem",
           }}
         >
-          BAR Web © 2025 — Secure file encryption with self-destruct
-        </p>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+            <PackageOpen size={11} style={{ color: T.textD }} />
+            <span style={{ fontSize: "0.75rem", color: T.textD, letterSpacing: "-0.01em" }}>
+              BAR Web — Encrypted file containers with self-destruct
+            </span>
+          </div>
+          <span style={{ fontSize: "0.6875rem", color: T.textD }}>© 2025</span>
+        </div>
       </footer>
     </div>
   );
 }
 
-/* ─────────────────────────────────────────────
-   App with routing
-───────────────────────────────────────────── */
+/*──────────────────────────────────────────────
+  App root with routing
+──────────────────────────────────────────────*/
 function App() {
   return (
     <Routes>
-      <Route path="/" element={<LandingPage />} />
-      <Route path="/app" element={<MainApp />} />
+      <Route path="/"            element={<LandingPage />} />
+      <Route path="/app"         element={<MainApp />} />
       <Route path="/share/:token" element={<SharePageWrapper />} />
     </Routes>
   );
