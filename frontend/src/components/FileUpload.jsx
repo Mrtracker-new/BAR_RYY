@@ -1,146 +1,139 @@
 import React, { useState, useRef } from 'react';
-import { Upload, File, X, FileText, Image, Film, Music, Archive } from 'lucide-react';
+import { Upload, File, X, FileText, Image, Film, Music, Archive, Lock } from 'lucide-react';
 
-/* ─────────────────────────────────────────────
-   File type → icon + label
-───────────────────────────────────────────── */
-function getFileIcon(file) {
-  if (!file) return { Icon: File, label: 'File', color: '#888888' };
+/* ── File type → icon + accent color ── */
+function getFileType(file) {
+  if (!file) return { Icon: File, label: 'File', color: '#555' };
   const t = file.type;
-  if (t.startsWith('image/'))       return { Icon: Image,    label: 'Image',    color: '#38BDF8' };
-  if (t.startsWith('video/'))       return { Icon: Film,     label: 'Video',    color: '#A78BFA' };
-  if (t.startsWith('audio/'))       return { Icon: Music,    label: 'Audio',    color: '#34D399' };
-  if (t === 'application/pdf')      return { Icon: FileText, label: 'PDF',      color: '#FB7185' };
+  if (t.startsWith('image/'))  return { Icon: Image,    label: 'Image',    color: '#38BDF8' };
+  if (t.startsWith('video/'))  return { Icon: Film,     label: 'Video',    color: '#A78BFA' };
+  if (t.startsWith('audio/'))  return { Icon: Music,    label: 'Audio',    color: '#34D399' };
+  if (t === 'application/pdf') return { Icon: FileText, label: 'PDF',      color: '#FB7185' };
   if (t.includes('zip') || t.includes('rar') || t.includes('archive'))
     return { Icon: Archive, label: 'Archive', color: '#FBBF24' };
   if (t.includes('document') || t.includes('word') || t.includes('text'))
     return { Icon: FileText, label: 'Document', color: '#60A5FA' };
-  return { Icon: File, label: 'File', color: '#888888' };
+  return { Icon: File, label: 'File', color: '#666' };
 }
 
-function formatFileSize(bytes) {
-  if (!bytes || bytes === 0) return '0 B';
+function fmtSize(bytes) {
+  if (!bytes) return '0 B';
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return `${Math.round((bytes / Math.pow(k, i)) * 10) / 10} ${sizes[i]}`;
 }
 
-/* ─────────────────────────────────────────────
-   FileUpload component
-───────────────────────────────────────────── */
+const TYPE_PILLS = [
+  { label: 'Images', color: '#38BDF8' },
+  { label: 'PDF',    color: '#FB7185' },
+  { label: 'Docs',   color: '#60A5FA' },
+  { label: 'Archives', color: '#FBBF24' },
+];
+
+/* ── Component ── */
 const FileUpload = ({ onFileSelect, uploadedFile, onRemove, filePreview }) => {
   const [isDragging, setIsDragging] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState(null);
-  const fileInputRef = useRef(null);
+  const [localPreview, setLocalPreview] = useState(null);
+  const inputRef = useRef(null);
 
-  const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
-  const handleDragLeave = (e) => { e.preventDefault(); setIsDragging(false); };
+  const handleDragOver  = e => { e.preventDefault(); setIsDragging(true); };
+  const handleDragLeave = e => { e.preventDefault(); setIsDragging(false); };
 
-  const handleDrop = (e) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const files = e.dataTransfer.files;
-    if (files.length > 0) { generatePreview(files[0]); onFileSelect(files[0]); }
-  };
-
-  const handleFileInput = (e) => {
-    const files = e.target.files;
-    if (files.length > 0) { generatePreview(files[0]); onFileSelect(files[0]); }
-  };
-
-  const generatePreview = (file) => {
+  const processFile = (file) => {
     if (!file) return;
-    const t = file.type;
-    if (t.startsWith('image/')) {
+    if (file.type.startsWith('image/')) {
       const reader = new FileReader();
-      reader.onload = (e) => setPreviewUrl({ type: 'image', url: e.target.result });
+      reader.onload = e => setLocalPreview(e.target.result);
       reader.readAsDataURL(file);
     } else {
-      setPreviewUrl(null);
+      setLocalPreview(null);
     }
+    onFileSelect(file);
   };
 
-  const { Icon, label, color } = getFileIcon(uploadedFile);
+  const handleDrop = e => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) processFile(file);
+  };
 
-  /* ── Drop zone (no file yet) ── */
+  const handleInput = e => {
+    const file = e.target.files[0];
+    if (file) processFile(file);
+  };
+
+  const { Icon, label, color } = getFileType(uploadedFile);
+
+  /* ── Empty drop zone ── */
   if (!uploadedFile) {
     return (
       <div
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        onClick={() => fileInputRef.current?.click()}
-        className={`upload-zone${isDragging ? ' dragging' : ''}`}
+        onClick={() => inputRef.current?.click()}
+        className="upload-zone"
         style={{
-          padding: '2.5rem 1.5rem',
+          padding: '3rem 1.5rem',
           textAlign: 'center',
           userSelect: 'none',
-          transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+          borderColor: isDragging ? 'rgba(232,160,32,0.45)' : undefined,
+          background: isDragging ? 'rgba(232,160,32,0.03)' : undefined,
         }}
       >
-        <input
-          ref={fileInputRef}
-          type="file"
-          style={{ display: 'none' }}
-          onChange={handleFileInput}
-        />
+        <input ref={inputRef} type="file" style={{ display: 'none' }} onChange={handleInput} />
 
-        {/* Icon ring */}
+        {/* Upload icon — square */}
         <div
           style={{
-            width: 56,
-            height: 56,
-            borderRadius: '50%',
-            border: `1px solid ${isDragging ? 'rgba(232,160,32,0.4)' : 'rgba(255,255,255,0.08)'}`,
+            width: 44, height: 44, borderRadius: '0.625rem',
+            border: `1px solid ${isDragging ? 'rgba(232,160,32,0.35)' : 'rgba(255,255,255,0.07)'}`,
             background: isDragging ? 'rgba(232,160,32,0.08)' : 'rgba(255,255,255,0.03)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            margin: '0 auto 1.25rem',
-            transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            margin: '0 auto 1rem',
+            transition: 'all 0.2s ease',
           }}
         >
           <Upload
-            size={22}
+            size={16}
             style={{
-              color: isDragging ? '#E8A020' : '#444444',
-              transition: 'color 0.25s ease',
+              color: isDragging ? '#E8A020' : '#3a3a3a',
+              transition: 'color 0.2s ease',
             }}
           />
         </div>
 
         <p
           style={{
-            fontSize: '0.9375rem',
-            fontWeight: 600,
-            letterSpacing: '-0.01em',
-            color: isDragging ? '#E8A020' : '#cccccc',
-            marginBottom: '0.375rem',
-            transition: 'color 0.25s ease',
+            fontSize: '0.9375rem', fontWeight: 600, letterSpacing: '-0.02em',
+            color: isDragging ? '#E8A020' : '#999',
+            marginBottom: '0.3rem', transition: 'color 0.2s ease',
           }}
         >
-          {isDragging ? 'Drop to encrypt' : 'Drop file or click to browse'}
+          {isDragging ? 'Release to encrypt' : 'Drop file or click to browse'}
         </p>
-        <p style={{ fontSize: '0.8125rem', color: '#444444', marginBottom: '1.5rem' }}>
-          Images, PDFs, documents, archives — any file type
+        <p
+          style={{
+            fontSize: '0.8125rem', color: '#313131',
+            marginBottom: '1.5rem', letterSpacing: '-0.01em',
+          }}
+        >
+          Any file type supported
         </p>
 
-        {/* Type tags */}
+        {/* Type pills */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem', justifyContent: 'center' }}>
-          {['Images', 'PDF', 'Docs', 'Archives', 'Video', 'Audio'].map((t) => (
+          {TYPE_PILLS.map(({ label: t, color: c }) => (
             <span
               key={t}
               style={{
-                padding: '0.1875rem 0.625rem',
-                borderRadius: '999px',
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.06)',
-                fontSize: '0.6875rem',
-                fontWeight: 500,
-                letterSpacing: '0.04em',
-                textTransform: 'uppercase',
-                color: '#555555',
+                padding: '0.1875rem 0.5625rem', borderRadius: '999px',
+                background: `${c}09`, border: `1px solid ${c}16`,
+                fontSize: '0.625rem', fontWeight: 600,
+                letterSpacing: '0.07em', textTransform: 'uppercase',
+                color: `${c}88`,
               }}
             >
               {t}
@@ -151,131 +144,91 @@ const FileUpload = ({ onFileSelect, uploadedFile, onRemove, filePreview }) => {
     );
   }
 
-  /* ── File selected state ── */
+  /* ── File selected ── */
   return (
     <div
       style={{
-        borderRadius: '0.875rem',
+        borderRadius: '0.625rem',
         border: '1px solid rgba(232,160,32,0.18)',
-        background: 'rgba(232,160,32,0.04)',
+        background: 'rgba(232,160,32,0.03)',
         overflow: 'hidden',
       }}
     >
-      {/* File info row */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.875rem',
-          padding: '1rem 1.125rem',
-        }}
-      >
-        {/* Icon */}
+      {/* File row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.875rem 1rem' }}>
+        {/* File type icon */}
         <div
           style={{
-            width: 40,
-            height: 40,
-            minWidth: 40,
-            borderRadius: '0.5rem',
-            background: `${color}14`,
-            border: `1px solid ${color}25`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            width: 36, height: 36, minWidth: 36, borderRadius: '0.4375rem',
+            background: `${color}10`, border: `1px solid ${color}20`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
         >
-          <Icon size={18} style={{ color }} />
+          <Icon size={15} style={{ color }} />
         </div>
 
-        {/* File details */}
+        {/* Name + meta */}
         <div style={{ flex: 1, minWidth: 0 }}>
           <p
             style={{
-              fontSize: '0.875rem',
-              fontWeight: 600,
-              color: '#e0e0e0',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              letterSpacing: '-0.01em',
+              fontSize: '0.875rem', fontWeight: 600, color: '#ddd',
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              letterSpacing: '-0.015em', marginBottom: '0.125rem',
             }}
           >
             {uploadedFile.name}
           </p>
-          <p
-            style={{
-              fontSize: '0.75rem',
-              color: '#555555',
-              marginTop: '0.125rem',
-              fontFamily: "'JetBrains Mono', monospace",
-            }}
-          >
-            {label} · {formatFileSize(uploadedFile.size)}
+          <p style={{ fontSize: '0.6875rem', color: '#3a3a3a', fontFamily: "'JetBrains Mono', monospace" }}>
+            {label} · {fmtSize(uploadedFile.size)}
           </p>
         </div>
 
         {/* Remove */}
         <button
-          onClick={() => { onRemove(); setPreviewUrl(null); }}
-          style={{
-            width: 30,
-            height: 30,
-            minWidth: 30,
-            borderRadius: '0.375rem',
-            background: 'transparent',
-            border: '1px solid transparent',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            color: '#555555',
-            transition: 'background 0.2s ease, color 0.2s ease, border-color 0.2s ease',
-          }}
-          className="hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20"
+          onClick={() => { onRemove(); setLocalPreview(null); }}
           title="Remove file"
+          className="btn-icon"
+          style={{ width: 28, height: 28 }}
+          onMouseOver={e => {
+            e.currentTarget.style.background = 'rgba(239,68,68,0.08)';
+            e.currentTarget.style.borderColor = 'rgba(239,68,68,0.2)';
+            e.currentTarget.style.color = '#f87171';
+          }}
+          onMouseOut={e => {
+            e.currentTarget.style.background = 'transparent';
+            e.currentTarget.style.borderColor = 'transparent';
+            e.currentTarget.style.color = 'var(--text-tertiary)';
+          }}
         >
-          <X size={15} />
+          <X size={12} />
         </button>
       </div>
 
       {/* Status bar */}
       <div
         style={{
-          padding: '0.5rem 1.125rem',
+          padding: '0.4375rem 1rem',
           borderTop: '1px solid rgba(232,160,32,0.10)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.5rem',
+          display: 'flex', alignItems: 'center', gap: '0.5rem',
+          background: 'rgba(232,160,32,0.03)',
         }}
       >
-        <span
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: '50%',
-            background: '#22C55E',
-            boxShadow: '0 0 6px #22C55E',
-            animation: 'pulse 2s infinite',
-            flexShrink: 0,
-          }}
-        />
-        <span style={{ fontSize: '0.75rem', color: '#666666', fontWeight: 500 }}>
-          Uploaded — ready to configure and seal
+        <Lock size={10} style={{ color: '#E8A020', flexShrink: 0 }} />
+        <span style={{ fontSize: '0.6875rem', color: '#3a3a3a', fontWeight: 500, letterSpacing: '-0.01em' }}>
+          Ready to seal — configure rules and encrypt
         </span>
       </div>
 
       {/* Image preview */}
-      {(filePreview || previewUrl?.type === 'image') && (
-        <div style={{ borderTop: '1px solid rgba(232,160,32,0.10)' }}>
+      {(filePreview || localPreview) && (
+        <div style={{ borderTop: '1px solid rgba(232,160,32,0.08)' }}>
           <img
-            src={filePreview || previewUrl.url}
+            src={filePreview || localPreview}
             alt="Preview"
             style={{
-              width: '100%',
-              maxHeight: 200,
+              width: '100%', maxHeight: 180,
               objectFit: 'contain',
-              background: '#0a0a0a',
-              display: 'block',
+              background: '#090909', display: 'block',
             }}
           />
         </div>
