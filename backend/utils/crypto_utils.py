@@ -270,44 +270,56 @@ def pack_bar_file(encrypted_data: bytes, metadata: dict, key: bytes, password: s
 def unpack_bar_file(bar_data: bytes, password: str = None) -> tuple:
     """
     Unpack BAR file into components.
-    
+
     Args:
         bar_data: Raw BAR file data
         password: Optional password for password-derived encryption
-        
+
     Returns:
-        Tuple of (encrypted_data, metadata, key)
-        
+        4-tuple of ``(encrypted_data, metadata, key, salt)`` where:
+
+        * ``encrypted_data`` – the raw Fernet ciphertext as stored on disk.
+          Callers that need to re-pack the file (e.g. after updating the view
+          count) **must** reuse this blob verbatim so that the HMAC computed
+          by :func:`pack_bar_file` matches on the next read.
+        * ``metadata`` – the plaintext metadata dict.
+        * ``key`` – the Fernet key (bytes, URL-safe base64 encoded).
+        * ``salt`` – the PBKDF2 salt bytes for ``password_derived`` files, or
+          ``None`` for ``key_stored`` (legacy) files.  Required by
+          :func:`pack_bar_file` when re-packing a password-protected file.
+
     Security:
-        - For password_derived files: Derives key from password and salt
+        - For password_derived files: Derives key from password and stored salt
         - For key_stored files: Extracts key from file (backward compatible)
-        
+
     Raises:
         ValueError: If file format is invalid
         ValueError: If password is required but not provided
-        ValueError: If password-derived encryption is used but no password given
+        TamperDetectedException: If the HMAC signature does not match
     """
     # Remove header
     if not bar_data.startswith(b"BAR_FILE_V1\n"):
         raise ValueError("Invalid BAR file format")
-    
+
     obfuscated_data = bar_data[12:]  # Remove header
-    
+
     # Deobfuscate: Base64 decode to get the JSON
     bar_json = base64.b64decode(obfuscated_data)
     bar_structure = json.loads(bar_json.decode('utf-8'))
-    
+
     metadata = bar_structure["metadata"]
     encrypted_data = base64.b64decode(bar_structure["encrypted_data"])
-    
+
     # Determine encryption method
     encryption_method = bar_structure.get("encryption_method", "key_stored")  # Default to legacy
-    
+
+    salt: bytes | None = None  # Will be populated for password_derived files
+
     if encryption_method == "password_derived":
         # Password-derived encryption: Must derive key from password
         if not password:
             raise ValueError("Password required for decryption")
-        
+
         # Verify password FIRST if password_hash exists (before key derivation)
         # This prevents false "tampering detected" errors when password is wrong
         if "password_hash" in metadata:
@@ -315,39 +327,39 @@ def unpack_bar_file(bar_data: bytes, password: str = None) -> tuple:
             stored_hash = metadata["password_hash"]
             if not hmac.compare_digest(provided_hash, stored_hash):
                 raise ValueError("Invalid password")
-        
-        # Get salt from file
+
+        # Get salt from file — kept so callers can re-pack without changing it
         salt = base64.b64decode(bar_structure["salt"])
-        
+
         # Derive key from password and salt
         key = derive_key_from_password(password, salt)
-        
+
     else:
         # Legacy mode: Key is stored in file
         key = base64.b64decode(bar_structure["encryption_key"])
-    
+
     # Verify HMAC signature for integrity (if present)
     if "hmac_signature" in bar_structure:
         stored_signature = bar_structure["hmac_signature"]
-        
+
         # Reconstruct the structure without signature for verification
         # MUST use same JSON formatting as during signing
         structure_for_verification = {k: v for k, v in bar_structure.items() if k != "hmac_signature"}
         verification_json = json.dumps(structure_for_verification, sort_keys=True, separators=(',', ':'))
-        
-        # Verify signature - will raise TamperDetectedException if invalid
+
+        # Verify signature — raises TamperDetectedException if invalid
         verify_hmac_signature(verification_json.encode('utf-8'), key, stored_signature)
     else:
-        # No signature present - old file format (pre-HMAC)
-        # Issue warning but allow it for backward compatibility
+        # No signature present — old file format (pre-HMAC).
+        # Allow for backward compatibility but warn the operator.
         import warnings
         warnings.warn(
             "BAR file does not contain HMAC signature (old format). "
             "Tampering cannot be detected. Consider re-encrypting with current version.",
             UserWarning
         )
-    
-    return encrypted_data, metadata, key
+
+    return encrypted_data, metadata, key, salt
 
 
 def peek_bar_metadata(bar_data: bytes) -> dict:
