@@ -181,7 +181,7 @@ async def share_file(
         password_to_use = password.strip() if password and password.strip() else None
         
         try:
-            decrypted_data, metadata, key = encryption_service.decrypt_bar_file(bar_data, password_to_use)
+            decrypted_data, metadata, key, _enc, _salt = encryption_service.decrypt_bar_file(bar_data, password_to_use)
         except HTTPException as e:
             # Send access denied webhook
             if e.status_code == 403 and file_record.get('metadata'):
