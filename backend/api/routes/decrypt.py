@@ -96,7 +96,7 @@ async def decrypt_bar(
         password_to_use = request.password if request.password and request.password.strip() else None
 
         try:
-            decrypted_data, metadata, key = encryption_service.decrypt_bar_file(bar_data, password_to_use)
+            decrypted_data, metadata, key, encrypted_data, salt = encryption_service.decrypt_bar_file(bar_data, password_to_use)
         except HTTPException as decrypt_exc:
             # Wrong password (403) – record the failure so the brute-force
             # counter advances and the progressive delay grows.
@@ -166,19 +166,18 @@ async def decrypt_bar(
         )
 
         if not should_destroy:
-            # Re-encrypt with updated view count and persist.
-            encrypted_data = crypto_utils.encrypt_file(
-                crypto_utils.decrypt_file(
-                    crypto_utils.encrypt_file(decrypted_data, key),
-                    key
-                ),
-                key
-            )
+            # Persist the updated view count by re-packing the file with the
+            # ORIGINAL ciphertext.  Re-encrypting the plaintext would produce a
+            # new Fernet token (Fernet encryption is non-deterministic), which
+            # would invalidate the HMAC signature computed over the ciphertext
+            # at seal time, causing every future access to fail with
+            # TamperDetectedException even though no actual tampering occurred.
             updated_bar = crypto_utils.pack_bar_file(
-                encrypted_data,
+                encrypted_data,  # original ciphertext — MUST NOT be re-encrypted
                 metadata,
                 key,
-                password=request.password if metadata.get("password_protected") else None
+                password=request.password if metadata.get("password_protected") else None,
+                salt=salt,       # original PBKDF2 salt for password-derived files
             )
             with open(bar_file, "wb") as f:
                 f.write(updated_bar)
@@ -272,7 +271,7 @@ async def decrypt_uploaded_bar_file(
         password_to_use = password if password and password.strip() else None
         
         try:
-            decrypted_data, metadata, key = encryption_service.decrypt_bar_file(bar_data, password_to_use)
+            decrypted_data, metadata, key, _enc, _salt = encryption_service.decrypt_bar_file(bar_data, password_to_use)
         except HTTPException as e:
             # Record failed attempt
             if e.status_code == 403:
