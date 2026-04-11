@@ -30,7 +30,7 @@ def decrypt_bar_file(bar_file_path, password=None, output_dir=None):
             bar_data = f.read()
         
         # Unpack BAR file with password for password-derived encryption
-        encrypted_data, metadata, key = crypto_utils.unpack_bar_file(bar_data, password=password)
+        encrypted_data, metadata, key, _salt = crypto_utils.unpack_bar_file(bar_data, password=password)
         
         # Display metadata
         print(f"📄 Original Filename: {metadata['filename']}")
