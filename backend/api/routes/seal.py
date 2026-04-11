@@ -180,7 +180,7 @@ async def get_bar_info(
         with open(bar_file, "rb") as f:
             bar_data = f.read()
         
-        _, metadata, _ = crypto_utils.unpack_bar_file(bar_data)
+        _, metadata, _, _salt = crypto_utils.unpack_bar_file(bar_data)
         
         # Return safe metadata (excluding encryption key)
         return {
