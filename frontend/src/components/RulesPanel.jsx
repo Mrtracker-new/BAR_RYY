@@ -1,181 +1,219 @@
 import React from 'react';
-import { Eye, Clock, Lock, Webhook, Server, Download } from 'lucide-react';
+import { Eye, Clock, Lock, Webhook, Server, Download, RefreshCw, Mail, Check } from 'lucide-react';
 
-/* ─────────────────────────────────────────────
-   Small label above form sections
-───────────────────────────────────────────── */
-function FieldLabel({ children }) {
+/* ── Design tokens ── */
+const T = {
+  gold:    '#E8A020',
+  goldM:   '#C8893A',
+  border:  'rgba(255,255,255,0.06)',
+  borderH: 'rgba(255,255,255,0.11)',
+  s0:      '#0d0d0d',
+  s1:      '#111111',
+  s2:      '#161616',
+  text:    '#c8c8c8',
+  textT:   '#404040',
+  textD:   '#292929',
+  mono:    "'JetBrains Mono', monospace",
+};
+
+/* ── Section label ── */
+function SectionLabel({ icon: Icon, children }) {
   return (
-    <p
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginBottom: '0.625rem' }}>
+      {Icon && <Icon size={10} style={{ color: T.textT, flexShrink: 0 }} />}
+      <span
+        style={{
+          fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.08em',
+          textTransform: 'uppercase', color: T.textT,
+        }}
+      >
+        {children}
+      </span>
+    </div>
+  );
+}
+
+/* ── Divider ── */
+function Sep() {
+  return <div style={{ height: 1, background: 'rgba(255,255,255,0.04)', margin: '1.125rem 0' }} />;
+}
+
+/* ── Storage mode card ── */
+function ModeCard({ active, icon: Icon, label, sub, onClick }) {
+  return (
+    <button
+      onClick={onClick}
       style={{
-        fontSize: '0.6875rem',
-        fontWeight: 600,
-        letterSpacing: '0.06em',
-        textTransform: 'uppercase',
-        color: '#555555',
-        marginBottom: '0.625rem',
+        flex: 1, padding: '0.75rem 0.875rem', borderRadius: '0.5rem',
+        border: active ? '1px solid rgba(232,160,32,0.28)' : `1px solid ${T.border}`,
+        background: active ? 'rgba(232,160,32,0.07)' : 'rgba(255,255,255,0.02)',
+        cursor: 'pointer', textAlign: 'left',
+        transition: 'border-color 0.18s ease, background 0.18s ease',
+        position: 'relative',
       }}
     >
-      {children}
-    </p>
+      {/* Active checkmark */}
+      {active && (
+        <div
+          style={{
+            position: 'absolute', top: 6, right: 6,
+            width: 14, height: 14, borderRadius: '50%',
+            background: T.gold, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <Check size={8} style={{ color: '#000' }} strokeWidth={3} />
+        </div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.3rem' }}>
+        <Icon size={11} style={{ color: active ? T.gold : '#555', flexShrink: 0 }} />
+        <span
+          style={{
+            fontSize: '0.8125rem', fontWeight: 600, letterSpacing: '-0.01em',
+            color: active ? '#e0e0e0' : '#555',
+          }}
+        >
+          {label}
+        </span>
+      </div>
+      <p style={{ fontSize: '0.6875rem', color: '#3a3a3a', lineHeight: 1.4 }}>{sub}</p>
+    </button>
   );
 }
 
-/* ─────────────────────────────────────────────
-   Divider
-───────────────────────────────────────────── */
-function Divider() {
+/* ── Stepper control ── */
+function Stepper({ value, min, max, onChange, unit }) {
+  const decrement = () => onChange(Math.max(min, value - 1));
+  const increment = () => onChange(Math.min(max, value + 1));
+
   return (
-    <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', margin: '1.25rem 0' }} />
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+      <div className="stepper">
+        <button className="stepper-btn" onClick={decrement} title="Decrease">−</button>
+        <span className="stepper-value">{value}</span>
+        <button className="stepper-btn" onClick={increment} title="Increase">+</button>
+      </div>
+      <span style={{ fontSize: '0.8125rem', color: '#555', fontFamily: T.mono }}>
+        {value} {unit && (value > 1 ? `${unit}s` : unit)}
+      </span>
+    </div>
   );
 }
 
-/* ─────────────────────────────────────────────
-   Main
-───────────────────────────────────────────── */
+/* ── Toggle switch row ── */
+function ToggleRow({ checked, onChange, label, description }) {
+  return (
+    <label
+      style={{
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+        gap: '0.875rem', padding: '0.625rem 0.5rem', borderRadius: '0.5rem',
+        cursor: 'pointer', transition: 'background 0.15s ease',
+      }}
+      onMouseOver={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+      onMouseOut={e => e.currentTarget.style.background = 'transparent'}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#c0c0c0', marginBottom: '0.125rem', letterSpacing: '-0.01em' }}>
+          {label}
+        </p>
+        <p style={{ fontSize: '0.6875rem', color: '#3a3a3a', lineHeight: 1.5 }}>
+          {description}
+        </p>
+      </div>
+      {/* Toggle switch */}
+      <label className="toggle-switch">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={onChange}
+          style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }}
+        />
+        <span className="toggle-track" />
+      </label>
+    </label>
+  );
+}
+
+/* ── Main ── */
 const RulesPanel = ({ rules, onRulesChange }) => {
-  const handleMaxViewsChange = (value) =>
-    onRulesChange({ ...rules, maxViews: parseInt(value) || 1 });
+  const set = (patch) => onRulesChange({ ...rules, ...patch });
 
   const handleExpiryChange = (value, unit) => {
     const multipliers = { minutes: 1, hours: 60, days: 1440 };
     const minutes = parseInt(value) * multipliers[unit] || 0;
-    onRulesChange({ ...rules, expiryMinutes: minutes, expiryUnit: unit, expiryValue: value });
+    set({ expiryMinutes: minutes, expiryUnit: unit, expiryValue: value });
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
 
-      {/* ── Storage Mode ── */}
-      <div style={{ marginBottom: '1.25rem' }}>
-        <FieldLabel>Storage Mode</FieldLabel>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-          {[
-            {
-              value: 'client',
-              label: 'Client-Side',
-              sub: 'Download .bar file',
-              Icon: Download,
-            },
-            {
-              value: 'server',
-              label: 'Server-Side',
-              sub: 'Shareable link',
-              Icon: Server,
-            },
-          ].map(({ value, label, sub, Icon }) => {
-            const active = rules.storageMode === value || (!rules.storageMode && value === 'client');
-            return (
-              <label
-                key={value}
-                className={`radio-card${active ? ' active' : ''}`}
-                style={{ cursor: 'pointer' }}
-              >
-                <input
-                  type="radio"
-                  name="storageMode"
-                  value={value}
-                  checked={active}
-                  onChange={() => onRulesChange({ ...rules, storageMode: value })}
-                  style={{ display: 'none' }}
-                />
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                  <Icon
-                    size={13}
-                    style={{ color: active ? '#E8A020' : '#555555', flexShrink: 0 }}
-                  />
-                  <span
-                    style={{
-                      fontSize: '0.8125rem',
-                      fontWeight: 600,
-                      color: active ? '#e0e0e0' : '#666666',
-                    }}
-                  >
-                    {label}
-                  </span>
-                </div>
-                <p style={{ fontSize: '0.7rem', color: '#444444', lineHeight: 1.4 }}>
-                  {sub}
-                </p>
-              </label>
-            );
-          })}
+      {/* ── Storage mode ── */}
+      <div style={{ marginBottom: '1.125rem' }}>
+        <SectionLabel>Storage Mode</SectionLabel>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <ModeCard
+            active={!rules.storageMode || rules.storageMode === 'client'}
+            icon={Download}
+            label="Client-Side"
+            sub="Download .bar file"
+            onClick={() => set({ storageMode: 'client' })}
+          />
+          <ModeCard
+            active={rules.storageMode === 'server'}
+            icon={Server}
+            label="Server-Side"
+            sub="Shareable link"
+            onClick={() => set({ storageMode: 'server' })}
+          />
         </div>
       </div>
 
-      <Divider />
+      <Sep />
 
-      {/* ── Max Views (server only) ── */}
+      {/* ── Self-destruct (server only) ── */}
       {rules.storageMode === 'server' ? (
-        <div style={{ marginBottom: '1.25rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-              <Eye size={13} style={{ color: '#555555' }} />
-              <FieldLabel>Self-Destruct Limit</FieldLabel>
-            </div>
-            <span
-              style={{
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                fontFamily: "'JetBrains Mono', monospace",
-                color: '#E8A020',
-                background: 'rgba(232,160,32,0.08)',
-                border: '1px solid rgba(232,160,32,0.18)',
-                borderRadius: '0.375rem',
-                padding: '0.125rem 0.5rem',
-              }}
-            >
-              {rules.maxViews} {rules.maxViews > 1 ? 'views' : 'view'}
-            </span>
+        <div style={{ marginBottom: '1.125rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+            <SectionLabel icon={Eye}>Self-Destruct Limit</SectionLabel>
           </div>
-          <input
-            type="range"
-            min="1"
-            max="10"
+          <Stepper
             value={rules.maxViews}
-            onChange={(e) => handleMaxViewsChange(e.target.value)}
-            style={{ width: '100%', marginBottom: 0 }}
+            min={1}
+            max={10}
+            unit="view"
+            onChange={v => set({ maxViews: v })}
           />
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.25rem' }}>
-            <span style={{ fontSize: '0.625rem', color: '#333333' }}>1</span>
-            <span style={{ fontSize: '0.625rem', color: '#333333' }}>10</span>
-          </div>
         </div>
       ) : (
         <div
           style={{
-            marginBottom: '1.25rem',
-            padding: '0.75rem',
-            borderRadius: '0.5rem',
-            background: 'rgba(255,255,255,0.02)',
-            border: '1px solid rgba(255,255,255,0.04)',
-            textAlign: 'center',
+            marginBottom: '1.125rem', padding: '0.625rem 0.75rem',
+            borderRadius: '0.5rem', background: 'rgba(255,255,255,0.02)',
+            border: `1px solid rgba(255,255,255,0.04)`,
           }}
         >
-          <p style={{ fontSize: '0.75rem', color: '#444444' }}>
-            Switch to <span style={{ color: '#aaaaaa' }}>Server-Side</span> to set view limits
+          <p style={{ fontSize: '0.75rem', color: '#303030', lineHeight: 1.5 }}>
+            Switch to <span style={{ color: '#555' }}>Server-Side</span> to set view limits
           </p>
         </div>
       )}
 
-      {/* ── Auto-Expiry ── */}
-      <div style={{ marginBottom: '1.25rem' }}>
-        <FieldLabel>Auto-Expiration</FieldLabel>
+      {/* ── Expiry ── */}
+      <div style={{ marginBottom: '1.125rem' }}>
+        <SectionLabel icon={Clock}>Auto-Expiration</SectionLabel>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <input
-            type="number"
-            min="0"
+            type="number" min="0"
             value={rules.expiryValue || 0}
-            onChange={(e) => handleExpiryChange(e.target.value, rules.expiryUnit || 'minutes')}
+            onChange={e => handleExpiryChange(e.target.value, rules.expiryUnit || 'minutes')}
             className="input-field"
             style={{ width: '5rem', textAlign: 'center', flexShrink: 0 }}
             placeholder="0"
           />
           <select
             value={rules.expiryUnit || 'minutes'}
-            onChange={(e) => handleExpiryChange(rules.expiryValue || 0, e.target.value)}
+            onChange={e => handleExpiryChange(rules.expiryValue || 0, e.target.value)}
             className="input-field"
-            style={{ flex: 1, cursor: 'pointer' }}
+            style={{ flex: 1 }}
           >
             <option value="minutes">Minutes</option>
             <option value="hours">Hours</option>
@@ -183,79 +221,56 @@ const RulesPanel = ({ rules, onRulesChange }) => {
           </select>
         </div>
         {(rules.expiryMinutes || 0) === 0 && (
-          <p style={{ fontSize: '0.7rem', color: '#444444', marginTop: '0.375rem' }}>
-            Set to 0 to disable expiry
+          <p style={{ fontSize: '0.6875rem', color: T.textD, marginTop: '0.375rem' }}>
+            Set to 0 to disable auto-expiry
           </p>
         )}
       </div>
 
-      {/* ── Refresh Control (server only) ── */}
+      {/* ── Refresh control (server only) ── */}
       {rules.storageMode === 'server' && (
         <>
-          <Divider />
-          <div style={{ marginBottom: '1.25rem' }}>
-            <FieldLabel>Refresh Control</FieldLabel>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.625rem' }}>
+          <Sep />
+          <div style={{ marginBottom: '1.125rem' }}>
+            <SectionLabel icon={RefreshCw}>Refresh Control</SectionLabel>
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.625rem' }}>
               {[
                 {
-                  id: 'threshold',
-                  label: 'View Threshold',
-                  sub: 'Prevents rapid refresh',
-                  isActive:
-                    (rules.viewRefreshMinutes || 0) > 0 || !(rules.autoRefreshSeconds || 0),
-                  onSelect: () =>
-                    onRulesChange({
-                      ...rules,
-                      viewRefreshMinutes: rules.viewRefreshMinutes || 5,
-                      autoRefreshSeconds: 0,
-                    }),
+                  id: 'threshold', label: 'View Threshold', sub: 'Prevents rapid refresh',
+                  isActive: (rules.viewRefreshMinutes || 0) > 0 || !(rules.autoRefreshSeconds || 0),
+                  onSelect: () => set({ viewRefreshMinutes: rules.viewRefreshMinutes || 5, autoRefreshSeconds: 0 }),
                 },
                 {
-                  id: 'auto',
-                  label: 'Auto-Refresh',
-                  sub: 'Forces page reload',
+                  id: 'auto', label: 'Auto-Refresh', sub: 'Forces page reload',
                   isActive: (rules.autoRefreshSeconds || 0) > 0,
-                  onSelect: () =>
-                    onRulesChange({
-                      ...rules,
-                      viewRefreshMinutes: 0,
-                      autoRefreshSeconds: rules.autoRefreshSeconds || 30,
-                    }),
+                  onSelect: () => set({ viewRefreshMinutes: 0, autoRefreshSeconds: rules.autoRefreshSeconds || 30 }),
                 },
               ].map(({ id, label, sub, isActive, onSelect }) => (
-                <label
+                <button
                   key={id}
-                  className={`radio-card${isActive ? ' active' : ''}`}
-                  style={{ cursor: 'pointer' }}
+                  onClick={onSelect}
+                  style={{
+                    flex: 1, padding: '0.625rem 0.75rem', borderRadius: '0.5rem',
+                    border: isActive ? '1px solid rgba(232,160,32,0.25)' : `1px solid ${T.border}`,
+                    background: isActive ? 'rgba(232,160,32,0.06)' : 'rgba(255,255,255,0.02)',
+                    cursor: 'pointer', textAlign: 'left', transition: 'all 0.18s ease',
+                  }}
                 >
-                  <input
-                    type="radio"
-                    name="refreshControl"
-                    checked={isActive}
-                    onChange={onSelect}
-                    style={{ display: 'none' }}
-                  />
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginBottom: '0.25rem' }}>
-                    <Clock size={12} style={{ color: isActive ? '#E8A020' : '#555555' }} />
-                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: isActive ? '#e0e0e0' : '#666666' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.25rem' }}>
+                    <Clock size={10} style={{ color: isActive ? T.gold : '#555' }} />
+                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: isActive ? '#e0e0e0' : '#555' }}>
                       {label}
                     </span>
                   </div>
-                  <p style={{ fontSize: '0.675rem', color: '#444444' }}>{sub}</p>
-                </label>
+                  <p style={{ fontSize: '0.6875rem', color: '#3a3a3a', lineHeight: 1.4 }}>{sub}</p>
+                </button>
               ))}
             </div>
 
             {(rules.viewRefreshMinutes || 0) > 0 || !(rules.autoRefreshSeconds || 0) ? (
               <select
                 value={rules.viewRefreshMinutes || 0}
-                onChange={(e) =>
-                  onRulesChange({
-                    ...rules,
-                    viewRefreshMinutes: parseInt(e.target.value),
-                    autoRefreshSeconds: 0,
-                  })
-                }
+                onChange={e => set({ viewRefreshMinutes: parseInt(e.target.value), autoRefreshSeconds: 0 })}
                 className="input-field"
               >
                 <option value="0">Every access counts (default)</option>
@@ -268,13 +283,7 @@ const RulesPanel = ({ rules, onRulesChange }) => {
             ) : (
               <select
                 value={rules.autoRefreshSeconds || 0}
-                onChange={(e) =>
-                  onRulesChange({
-                    ...rules,
-                    viewRefreshMinutes: 0,
-                    autoRefreshSeconds: parseInt(e.target.value),
-                  })
-                }
+                onChange={e => set({ viewRefreshMinutes: 0, autoRefreshSeconds: parseInt(e.target.value) })}
                 className="input-field"
               >
                 <option value="10">10 seconds (strict)</option>
@@ -288,93 +297,65 @@ const RulesPanel = ({ rules, onRulesChange }) => {
         </>
       )}
 
-      <Divider />
+      <Sep />
 
-      {/* ── Advanced Options ── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
-        {/* Password */}
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginBottom: '0.5rem' }}>
-            <Lock size={12} style={{ color: '#E8A020' }} />
-            <FieldLabel>Password Protection</FieldLabel>
-          </div>
-          <input
-            type="password"
-            value={rules.password || ''}
-            onChange={(e) => onRulesChange({ ...rules, password: e.target.value })}
-            className="input-field"
-            placeholder="Leave blank for no password"
-            autoComplete="new-password"
-          />
-        </div>
+      {/* ── Password ── */}
+      <div style={{ marginBottom: '0.875rem' }}>
+        <SectionLabel icon={Lock}>Password Protection</SectionLabel>
+        <input
+          type="password"
+          value={rules.password || ''}
+          onChange={e => set({ password: e.target.value })}
+          className="input-field"
+          placeholder="Leave blank for no password"
+          autoComplete="new-password"
+        />
+      </div>
 
-        {/* Webhook */}
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginBottom: '0.5rem' }}>
-            <Webhook size={12} style={{ color: '#E8A020' }} />
-            <FieldLabel>Tamper Webhook</FieldLabel>
-          </div>
-          <input
-            type="url"
-            value={rules.webhookUrl || ''}
-            onChange={(e) => onRulesChange({ ...rules, webhookUrl: e.target.value })}
-            className="input-field"
-            placeholder="https://discord.com/api/webhooks/…"
-          />
-        </div>
+      {/* ── Webhook ── */}
+      <div style={{ marginBottom: rules.storageMode === 'server' ? '0.875rem' : 0 }}>
+        <SectionLabel icon={Webhook}>Tamper Webhook</SectionLabel>
+        <input
+          type="url"
+          value={rules.webhookUrl || ''}
+          onChange={e => set({ webhookUrl: e.target.value })}
+          className="input-field"
+          placeholder="https://discord.com/api/webhooks/…"
+        />
+      </div>
 
-        {/* Server-only toggles */}
-        {rules.storageMode === 'server' && (
-          <>
-            <label className="toggle-row">
-              <input
-                type="checkbox"
-                checked={rules.viewOnly || false}
-                onChange={(e) => onRulesChange({ ...rules, viewOnly: e.target.checked })}
-                style={{ marginTop: 1 }}
-              />
-              <div>
-                <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#cccccc', marginBottom: '0.125rem' }}>
-                  View Only Mode
-                </p>
-                <p style={{ fontSize: '0.7rem', color: '#555555', lineHeight: 1.4 }}>
-                  Recipients can view but cannot download the file
-                </p>
-              </div>
-            </label>
-
-            <label className="toggle-row">
-              <input
-                type="checkbox"
-                checked={rules.requireOtp || false}
-                onChange={(e) => onRulesChange({ ...rules, requireOtp: e.target.checked })}
-                style={{ marginTop: 1 }}
-              />
-              <div>
-                <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#cccccc', marginBottom: '0.125rem' }}>
-                  Require Email OTP (2FA)
-                </p>
-                <p style={{ fontSize: '0.7rem', color: '#555555', lineHeight: 1.4 }}>
-                  A 6-digit code sent to recipient's email
-                </p>
-              </div>
-            </label>
-
+      {/* ── Server-only toggles ── */}
+      {rules.storageMode === 'server' && (
+        <>
+          <Sep />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+            <ToggleRow
+              checked={rules.viewOnly || false}
+              onChange={e => set({ viewOnly: e.target.checked })}
+              label="View Only Mode"
+              description="Recipients can view but cannot download"
+            />
+            <ToggleRow
+              checked={rules.requireOtp || false}
+              onChange={e => set({ requireOtp: e.target.checked })}
+              label="Require Email OTP"
+              description="6-digit code sent to recipient's email"
+            />
             {rules.requireOtp && (
-              <div style={{ marginTop: '-0.25rem' }}>
+              <div style={{ paddingLeft: '0.5rem', paddingRight: '0.5rem', paddingBottom: '0.5rem' }}>
                 <input
                   type="email"
                   value={rules.otpEmail || ''}
-                  onChange={(e) => onRulesChange({ ...rules, otpEmail: e.target.value })}
+                  onChange={e => set({ otpEmail: e.target.value })}
                   className="input-field"
                   placeholder="recipient@example.com"
                   required={rules.requireOtp}
                 />
               </div>
             )}
-          </>
-        )}
-      </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };
