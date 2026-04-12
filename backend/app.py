@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from dotenv import load_dotenv
+from core.csrf import CSRFGuard
 
 # Load environment variables
 load_dotenv()
@@ -62,22 +63,47 @@ else:
     print("🔒 ProxyHeadersMiddleware disabled (TRUSTED_PROXY_CIDRS=none)")
 
 
-# Configure CORS middleware
+# ---------------------------------------------------------------------------
+# CORS middleware
+# ---------------------------------------------------------------------------
+# Security notes
+# ~~~~~~~~~~~~~~
+# allow_credentials=False — the API uses NO cookies.  Setting this to True
+# while also listing wide-open origins (including localhost) would allow an
+# attacker's page to issue credentialed cross-origin requests.  Must stay
+# False unless cookies are deliberately introduced.
+#
+# Cookie policy (forward-looking)
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# If cookies are ever added:
+#   • Set SameSite=Strict; Secure; HttpOnly on every Set-Cookie response.
+#   • Only flip allow_credentials=True if cross-origin cookie sharing is a
+#     hard requirement (it rarely is).
+#   • Pair with a server-generated per-session X-CSRF-Token validated by
+#     the CSRFGuard middleware below.
+#
+# Origin lists
+# ~~~~~~~~~~~~
+# settings.allowed_origins automatically returns the production-only list
+# (no localhost) when IS_PRODUCTION=true, and the full dev list otherwise.
+# See core/config.py for details.
+# ---------------------------------------------------------------------------
 print(f"🔒 CORS allowed origins: {settings.allowed_origins}")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
-    allow_credentials=True,
+    allow_credentials=False,           # No cookies → credentials flag must be False
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=[
         "Content-Type",
         "Authorization",
+        # Required by CSRFGuard — every mutating fetch() from the frontend
+        # must include this header.  Its presence forces a CORS pre-flight
+        # for cross-origin requests, preventing Simple Request CSRF attacks.
         "X-Requested-With",
-        # Analytics key header — must be explicitly allowed so the browser's
-        # CORS preflight (OPTIONS) for /analytics/{token} succeeds.
-        # The key is transmitted as a header rather than a query parameter to
-        # prevent it from appearing in server access logs, browser history,
+        # Analytics key header — transmitted as a header rather than a query
+        # parameter to keep it out of server access logs, browser history,
         # CDN/proxy logs, and Referer headers.
         "X-Analytics-Key",
     ],
@@ -93,6 +119,25 @@ app.add_middleware(
         "X-BAR-Auto-Refresh-Seconds"
     ],
 )
+
+# ---------------------------------------------------------------------------
+# CSRF Guard middleware — must be added AFTER CORSMiddleware
+# ---------------------------------------------------------------------------
+# Starlette's middleware stack is LIFO: the last middleware added is the first
+# to process an inbound request.  By registering CSRFGuard after
+# CORSMiddleware we ensure:
+#   1. CORSMiddleware handles the pre-flight OPTIONS exchange first.
+#   2. CSRFGuard only inspects requests that have already passed the CORS
+#      origin check — no unnecessary 403s for legitimate pre-flights.
+#
+# What it enforces:
+#   • Every POST/PUT/PATCH/DELETE must include X-Requested-With (any value).
+#   • If Origin or Referer is present, it must match settings.allowed_origins.
+#   • GET / HEAD / OPTIONS are always exempt.
+#   • /health and / are always exempt.
+# ---------------------------------------------------------------------------
+app.add_middleware(CSRFGuard, allowed_origins=settings.allowed_origins)
+print("🔒 CSRFGuard middleware enabled")
 
 
 # Add security headers middleware
