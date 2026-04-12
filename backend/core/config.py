@@ -44,19 +44,53 @@ class Settings(BaseSettings):
     require_2fa: bool = os.getenv("REQUIRE_2FA", "false").lower() == "true"
     
     @property
-    def allowed_origins(self) -> List[str]:
-        """Get list of allowed CORS origins."""
+    def allowed_origins_dev(self) -> List[str]:
+        """
+        Full origin list including localhost — used in local development only.
+        Never use this list in production; localhost origins bypass CSRF and
+        CORS Same-Origin protections when the browser and attacker server run
+        on the same machine.
+        """
         origins = [
             "http://localhost:5173",
             "http://localhost:3000",
             "https://bar-rnr.vercel.app",
         ]
-        
         if self.frontend_url:
             origins.append(self.frontend_url)
             origins.append(self.frontend_url.rstrip("/"))
-        
-        return origins
+        return list(dict.fromkeys(origins))  # deduplicate, preserve order
+
+    @property
+    def allowed_origins_production(self) -> List[str]:
+        """
+        Strict origin list for production — localhost is intentionally absent.
+
+        Cookie / CORS policy reminder
+        ------------------------------
+        If cookies are ever introduced, set:
+            SameSite=Strict; Secure; HttpOnly
+        on every Set-Cookie response, and only set allow_credentials=True in
+        CORSMiddleware if cross-origin cookie sharing is a hard requirement.
+        """
+        origins = ["https://bar-rnr.vercel.app"]
+        if self.frontend_url:
+            origins.append(self.frontend_url)
+            origins.append(self.frontend_url.rstrip("/"))
+        return list(dict.fromkeys(origins))  # deduplicate, preserve order
+
+    @property
+    def allowed_origins(self) -> List[str]:
+        """
+        Active CORS origin list — delegates to the correct property based on
+        the IS_PRODUCTION environment variable so callers always get the right
+        list without having to make the choice themselves.
+        """
+        return (
+            self.allowed_origins_production
+            if self.is_production
+            else self.allowed_origins_dev
+        )
     
     class Config:
         env_file = ".env"
