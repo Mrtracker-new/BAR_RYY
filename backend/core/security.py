@@ -112,24 +112,43 @@ def check_rate_limit(request: Request, limit: int = 60) -> None:
         return
 
     client_ip = request.client.host
+    check_rate_limit_keyed(client_ip, limit=limit, window_seconds=60)
+
+
+def check_rate_limit_keyed(key: str, limit: int = 60, window_seconds: int = 60) -> None:
+    """
+    Rate limiting keyed on an arbitrary string (e.g. ``"otp:token:ip"``).
+
+    Unlike :func:`check_rate_limit` this function accepts an explicit key so
+    callers can maintain independent rate-limit buckets for different
+    (resource, IP) combinations without interfering with the global per-IP
+    counter.
+
+    Args:
+        key:            Arbitrary string key for the rate-limit bucket.
+        limit:          Maximum number of allowed requests per window.
+        window_seconds: Length of the sliding window in seconds.
+
+    Raises:
+        HTTPException 429 if the bucket is exhausted.
+    """
     current_time = datetime.now()
-    
-    # Clean up old entries (older than 1 minute)
-    cutoff_time = current_time - timedelta(minutes=1)
-    rate_limit_storage[client_ip] = [
-        timestamp for timestamp in rate_limit_storage[client_ip]
-        if timestamp > cutoff_time
+    cutoff_time = current_time - timedelta(seconds=window_seconds)
+
+    # Evict timestamps outside the current window.
+    rate_limit_storage[key] = [
+        ts for ts in rate_limit_storage[key] if ts > cutoff_time
     ]
-    
-    # Check rate limit
-    if len(rate_limit_storage[client_ip]) >= limit:
+
+    if len(rate_limit_storage[key]) >= limit:
         raise HTTPException(
             status_code=429,
             detail="Rate limit exceeded. Please try again later."
         )
-    
-    # Add current request
-    rate_limit_storage[client_ip].append(current_time)
+
+    rate_limit_storage[key].append(current_time)
+
+
 
 
 def check_password_brute_force(client_ip: str, resource_id: str = None) -> tuple[bool, int, str]:
