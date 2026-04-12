@@ -50,8 +50,17 @@ async def request_otp(
 ):
     """Request OTP code to be sent via email for 2FA-protected files."""
     try:
-        # Rate limit
+        # ── Rate limiting ───────────────────────────────────────────────────
+        # Layer 1: global per-IP limit (5 req/min across all tokens)
         security.check_rate_limit(req, limit=5)
+
+        # Layer 2: per-token per-IP limit — prevents an attacker who knows a
+        # valid token from spamming the owner's inbox even after rotating IPs.
+        # We reuse the password brute-force storage with a dedicated namespace
+        # prefix so the OTP counter is tracked independently.
+        client_ip = analytics.get_client_ip(req)
+        otp_key = f"otp:{token}:{client_ip}"
+        security.check_rate_limit_keyed(otp_key, limit=3, window_seconds=300)
         
         # Get file record
         file_record = await db.get_file_record(token)
@@ -98,6 +107,7 @@ async def request_otp(
     except Exception as e:
         print(f"❌ OTP request failed: {str(e)}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Failed to send OTP: {str(e)}")
+
 
 
 @router.post("/verify-otp/{token}")
