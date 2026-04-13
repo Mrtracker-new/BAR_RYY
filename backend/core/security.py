@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 from typing import Dict
 from urllib.parse import quote
+import json
 import re
 import os
 import unicodedata
@@ -472,6 +473,78 @@ _MAX_FILENAME_CHARS = 200
 # but note this choice.  Spaces, quotes, semicolons, equals-signs, and
 # percent-signs must never appear unencoded in the extended value.
 _RFC5987_SAFE = "!#$&+-.^_`|~"
+
+# ---------------------------------------------------------------------------
+# Metadata header sanitisation
+# ---------------------------------------------------------------------------
+
+# Exhaustive list of fields that are safe to transmit in the X-BAR-Metadata
+# response header.  Any field NOT listed here is silently dropped before
+# serialisation.
+#
+# Design rationale — allowlist vs denylist
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# A denylist (strip only the known-bad keys) is fragile: future metadata
+# fields added by developers would automatically be published to every
+# browser/extension/cross-origin script that can read CORS-exposed headers
+# until someone notices and updates the denylist.  An allowlist fails
+# *closed* — new fields are invisible to clients until they are explicitly
+# reviewed and added here.
+#
+# Sensitive fields that must NEVER appear in this set:
+#   password_hash  — SHA-256 of the user's password; enables offline attacks.
+#   webhook_url    — internal notification endpoint; SSRF & info-disclosure.
+#   file_hash      — SHA-256 fingerprint of the plaintext; content oracle.
+#   encryption_method — hints at key-derivation scheme; aids key-recovery.
+#
+# Safe fields (all non-sensitive, UI-facing):
+_METADATA_HEADER_ALLOWLIST: frozenset[str] = frozenset({
+    "filename",
+    "created_at",
+    "expires_at",
+    "max_views",
+    "current_views",
+    "password_protected",
+    "view_only",
+    "storage_mode",
+    "version",
+})
+
+
+def build_safe_metadata_header(metadata: dict) -> str:
+    """
+    Serialise a sanitised subset of *metadata* to a JSON string suitable for
+    embedding in the ``X-BAR-Metadata`` HTTP response header.
+
+    Security model
+    --------------
+    Only fields present in :data:`_METADATA_HEADER_ALLOWLIST` are included in
+    the output.  All other keys — including ``password_hash``,
+    ``webhook_url``, ``file_hash``, and ``encryption_method`` — are **silently
+    dropped** so they can never reach:
+
+    * The requesting browser (JavaScript / ``fetch`` API)
+    * Browser extensions
+    * CORS-enabled cross-origin scripts that can observe the response headers
+
+    The function uses an *allowlist* rather than a denylist so that any new
+    metadata field added in the future is automatically excluded from the
+    header until it has been explicitly reviewed and added to
+    :data:`_METADATA_HEADER_ALLOWLIST`.
+
+    Args:
+        metadata: The raw metadata dict returned by the decryption pipeline.
+
+    Returns:
+        A JSON string containing only the safe subset of the metadata,
+        ready to be assigned to ``response.headers["X-BAR-Metadata"]``.
+    """
+    safe_meta = {
+        key: value
+        for key, value in metadata.items()
+        if key in _METADATA_HEADER_ALLOWLIST
+    }
+    return json.dumps(safe_meta, separators=(',', ':'))
 
 
 def sanitize_header_value(value: str) -> str:
