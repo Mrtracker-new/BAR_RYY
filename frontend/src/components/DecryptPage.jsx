@@ -112,8 +112,21 @@ const DecryptPage = ({ onBack }) => {
       const fileName = response.headers['x-bar-filename'];
       const viewsRemaining = response.headers['x-bar-views-remaining'];
       const shouldDestroy = response.headers['x-bar-should-destroy'] === 'true';
+
+      // Parse X-BAR-Metadata defensively.  The header contains only the
+      // allowlisted safe fields (password_hash, webhook_url, file_hash, etc.
+      // are stripped server-side).  Fall back to whatever metadata was already
+      // loaded from the local .bar file before decryption if the header is
+      // absent or malformed.
+      let metadataObj = metadata; // pre-loaded via FileReader in handleFileSelect
       const metadataJson = response.headers['x-bar-metadata'];
-      const metadataObj = JSON.parse(metadataJson);
+      if (metadataJson) {
+        try {
+          metadataObj = JSON.parse(metadataJson);
+        } catch (parseErr) {
+          console.warn('X-BAR-Metadata header could not be parsed, using local metadata', parseErr);
+        }
+      }
 
       // Get decrypted file data
       const decryptedBytes = new Uint8Array(response.data);
@@ -146,14 +159,35 @@ const DecryptPage = ({ onBack }) => {
 
     } catch (err) {
       console.error('Decryption error:', err);
-      let errorMsg = 'Failed to decrypt: ';
+      let errorMsg = 'Failed to decrypt';
 
-      if (err.response?.status === 403) {
-        errorMsg = '🚫 Access Denied: ' + (err.response?.data?.detail || 'Maximum views reached or file expired');
-      } else if (err.response?.data?.detail) {
-        errorMsg += err.response.data.detail;
+      if (err.response) {
+        // When responseType is 'arraybuffer', axios delivers error bodies as
+        // ArrayBuffers too — err.response.data.detail is always undefined.
+        // Decode the buffer back to text, then parse the JSON error envelope.
+        let detail = null;
+        try {
+          const text = new TextDecoder().decode(err.response.data);
+          const json = JSON.parse(text);
+          detail = json?.detail || null;
+        } catch {
+          // Non-JSON error body (e.g. gateway timeout HTML) — ignore parse error
+        }
+
+        if (err.response.status === 403) {
+          errorMsg = '🚫 Access Denied: ' + (detail || 'Maximum views reached or file expired');
+        } else if (err.response.status === 429) {
+          errorMsg = '⏳ Rate Limited: ' + (detail || 'Too many attempts. Please wait before trying again.');
+        } else if (err.response.status === 400) {
+          errorMsg = '⚠️ Bad Request: ' + (detail || 'Invalid file or request');
+        } else if (detail) {
+          errorMsg = 'Failed to decrypt: ' + detail;
+        } else {
+          errorMsg = `Failed to decrypt (HTTP ${err.response.status})`;
+        }
       } else {
-        errorMsg += err.message;
+        // Network error — no response received at all
+        errorMsg = 'Failed to decrypt: ' + (err.message || 'Network error');
       }
 
       setError(errorMsg);
