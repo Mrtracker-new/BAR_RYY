@@ -397,10 +397,10 @@ async def share_file(
             mime_type, _ = mimetypes.guess_type(filename)
             if not mime_type:
                 mime_type = "application/octet-stream"
-            content_disposition = f"inline; filename={filename}"
+            content_disposition = security.build_content_disposition(filename, 'inline')
         else:
             mime_type = "application/octet-stream"
-            content_disposition = f"attachment; filename={filename}"
+            content_disposition = security.build_content_disposition(filename, 'attachment')
         
         # Build security headers
         response_headers = {
@@ -409,7 +409,7 @@ async def share_file(
             "X-BAR-Views-Remaining": str(views_remaining),
             "X-BAR-Should-Destroy": str(should_destroy).lower(),
             "X-BAR-View-Only": str(view_only).lower(),
-            "X-BAR-Filename": filename,
+            "X-BAR-Filename": security.sanitize_header_value(filename),
             "X-BAR-Storage-Mode": "server",
             "X-BAR-Is-New-View": str(is_new_view).lower(),
             "X-BAR-Auto-Refresh-Seconds": str(metadata.get("auto_refresh_seconds", 0))
