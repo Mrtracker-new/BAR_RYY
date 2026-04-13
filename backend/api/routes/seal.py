@@ -152,11 +152,12 @@ async def download_bar(
         if not bar_file or not os.path.exists(bar_file):
             raise HTTPException(status_code=404, detail="BAR file not found")
         
+        safe_filename = os.path.basename(bar_file)
         return FileResponse(
             bar_file,
             media_type="application/octet-stream",
-            filename=os.path.basename(bar_file),
-            headers={"Content-Disposition": f"attachment; filename={os.path.basename(bar_file)}"}
+            filename=safe_filename,
+            headers={"Content-Disposition": security.build_content_disposition(safe_filename, 'attachment')}
         )
         
     except Exception as e:
