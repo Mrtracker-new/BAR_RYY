@@ -1,6 +1,5 @@
 """Decrypt endpoints."""
 import os
-import json
 import hashlib
 import asyncio
 import traceback
@@ -241,8 +240,8 @@ async def decrypt_uploaded_bar_file(
         # Rate limit
         security.check_rate_limit(req, limit=20)
         
-        # Basic file validation
-        if not file.filename.lower().endswith('.bar'):
+        # Basic file validation — guard None filename before calling .lower()
+        if not file.filename or not file.filename.lower().endswith('.bar'):
             raise HTTPException(status_code=400, detail="Only .bar files are accepted")
         
         # Streaming size validation (prevents memory exhaustion)
@@ -255,8 +254,13 @@ async def decrypt_uploaded_bar_file(
         # Get client IP for brute force tracking
         client_ip = analytics.get_client_ip(req)
         
-        # Generate pseudo-token from file hash for tracking
-        file_token = hashlib.sha256(bar_data[:100]).hexdigest()[:16]
+        # Generate a stable pseudo-token from the full file bytes for brute-force
+        # tracking.  Using only bar_data[:100] was fragile: the first 100 bytes
+        # of every .bar file share the same fixed header ("BAR_FILE_V1\n" + start
+        # of a deterministic base64 prefix), so small or identically-sized files
+        # could collide and share a lockout bucket with unrelated files.  SHA-256
+        # of the entire content is a true file-identity fingerprint.
+        file_token = hashlib.sha256(bar_data).hexdigest()[:16]
         
         # Check brute force protection
         try:
@@ -278,25 +282,40 @@ async def decrypt_uploaded_bar_file(
                 security.record_password_attempt(client_ip, False, file_token)
             raise
         except crypto_utils.TamperDetectedException as e:
-            # Send tamper alert webhook if configured
-            webhook_url = metadata.get("webhook_url")
-            if webhook_url:
-                webhook_srv = webhook_service.get_webhook_service()
-                filename = metadata.get("filename", "unknown")
-                asyncio.create_task(webhook_srv.send_tamper_alert(
-                    webhook_url=webhook_url,
-                    filename=filename,
-                    token=file_token
-                ))
+            # Send tamper alert webhook if configured.
+            # IMPORTANT: `metadata` is NOT available here — it is produced by
+            # decrypt_bar_file(), the very call that raised this exception.
+            # We must use _peek_metadata() to read the unencrypted header
+            # from the raw bytes, exactly as the /decrypt/{bar_id} endpoint
+            # does for the same scenario.
+            try:
+                raw_meta = _peek_metadata(bar_data)
+                webhook_url = raw_meta.get("webhook_url") if raw_meta else None
+                if webhook_url:
+                    webhook_srv = webhook_service.get_webhook_service()
+                    asyncio.create_task(webhook_srv.send_tamper_alert(
+                        webhook_url=webhook_url,
+                        filename=raw_meta.get("filename", "unknown"),
+                        token=file_token
+                    ))
+            except Exception:
+                pass  # Never let webhook failures mask the tamper error
             raise HTTPException(status_code=403, detail="File integrity check failed - possible tampering")
         
-        # Validate access
-        password_to_check = password if password and password.strip() else None
-        is_valid, errors = client_storage.validate_client_access(metadata, password_to_check)
-        
+        # Validate access — expiry and presence of password string only.
+        # NOTE: crypto_utils.unpack_bar_file() (called inside decrypt_bar_file)
+        # already validated the password via constant-time HMAC comparison of
+        # password_hash.  If we reached here, decryption succeeded → the password
+        # (if required) was correct.  validate_client_access therefore only needs
+        # to check expiry; the password check it performs is a weaker belt-and-
+        # suspenders guard that should never fail at this point.
+        is_valid, errors = client_storage.validate_client_access(metadata, password_to_use)
+
         if not is_valid:
             error_msg = "; ".join(errors)
-            if "Password required" in error_msg and metadata.get('password_protected'):
+            # Only record a brute-force failure for errors that are not caused
+            # by an expired file — expiry is not a password mistake.
+            if any(e for e in errors if "password" in e.lower()):
                 security.record_password_attempt(client_ip, False, file_token)
             raise HTTPException(status_code=403, detail=error_msg)
         
@@ -316,7 +335,13 @@ async def decrypt_uploaded_bar_file(
                 "X-BAR-Should-Destroy": "false",
                 "X-BAR-View-Only": str(metadata.get('view_only', False)).lower(),
                 "X-BAR-Filename": security.sanitize_header_value(metadata["filename"]),
-                "X-BAR-Metadata": json.dumps(metadata)
+                # Only allowlisted, non-sensitive fields are included.
+                # Sensitive keys (password_hash, webhook_url, file_hash,
+                # encryption_method) are stripped inside build_safe_metadata_header
+                # before the value ever leaves the server.  See core/security.py
+                # for the full allowlist and the rationale for choosing an
+                # allowlist over a denylist.
+                "X-BAR-Metadata": security.build_safe_metadata_header(metadata),
             }
         )
         
