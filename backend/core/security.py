@@ -6,8 +6,10 @@ from fastapi.responses import Response
 from datetime import datetime, timedelta
 from collections import defaultdict
 from typing import Dict
+from urllib.parse import quote
 import re
 import os
+import unicodedata
 
 # Rate limiting storage (in production, use Redis)
 rate_limit_storage: Dict[str, list] = defaultdict(list)
@@ -438,3 +440,201 @@ def sanitize_error_message(error: str) -> str:
     
     # In development, return full error
     return error
+
+
+# ---------------------------------------------------------------------------
+# HTTP header safety helpers
+# ---------------------------------------------------------------------------
+
+# Regex matching every character that can terminate or fold an HTTP header
+# line — not just the obvious ASCII CRLF pair, but also:
+#   \x00  — null byte         (breaks many HTTP parsers outright)
+#   \x85  — NEXT LINE (NEL)   (Unicode line terminator, C1 control)
+#   \u2028 — LINE SEPARATOR   (Unicode Zl category)
+#   \u2029 — PARAGRAPH SEP    (Unicode Zp category)
+# Some HTTP/1.1 intermediaries (load balancers, CDNs, WAFs) fold on NEL or
+# LS/PS in addition to the standard CR/LF.  Stripping all of them is the
+# safe default for header values that embed user-controlled strings.
+_HEADER_UNSAFE = re.compile(r'[\r\n\x00\x85\u2028\u2029]')
+
+# Maximum safe byte-length for the *filename* portion of the header value.
+# We cap at 200 characters — well under the 255-byte filesystem limit and
+# leaves ample room for the surrounding header boilerplate within the ~8 KB
+# per-header limit imposed by most HTTP proxies and web servers.
+_MAX_FILENAME_CHARS = 200
+
+# RFC 5987 / RFC 8187 §3.2.1  attr-char  (verbatim from the ABNF):
+#   attr-char = ALPHA / DIGIT
+#             / "!" / "#" / "$" / "&" / "+" / "-" / "."
+#             / "^" / "_" / "`" / "|" / "~"
+# NOTE: the backtick (0x60) is in the RFC but causes rendering artefacts in
+# some terminals and curl versions.  We keep it for strict spec compliance
+# but note this choice.  Spaces, quotes, semicolons, equals-signs, and
+# percent-signs must never appear unencoded in the extended value.
+_RFC5987_SAFE = "!#$&+-.^_`|~"
+
+
+def sanitize_header_value(value: str) -> str:
+    """
+    Strip characters that could terminate or fold an HTTP response header line.
+
+    Beyond the obvious ASCII CR (``\\r``) and LF (``\\n``), this function also
+    removes:
+
+    * ``\\x00`` — null byte (crashes many HTTP parsers)
+    * ``\\x85`` — Unicode NEXT LINE / NEL (C1 control, treated as newline by
+      some intermediaries)
+    * ``\\u2028`` — Unicode LINE SEPARATOR
+    * ``\\u2029`` — Unicode PARAGRAPH SEPARATOR
+
+    These Unicode line terminators are not commonly found in legitimate
+    filenames but are used in known CRLF-injection bypass payloads targeting
+    CDNs and WAFs that translate Unicode line terminators to ASCII line-endings
+    before forwarding the response.
+
+    Args:
+        value: Raw string to be embedded in an HTTP header field.
+
+    Returns:
+        The input string with all line-terminating characters removed.
+    """
+    return _HEADER_UNSAFE.sub('', value)
+
+
+def build_content_disposition(
+    filename: str,
+    disposition: str = 'attachment',
+) -> str:
+    """
+    Build a safe, RFC 6266 / RFC 8187 compliant ``Content-Disposition``
+    header value for file-download and inline-display responses.
+
+    Security properties
+    -------------------
+    * **CRLF / line-terminator injection** — ``\\r``, ``\\n``, ``\\x00``,
+      ``\\x85``, U+2028, and U+2029 are stripped before any other processing.
+      Without a line terminator the payload cannot break out into a synthetic
+      HTTP response header line (CVE class: HTTP response splitting / header
+      injection).
+    * **Quote injection** — the ``filename="…"`` fallback parameter quotes the
+      filename and backslash-escapes any embedded ``"`` or ``\\`` character per
+      RFC 7230 §3.2.6, so a rogue quote cannot close the quoted-string early
+      and inject extra parameters (e.g. ``; type=text/html``).
+    * **Unicode / non-ASCII filenames** — the ``filename*`` extended parameter
+      uses RFC 5987 / RFC 8187 UTF-8 percent-encoding, which is the only
+      interoperable mechanism for non-ASCII filenames across all modern
+      browsers.
+    * **Filename length** — the filename is truncated to
+      ``_MAX_FILENAME_CHARS`` characters (preserving the extension) before
+      building either header parameter, preventing excessively long header
+      lines that could be rejected by proxies or used in DoS attempts.
+    * **Disposition value guard** — a runtime check ensures only ``attachment``
+      or ``inline`` can be produced; any other string raises ``ValueError``
+      rather than emitting a malformed or injected directive.
+
+    Format produced
+    ---------------
+    The header uses the *dual-parameter* pattern recommended by RFC 6266 §4.3::
+
+        attachment; filename="safe_ascii.pdf"; filename*=UTF-8''safe_ascii.pdf
+
+    RFC-compliant clients prefer ``filename*``; legacy HTTP/1.0 clients fall
+    back to the quoted ``filename`` parameter.  The ``filename`` parameter is
+    always placed first, which is the order preferred by RFC 6266.
+
+    Args:
+        filename:    The original filename to embed.  May contain Unicode,
+                     spaces, or special characters — all are handled safely.
+        disposition: Must be ``'attachment'`` (force download) or ``'inline'``
+                     (display in browser).  Defaults to ``'attachment'``.
+                     **Validated at runtime** — any other value raises
+                     ``ValueError``.
+
+    Returns:
+        A fully-formed ``Content-Disposition`` header value string ready to be
+        assigned to ``response.headers["Content-Disposition"]``.
+
+    Raises:
+        ValueError: If *disposition* is not ``'attachment'`` or ``'inline'``.
+    """
+    # ------------------------------------------------------------------ #
+    # 0. Runtime guard on disposition                                      #
+    # ------------------------------------------------------------------ #
+    if disposition not in ('attachment', 'inline'):
+        raise ValueError(
+            f"disposition must be 'attachment' or 'inline', got {disposition!r}"
+        )
+
+    # ------------------------------------------------------------------ #
+    # 1. Normalise: empty → safe default                                  #
+    # ------------------------------------------------------------------ #
+    if not filename or not filename.strip():
+        filename = 'download'
+
+    # ------------------------------------------------------------------ #
+    # 2. Strip all HTTP line-terminator characters                        #
+    #    (primary CRLF/NEL/LS/PS injection defence — must happen first)  #
+    # ------------------------------------------------------------------ #
+    filename = sanitize_header_value(filename)
+
+    # ------------------------------------------------------------------ #
+    # 3. Truncate to a safe length, preserving the file extension         #
+    #    so the browser still applies the correct default application.   #
+    # ------------------------------------------------------------------ #
+    if len(filename) > _MAX_FILENAME_CHARS:
+        name_part, ext_part = os.path.splitext(filename)
+        # Reserve space for the extension (including its leading dot).
+        max_name = _MAX_FILENAME_CHARS - len(ext_part)
+        filename = name_part[:max(max_name, 1)] + ext_part
+
+    # ------------------------------------------------------------------ #
+    # 4. Build the quoted ASCII fallback for the filename="" parameter    #
+    #                                                                     #
+    #    RFC 7230 §3.2.6 quoted-string accepts:                          #
+    #      qdtext = HTAB / SP / %x21 / %x23-5B / %x5D-7E / obs-text     #
+    #    where obs-text (0x80–0xFF) should NOT be relied upon — many      #
+    #    intermediaries reject or mis-decode opaque octets in header      #
+    #    values.  We therefore restrict the fallback strictly to 7-bit    #
+    #    printable ASCII (0x20–0x7E, excluding DEL=0x7F).                #
+    #                                                                     #
+    #    Characters outside that range are approximated via Unicode       #
+    #    NFKD decomposition (é → e, Ä → A, 日 → _, 🔥 → _) so the       #
+    #    fallback is always a readable, valid ASCII string even when the  #
+    #    original filename is entirely non-Latin.                         #
+    #                                                                     #
+    #    Any literal '"' or '\' inside the filename is backslash-escaped  #
+    #    to prevent premature closing of the quoted-string.              #
+    # ------------------------------------------------------------------ #
+    ascii_parts: list[str] = []
+    for ch in filename:
+        code = ord(ch)
+        if 0x20 <= code <= 0x7E:          # printable 7-bit ASCII (safe)
+            if ch in ('"', '\\'):
+                ascii_parts.append('\\')  # RFC 7230 quoted-pair escape
+            ascii_parts.append(ch)
+        else:
+            # Attempt NFKD decomposition to recover a Latin ASCII base
+            # letter (e.g. é→e, ü→u, Ä→A, ñ→n).  Strip combining marks
+            # and anything that is still outside 0x20–0x7E.
+            nfkd = unicodedata.normalize('NFKD', ch)
+            base = ''.join(c for c in nfkd if 0x20 <= ord(c) <= 0x7E)
+            ascii_parts.append(base if base else '_')
+
+    ascii_fallback = ''.join(ascii_parts)
+
+    # Ensure the fallback is never empty after all transformations.
+    if not ascii_fallback:
+        ascii_fallback = 'download'
+
+    # ------------------------------------------------------------------ #
+    # 5. Build the RFC 5987 / RFC 8187 percent-encoded extended value     #
+    #    for the filename*= parameter (full Unicode support).             #
+    #                                                                     #
+    #    safe= contains the exact attr-char set from RFC 8187 §3.2.1.   #
+    #    Every other byte (including spaces, quotes, semicolons, etc.)   #
+    #    becomes a %XX escape sequence.                                   #
+    # ------------------------------------------------------------------ #
+    encoded = quote(filename.encode('utf-8'), safe=_RFC5987_SAFE)
+
+    return f'{disposition}; filename="{ascii_fallback}"; filename*=UTF-8\'\'{encoded}'
+
