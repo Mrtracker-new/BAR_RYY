@@ -196,7 +196,7 @@ async def decrypt_bar(
             content=decrypted_data,
             media_type="application/octet-stream",
             headers={
-                "Content-Disposition": f"attachment; filename={original_filename}",
+                "Content-Disposition": security.build_content_disposition(original_filename, 'attachment'),
                 "X-BAR-Views-Remaining": str(views_remaining),
                 "X-BAR-Destroyed": str(should_destroy).lower(),
             },
@@ -311,11 +311,11 @@ async def decrypt_uploaded_bar_file(
             content=decrypted_data,
             media_type="application/octet-stream",
             headers={
-                "Content-Disposition": f"attachment; filename={metadata['filename']}",
+                "Content-Disposition": security.build_content_disposition(metadata['filename'], 'attachment'),
                 "X-BAR-Views-Remaining": "0",
                 "X-BAR-Should-Destroy": "false",
                 "X-BAR-View-Only": str(metadata.get('view_only', False)).lower(),
-                "X-BAR-Filename": metadata["filename"],
+                "X-BAR-Filename": security.sanitize_header_value(metadata["filename"]),
                 "X-BAR-Metadata": json.dumps(metadata)
             }
         )
