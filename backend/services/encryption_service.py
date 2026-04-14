@@ -2,7 +2,6 @@
 import os
 import uuid
 import base64
-import hashlib
 import secrets
 from typing import Optional, Tuple, Dict, Any
 from datetime import datetime
@@ -56,12 +55,7 @@ class EncryptionService:
         """
         # Calculate file hash
         file_hash = crypto_utils.calculate_file_hash(file_data)
-        
-        # Generate password hash if provided
-        password_hash = None
-        if password:
-            password_hash = hashlib.sha256(password.encode()).hexdigest()
-        
+
         # Create metadata based on storage mode
         if storage_mode == 'server':
             metadata = server_storage.create_server_metadata(
@@ -82,10 +76,13 @@ class EncryptionService:
                 webhook_url=webhook_url,
                 view_only=view_only
             )
-        
+
+        # NOTE: password_hash is intentionally NOT stored in metadata.
+        # Password correctness is verified exclusively via PBKDF2-HMAC-SHA256
+        # key derivation + the structural HMAC signature on every access.
+        # Storing a hash — even a salted/slow one — in the plaintext header
+        # creates an offline crack oracle for anyone who possesses the file.
         metadata["file_hash"] = file_hash
-        if password_hash:
-            metadata["password_hash"] = password_hash
         
         # Create .BAR file
         if password:
@@ -226,7 +223,17 @@ class EncryptionService:
                 raise HTTPException(status_code=403, detail="Invalid password")
             else:
                 raise HTTPException(status_code=403, detail="Decryption failed")
-        except crypto_utils.TamperDetectedException as e:
+        except crypto_utils.TamperDetectedException:
+            # Two possible causes:
+            #   a) A wrong password produced a wrong PBKDF2 key, which caused
+            #      the HMAC check to fail — this is the *expected* failure mode
+            #      now that we no longer store a fast SHA-256 pre-check hash.
+            #   b) The file was genuinely tampered with.
+            # We disambiguate by checking whether a password was supplied.  If
+            # yes, surface it as "Invalid password" so the UI can prompt the
+            # user to retry.  If no password was involved, it is real tampering.
+            if password_to_use:
+                raise HTTPException(status_code=403, detail="Invalid password")
             raise HTTPException(
                 status_code=403,
                 detail="File integrity check failed - possible tampering"
