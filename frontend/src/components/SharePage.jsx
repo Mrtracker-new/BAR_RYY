@@ -183,6 +183,11 @@ const SharePage = ({ token }) => {
 
       if (err.response?.status === 404) {
         errorMsg = '🚫 File not found or already destroyed';
+      } else if (err.response?.status === 410) {
+        // 410 Gone: atomic view-count guard rejected this request.
+        // The view budget was already exhausted by a concurrent request.
+        // The file has been permanently destroyed — retrying will not help.
+        errorMsg = '🔥 File has been destroyed — maximum views reached';
       } else if (err.response?.status === 403) {
         // Get the actual error message from backend
         let detail = 'Unknown error';
