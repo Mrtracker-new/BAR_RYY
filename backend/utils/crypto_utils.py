@@ -320,13 +320,14 @@ def unpack_bar_file(bar_data: bytes, password: str = None) -> tuple:
         if not password:
             raise ValueError("Password required for decryption")
 
-        # Verify password FIRST if password_hash exists (before key derivation)
-        # This prevents false "tampering detected" errors when password is wrong
-        if "password_hash" in metadata:
-            provided_hash = hashlib.sha256(password.encode()).hexdigest()
-            stored_hash = metadata["password_hash"]
-            if not hmac.compare_digest(provided_hash, stored_hash):
-                raise ValueError("Invalid password")
+        # NOTE: password correctness is NOT pre-checked via a stored hash here.
+        # A password_hash field may still exist in legacy .bar files — it is
+        # intentionally ignored.  Password verification happens implicitly:
+        #   1. PBKDF2-HMAC-SHA256 (100 000 iterations) derives the key.
+        #   2. The HMAC signature over the entire BAR structure is verified.
+        # A wrong password → wrong key → HMAC mismatch → TamperDetectedException.
+        # Callers (EncryptionService.decrypt_bar_file) must catch that exception
+        # and, when a password was supplied, re-raise it as HTTPException(403).
 
         # Get salt from file — kept so callers can re-pack without changing it
         salt = base64.b64decode(bar_structure["salt"])
