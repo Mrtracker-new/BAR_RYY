@@ -492,7 +492,9 @@ _RFC5987_SAFE = "!#$&+-.^_`|~"
 # reviewed and added here.
 #
 # Sensitive fields that must NEVER appear in this set:
-#   password_hash  — SHA-256 of the user's password; enables offline attacks.
+#   password_hash  — REMOVED from the .bar format (C-02 fix).  No longer
+#                    written to new files.  Still blocked here for backward
+#                    compatibility with legacy .bar files that pre-date the fix.
 #   webhook_url    — internal notification endpoint; SSRF & info-disclosure.
 #   file_hash      — SHA-256 fingerprint of the plaintext; content oracle.
 #   encryption_method — hints at key-derivation scheme; aids key-recovery.
