@@ -1,8 +1,6 @@
 """Share endpoints for server-side files with 2FA support."""
 import os
 import json
-import hmac
-import hashlib
 import asyncio
 import traceback
 import mimetypes
@@ -189,94 +187,87 @@ async def share_file(
             bar_data = f.read()
         
         password_to_use = password.strip() if password and password.strip() else None
-        
-        try:
-            decrypted_data, metadata, key, _enc, _salt = encryption_service.decrypt_bar_file(bar_data, password_to_use)
-        except HTTPException as e:
-            # Send access denied webhook
-            if e.status_code == 403 and file_record.get('metadata'):
-                metadata_from_db = file_record['metadata']
-                if isinstance(metadata_from_db, str):
-                    metadata_from_db = json.loads(metadata_from_db)
-                webhook_url = metadata_from_db.get("webhook_url")
-                if webhook_url:
-                    client_ip = analytics.get_client_ip(req)
-                    webhook_srv = webhook_service.get_webhook_service()
-                    asyncio.create_task(webhook_srv.send_access_denied_alert(
-                        webhook_url=webhook_url,
-                        filename=metadata_from_db.get("filename", "unknown"),
-                        reason=str(e.detail),
-                        ip_address=client_ip
-                    ))
-            raise
-        
-        # Get current view count from database
-        current_views = file_record['current_views']
-        max_views = file_record['max_views']
-        
-        print(f"\n=== SHARE ACCESS REQUEST ===")
-        print(f"Token: {token}")
-        print(f"Password provided: {bool(password and password.strip())}")
-        print(f"Password protected: {metadata.get('password_protected')}")
-        print(f"Current views (DB): {current_views}/{max_views}")
-        
-        # Validate password if protected
-        if metadata.get("password_protected"):
-            client_ip = analytics.get_client_ip(req)
-            
-            # Check brute force protection
+
+        # ------------------------------------------------------------------ #
+        # Parse DB metadata once — needed for webhook URL and password flag   #
+        # before we have decrypted metadata from the BAR file.                #
+        # ------------------------------------------------------------------ #
+        db_metadata = file_record.get('metadata') or {}
+        if isinstance(db_metadata, str):
+            db_metadata = json.loads(db_metadata)
+        is_password_protected = bool(db_metadata.get('password_protected'))
+        client_ip = analytics.get_client_ip(req)
+
+        # ------------------------------------------------------------------ #
+        # Password gate — runs BEFORE decrypt so the brute-force lockout      #
+        # fires before any expensive PBKDF2 key derivation is attempted.      #
+        # ------------------------------------------------------------------ #
+        if is_password_protected:
+            # Step 1 — lockout / progressive-delay check
             try:
                 failed_count = await security.check_and_delay_password_attempt(client_ip, token)
                 if failed_count > 0:
-                    print(f"⚠️ Previous failed attempts: {failed_count}")
+                    print(f"⚠️ [{token}] {failed_count} previous failed attempt(s) from {client_ip}")
             except HTTPException:
                 raise
-            
-            if not password or not password.strip():
+
+            # Step 2 — reject missing password early (no PBKDF2 wasted)
+            if not password_to_use:
                 security.record_password_attempt(client_ip, False, token)
-                
-                # Send access denied webhook
-                webhook_url = metadata.get("webhook_url")
+                webhook_url = db_metadata.get("webhook_url")
                 if webhook_url:
                     webhook_srv = webhook_service.get_webhook_service()
                     asyncio.create_task(webhook_srv.send_access_denied_alert(
                         webhook_url=webhook_url,
-                        filename=metadata.get("filename", "unknown"),
+                        filename=db_metadata.get("filename", "unknown"),
                         reason="Password required but not provided",
-                        ip_address=client_ip
+                        ip_address=client_ip,
                     ))
-                
                 raise HTTPException(status_code=403, detail="Password required")
-            
-            # Validate password hash
-            stored_hash = metadata.get("password_hash")
-            if stored_hash:
-                provided_hash = hashlib.sha256(password.strip().encode()).hexdigest()
-                
-                if not hmac.compare_digest(provided_hash, stored_hash):
+
+        # ------------------------------------------------------------------ #
+        # Decrypt BAR file — password correctness validated inside via        #
+        # PBKDF2 key derivation + HMAC signature check.                       #
+        # ------------------------------------------------------------------ #
+        try:
+            decrypted_data, metadata, key, _enc, _salt = encryption_service.decrypt_bar_file(
+                bar_data, password_to_use
+            )
+        except HTTPException as e:
+            if e.status_code == 403:
+                if is_password_protected:
+                    # Wrong password — advance the brute-force counter
                     security.record_password_attempt(client_ip, False, token)
-                    
-                    # Send access denied webhook
-                    webhook_url = metadata.get("webhook_url")
-                    if webhook_url:
-                        webhook_srv = webhook_service.get_webhook_service()
-                        asyncio.create_task(webhook_srv.send_access_denied_alert(
-                            webhook_url=webhook_url,
-                            filename=metadata.get("filename", "unknown"),
-                            reason="Invalid password",
-                            ip_address=client_ip
-                        ))
-                    
-                    raise HTTPException(status_code=403, detail="Invalid password")
-                
-                security.record_password_attempt(client_ip, True, token)
+                webhook_url = db_metadata.get("webhook_url")
+                if webhook_url:
+                    webhook_srv = webhook_service.get_webhook_service()
+                    asyncio.create_task(webhook_srv.send_access_denied_alert(
+                        webhook_url=webhook_url,
+                        filename=db_metadata.get("filename", "unknown"),
+                        reason=str(e.detail),
+                        ip_address=client_ip,
+                    ))
+            raise
+
+        # Successful decryption — record it
+        if is_password_protected:
+            security.record_password_attempt(client_ip, True, token)
+
+        # Get current view count from database
+        current_views = file_record['current_views']
+        max_views = file_record['max_views']
+
+        print(f"\n=== SHARE ACCESS REQUEST ===")
+        print(f"Token: {token}")
+        print(f"Password provided: {bool(password_to_use)}")
+        print(f"Password protected: {is_password_protected}")
+        print(f"Current views (DB): {current_views}/{max_views}")
         
         # Check view limits
         if current_views >= max_views:
             webhook_url = metadata.get("webhook_url")
             if webhook_url:
                 webhook_srv = webhook_service.get_webhook_service()
-                client_ip = analytics.get_client_ip(req)
                 asyncio.create_task(webhook_srv.send_access_denied_alert(
                     webhook_url=webhook_url,
                     filename=metadata.get("filename", "unknown"),
@@ -301,7 +292,6 @@ async def share_file(
                     webhook_url = metadata.get("webhook_url")
                     if webhook_url:
                         webhook_srv = webhook_service.get_webhook_service()
-                        client_ip = analytics.get_client_ip(req)
                         asyncio.create_task(webhook_srv.send_access_denied_alert(
                             webhook_url=webhook_url,
                             filename=metadata.get("filename", "unknown"),
