@@ -582,90 +582,165 @@ class Database:
             print(f"❌ Failed to get recent access: {e}")
             return None
     
-    async def increment_view_count(
+    async def atomic_try_increment_view_count(
         self,
         token: str,
         session_fingerprint: str = None,
-        view_refresh_minutes: int = 0
-    ) -> tuple[bool, int, bool, bool]:
+        view_refresh_minutes: int = 0,
+    ) -> tuple[bool, int, bool, bool, bool]:
         """
-        Increment view count for a file with view refresh control support.
-        
+        Atomically attempt to increment the view count, guarded by the limit.
+
+        The core of the fix for C-04 (TOCTOU race condition).  A naive
+        check-then-act pattern allows two concurrent requests to both read
+        ``current_views < max_views`` and both succeed.  Instead, the
+        increment is expressed as a single guarded UPDATE:
+
+            UPDATE bar_files
+            SET current_views = current_views + 1
+            WHERE token = $1
+              AND destroyed = FALSE
+              AND current_views < max_views   ← CAS guard
+            RETURNING current_views, max_views
+
+        If 0 rows are affected the limit was already hit at the DB level —
+        no application-level race is possible regardless of concurrency.
+
+        PostgreSQL uses a single RETURNING statement (inherently atomic).
+        SQLite uses BEGIN IMMEDIATE which acquires an exclusive write lock
+        for the entire transaction, preventing concurrent interleaving.
+
         Args:
-            token: File access token
-            session_fingerprint: Optional session fingerprint for refresh control
-            view_refresh_minutes: Time threshold in minutes (0 = always increment)
-            
+            token: File access token.
+            session_fingerprint: Optional session fingerprint for view-refresh
+                control.  When supplied and ``view_refresh_minutes > 0``, a
+                recent access by the same session skips the increment.
+            view_refresh_minutes: Refresh window in minutes (0 = always count).
+
         Returns:
-            Tuple of (success, views_remaining, should_destroy, is_new_view)
+            5-tuple of ``(db_ok, views_remaining, should_destroy, is_new_view, limit_hit)``:
+
+            * ``db_ok``           – False only on an internal DB error.
+            * ``views_remaining`` – Views remaining after this operation.
+            * ``should_destroy``  – True when the file should now be deleted.
+            * ``is_new_view``     – True when this request counted as a new view.
+            * ``limit_hit``       – True when the atomic guard rejected the
+                                    request because ``current_views >= max_views``
+                                    at the moment of the UPDATE.  The caller
+                                    must return 410 to the client without serving
+                                    file content.
         """
         try:
+            # ── View-refresh deduplication ─────────────────────────────────
+            # Check if the same session accessed the file within the refresh
+            # window.  This is still a separate DB round-trip, but the worst
+            # outcome of a race here is that a repeat viewer is counted once
+            # rather than zero times — acceptable and far less severe than
+            # the limit-bypass race we are fixing.
             is_new_view = True
-            
-            # Check if within refresh threshold
             if view_refresh_minutes > 0 and session_fingerprint:
                 recent = await self.get_recent_access(
-                    token,
-                    session_fingerprint,
-                    view_refresh_minutes
+                    token, session_fingerprint, view_refresh_minutes
                 )
                 is_new_view = (recent is None)
-            
-            if is_new_view:
-                # Increment view count
-                if self.is_postgres:
-                    async with self.pool.acquire() as conn:
-                        row = await conn.fetchrow("""
-                            UPDATE bar_files 
-                            SET current_views = current_views + 1,
-                                last_accessed_at = NOW()
-                            WHERE token = $1 AND destroyed = FALSE
-                            RETURNING current_views, max_views
-                        """, token)
-                        
-                        if not row:
-                            return False, 0, False, False
-                        
-                        current_views = row['current_views']
-                        max_views = row['max_views']
-                else:
-                    async with aiosqlite.connect(self.db_path) as db:
+
+            # ── If not a new view, return current counts without touching DB ─
+            if not is_new_view:
+                file_record = await self.get_file_record(token)
+                if not file_record:
+                    return False, 0, False, False, False
+                current_views = file_record['current_views']
+                max_views    = file_record['max_views']
+                views_remaining = max(0, max_views - current_views)
+                should_destroy  = current_views >= max_views
+                # If should_destroy is True for a refresh-window access it means
+                # the file was already exhausted (legacy data or concurrent race).
+                # Return limit_hit=True so the caller blocks access rather than
+                # serving the file content and deleting it.
+                limit_hit = should_destroy
+                return True, views_remaining, should_destroy, False, limit_hit
+
+            # ── Atomic guarded increment ───────────────────────────────────
+            if self.is_postgres:
+                async with self.pool.acquire() as conn:
+                    row = await conn.fetchrow("""
+                        UPDATE bar_files
+                        SET current_views = current_views + 1,
+                            last_accessed_at = NOW()
+                        WHERE token = $1
+                          AND destroyed = FALSE
+                          AND current_views < max_views
+                        RETURNING current_views, max_views
+                    """, token)
+
+                    if row is None:
+                        # 0 rows affected — limit already reached (or token
+                        # does not exist / already destroyed).  Treat as
+                        # limit_hit so caller returns 410 without serving data.
+                        # is_new_view=False: no view was counted.
+                        return True, 0, False, False, True
+
+                    current_views = row['current_views']
+                    max_views     = row['max_views']
+
+            else:
+                # SQLite: pass isolation_level=None via connect() kwargs so the
+                # underlying sqlite3 connection starts with manual transaction mode
+                # (no auto-BEGIN before DML statements).  BEGIN IMMEDIATE then
+                # acquires an exclusive write lock, preventing concurrent
+                # interleaving between the UPDATE and SELECT changes().
+                async with aiosqlite.connect(self.db_path, isolation_level=None) as db:
+                    await db.execute("BEGIN IMMEDIATE")
+                    try:
                         await db.execute("""
-                            UPDATE bar_files 
+                            UPDATE bar_files
                             SET current_views = current_views + 1,
                                 last_accessed_at = ?
-                            WHERE token = ? AND destroyed = 0
+                            WHERE token = ?
+                              AND destroyed = 0
+                              AND current_views < max_views
                         """, (datetime.now(timezone.utc).isoformat(), token))
-                        await db.commit()
-                        
+
+                        # changes() returns the number of rows touched by the
+                        # preceding DML statement within this connection.
+                        async with db.execute("SELECT changes()") as cur:
+                            affected = (await cur.fetchone())[0]
+
+                        if affected == 0:
+                            await db.execute("ROLLBACK")
+                            # is_new_view=False: no view was counted.
+                            return True, 0, False, False, True
+
                         async with db.execute(
                             "SELECT current_views, max_views FROM bar_files WHERE token = ?",
                             (token,)
-                        ) as cursor:
-                            row = await cursor.fetchone()
-                            if not row:
-                                return False, 0, False, False
-                            current_views, max_views = row
-            else:
-                # Don't increment, just get current counts
-                file_record = await self.get_file_record(token)
-                if not file_record:
-                    return False, 0, False, False
-                current_views = file_record['current_views']
-                max_views = file_record['max_views']
-            
+                        ) as cur:
+                            row = await cur.fetchone()
+
+                        await db.execute("COMMIT")
+
+                        if not row:
+                            return False, 0, False, False, False
+
+                        current_views, max_views = row
+                    except Exception:
+                        await db.execute("ROLLBACK")
+                        raise
+
             views_remaining = max(0, max_views - current_views)
-            should_destroy = current_views >= max_views
-            
-            # Mark as destroyed if limit reached
-            if should_destroy and is_new_view:
+            should_destroy  = current_views >= max_views
+
+            # Mark as destroyed inside this method so the caller never needs
+            # to call mark_as_destroyed() separately — closing a second race
+            # window where two concurrent requests could both trigger deletion.
+            if should_destroy:
                 await self.mark_as_destroyed(token)
-            
-            return True, views_remaining, should_destroy, is_new_view
-            
+
+            return True, views_remaining, should_destroy, True, False
+
         except Exception as e:
-            print(f"❌ Failed to increment view count: {e}")
-            return False, 0, False, False
+            print(f"❌ Failed in atomic_try_increment_view_count: {e}")
+            return False, 0, False, False, False
 
     
     async def mark_as_destroyed(self, token: str) -> bool:
