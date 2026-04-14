@@ -277,38 +277,49 @@ async def decrypt_uploaded_bar_file(
         try:
             decrypted_data, metadata, key, _enc, _salt = encryption_service.decrypt_bar_file(bar_data, password_to_use)
         except HTTPException as e:
-            # Record failed attempt
             if e.status_code == 403:
                 security.record_password_attempt(client_ip, False, file_token)
+
+                # decrypt_bar_file() maps both "wrong password" and
+                # "genuine tampering" to HTTPException(403).  We distinguish
+                # them by the detail string so we can fire the correct webhook
+                # and log the correct event.
+                is_wrong_password = (
+                    "Invalid password" in e.detail
+                    or "Password required" in e.detail
+                )
+                try:
+                    raw_meta = _peek_metadata(bar_data)
+                    webhook_url = raw_meta.get("webhook_url") if raw_meta else None
+                    if webhook_url:
+                        webhook_srv = webhook_service.get_webhook_service()
+                        if is_wrong_password:
+                            asyncio.create_task(webhook_srv.send_access_denied_alert(
+                                webhook_url=webhook_url,
+                                filename=raw_meta.get("filename", "unknown"),
+                                reason=f"{e.detail} (client-side decrypt)",
+                                ip_address=client_ip,
+                            ))
+                        else:
+                            # Tamper or corruption — fire tamper alert
+                            asyncio.create_task(webhook_srv.send_tamper_alert(
+                                webhook_url=webhook_url,
+                                filename=raw_meta.get("filename", "unknown"),
+                                token=file_token,
+                            ))
+                except Exception:
+                    pass  # Never let webhook failures mask the auth error
             raise
-        except crypto_utils.TamperDetectedException as e:
-            # Send tamper alert webhook if configured.
-            # IMPORTANT: `metadata` is NOT available here — it is produced by
-            # decrypt_bar_file(), the very call that raised this exception.
-            # We must use _peek_metadata() to read the unencrypted header
-            # from the raw bytes, exactly as the /decrypt/{bar_id} endpoint
-            # does for the same scenario.
-            try:
-                raw_meta = _peek_metadata(bar_data)
-                webhook_url = raw_meta.get("webhook_url") if raw_meta else None
-                if webhook_url:
-                    webhook_srv = webhook_service.get_webhook_service()
-                    asyncio.create_task(webhook_srv.send_tamper_alert(
-                        webhook_url=webhook_url,
-                        filename=raw_meta.get("filename", "unknown"),
-                        token=file_token
-                    ))
-            except Exception:
-                pass  # Never let webhook failures mask the tamper error
-            raise HTTPException(status_code=403, detail="File integrity check failed - possible tampering")
         
         # Validate access — expiry and presence of password string only.
         # NOTE: crypto_utils.unpack_bar_file() (called inside decrypt_bar_file)
-        # already validated the password via constant-time HMAC comparison of
-        # password_hash.  If we reached here, decryption succeeded → the password
-        # (if required) was correct.  validate_client_access therefore only needs
-        # to check expiry; the password check it performs is a weaker belt-and-
-        # suspenders guard that should never fail at this point.
+        # validates the password via PBKDF2-HMAC-SHA256 key derivation + the
+        # structural HMAC signature.  A wrong password produces a wrong key,
+        # the HMAC check fails, and decrypt_bar_file raises HTTPException(403,
+        # "Invalid password").  If we reached here the password (if any) is
+        # correct.  validate_client_access therefore only checks expiry; its
+        # password presence check is a belt-and-suspenders guard that should
+        # never fail at this point.
         is_valid, errors = client_storage.validate_client_access(metadata, password_to_use)
 
         if not is_valid:
