@@ -175,17 +175,24 @@ async def share_file(
                     detail="2FA verification required. Please request and verify OTP first."
                 )
         
-        # Get file path and check if it exists
+        # Resolve file path from DB record, then open atomically.
+        # Using a single open() instead of os.path.exists() + open() eliminates
+        # the file-existence TOCTOU race: if a concurrent request destroys the
+        # file between get_file_record() and here, FileNotFoundError is caught
+        # cleanly rather than crashing with an unhandled exception.
         bar_file = file_record['file_path']
-        if not os.path.exists(bar_file):
-            # File was deleted but record exists - clean up
+        try:
+            with open(bar_file, "rb") as f:
+                bar_data = f.read()
+        except FileNotFoundError:
+            # File was deleted by a concurrent request that hit the view limit
+            # just before us.  Clean up the stale DB record and return 410.
             await db.mark_as_destroyed(token)
-            raise HTTPException(status_code=404, detail="File not found or already destroyed")
-        
-        # Read and decrypt BAR file
-        with open(bar_file, "rb") as f:
-            bar_data = f.read()
-        
+            raise HTTPException(
+                status_code=410,
+                detail="File not found or already destroyed"
+            )
+
         password_to_use = password.strip() if password and password.strip() else None
 
         # ------------------------------------------------------------------ #
@@ -249,35 +256,20 @@ async def share_file(
                     ))
             raise
 
-        # Successful decryption — record it
+
+        # ------------------------------------------------------------------ #
+        # Successful decryption — record it                                   #
+        # ------------------------------------------------------------------ #
         if is_password_protected:
             security.record_password_attempt(client_ip, True, token)
 
-        # Get current view count from database
-        current_views = file_record['current_views']
-        max_views = file_record['max_views']
+        # NOTE: we deliberately do NOT read current_views / max_views from
+        # file_record here.  That snapshot was taken at the top of this
+        # function and may be stale by the time we reach this point under
+        # concurrent load.  Limit enforcement is handled atomically inside
+        # atomic_try_increment_view_count() below.
 
-        print(f"\n=== SHARE ACCESS REQUEST ===")
-        print(f"Token: {token}")
-        print(f"Password provided: {bool(password_to_use)}")
-        print(f"Password protected: {is_password_protected}")
-        print(f"Current views (DB): {current_views}/{max_views}")
-        
-        # Check view limits
-        if current_views >= max_views:
-            webhook_url = metadata.get("webhook_url")
-            if webhook_url:
-                webhook_srv = webhook_service.get_webhook_service()
-                asyncio.create_task(webhook_srv.send_access_denied_alert(
-                    webhook_url=webhook_url,
-                    filename=metadata.get("filename", "unknown"),
-                    reason=f"Maximum views reached ({current_views}/{max_views})",
-                    ip_address=client_ip
-                ))
-            
-            raise HTTPException(status_code=403, detail=f"Maximum views reached ({current_views}/{max_views})")
-        
-        # Check expiry
+        # Check expiry (immutable metadata — no race risk)
         if file_record.get('expires_at'):
             expires_at_str = file_record['expires_at']
             if expires_at_str:
@@ -302,33 +294,57 @@ async def share_file(
                     raise HTTPException(status_code=403, detail="File has expired")
         
         print("✅ Access validation passed")
-        
+
         # Generate session fingerprint for view refresh control
         ip_address = analytics.get_client_ip(req)
         user_agent = req.headers.get("User-Agent", "Unknown")
-        
+
         from utils.crypto_utils import generate_session_fingerprint
         session_fingerprint = generate_session_fingerprint(token, ip_address, user_agent)
-        
+
         # Get view refresh setting from metadata
         view_refresh_minutes = metadata.get("view_refresh_minutes", 0)
-        
+
         # Get device and geolocation for analytics
         device_type = analytics.get_device_type(user_agent)
         geo_data = await analytics.get_geolocation(ip_address)
         country = geo_data.get("country") if geo_data else None
         city = geo_data.get("city") if geo_data else None
-        
-        # Update view count in database (with fingerprint check)
-        success, views_remaining, should_destroy, is_new_view = await db.increment_view_count(
-            token,
-            session_fingerprint=session_fingerprint,
-            view_refresh_minutes=view_refresh_minutes
-        )
-        
-        if not success:
+
+        # ------------------------------------------------------------------ #
+        # Atomic view-count increment (C-04 fix)                              #
+        # The guarded UPDATE inside atomic_try_increment_view_count() is the  #
+        # single source of truth for limit enforcement.  If limit_hit is True #
+        # the DB rejected the increment because current_views >= max_views at  #
+        # the moment of the UPDATE — no file content is served.               #
+        # ------------------------------------------------------------------ #
+        db_ok, views_remaining, should_destroy, is_new_view, limit_hit = \
+            await db.atomic_try_increment_view_count(
+                token,
+                session_fingerprint=session_fingerprint,
+                view_refresh_minutes=view_refresh_minutes,
+            )
+
+        if not db_ok:
             raise HTTPException(status_code=500, detail="Failed to update view count")
-        
+
+        if limit_hit:
+            # Atomic guard fired: another concurrent request already exhausted
+            # the view budget.  Return 410 Gone — the resource no longer exists.
+            webhook_url = metadata.get("webhook_url")
+            if webhook_url:
+                webhook_srv = webhook_service.get_webhook_service()
+                asyncio.create_task(webhook_srv.send_access_denied_alert(
+                    webhook_url=webhook_url,
+                    filename=metadata.get("filename", "unknown"),
+                    reason="Maximum views reached — atomic guard rejected request",
+                    ip_address=client_ip,
+                ))
+            raise HTTPException(
+                status_code=410,
+                detail="Maximum views reached — file has been destroyed"
+            )
+
         # Log the access (always log, even if not counted as new view)
         await db.log_access(
             token=token,
@@ -363,20 +379,30 @@ async def share_file(
         
         # Destroy file if view limit reached
         if should_destroy:
-            crypto_utils.secure_delete_file(bar_file)
-            print(f"🔥 File destroyed after reaching max views")
-            
+            try:
+                crypto_utils.secure_delete_file(bar_file)
+                print(f"🔥 File destroyed after reaching max views")
+            except Exception as _del_err:
+                # Log but don't abort — last viewer still gets their content.
+                # DB is already marked destroyed; file is unreachable regardless.
+                print(f"⚠️ secure_delete_file error (file inaccessible via DB): {_del_err}")
+
+
             # Send destruction webhook
             webhook_url = metadata.get("webhook_url")
             if webhook_url:
+                # max_views comes from file_record (immutable metadata — safe
+                # to use here; we only removed the stale *view count* snapshot).
+                _max_views = file_record.get('max_views', 0)
                 webhook_srv = webhook_service.get_webhook_service()
                 asyncio.create_task(webhook_srv.send_destruction_alert(
                     webhook_url=webhook_url,
                     filename=metadata.get("filename", "unknown"),
                     reason="Maximum views reached",
-                    views_used=max_views,
-                    max_views=max_views
+                    views_used=_max_views,
+                    max_views=_max_views
                 ))
+
         
         # Return decrypted file
         view_only = metadata.get('view_only', False)
