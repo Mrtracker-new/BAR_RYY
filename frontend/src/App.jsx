@@ -42,20 +42,20 @@ const EASE = [0.16, 1, 0.3, 1];
   Design tokens (single source of truth)
 ──────────────────────────────────────────────*/
 const T = {
-  gold:   "#E8A020",
-  goldM:  "#C8893A",
-  green:  "#22C55E",
-  bg:     "#070707",
-  s0:     "#0d0d0d",
-  s1:     "#111111",
-  s2:     "#161616",
+  gold: "#E8A020",
+  goldM: "#C8893A",
+  green: "#22C55E",
+  bg: "#070707",
+  s0: "#0d0d0d",
+  s1: "#111111",
+  s2: "#161616",
   border: "rgba(255,255,255,0.06)",
-  borderH:"rgba(255,255,255,0.11)",
-  text:   "#efefef",
-  textS:  "#888888",
-  textT:  "#404040",
-  textD:  "#292929",
-  mono:   "'JetBrains Mono', monospace",
+  borderH: "rgba(255,255,255,0.11)",
+  text: "#efefef",
+  textS: "#888888",
+  textT: "#404040",
+  textD: "#292929",
+  mono: "'JetBrains Mono', monospace",
 };
 
 const shadow = "0 2px 8px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.5)";
@@ -214,9 +214,9 @@ function CardHeader({ icon: Icon, label, color = T.gold, children }) {
 ──────────────────────────────────────────────*/
 function ContainerPreview({ uploadedFile, rules }) {
   const rows = [
-    { label: "File",     value: uploadedFile?.name, truncate: true },
-    { label: "Storage",  value: rules.storageMode === "server" ? "Server-Side" : "Client-Side" },
-    { label: "Expiry",   value: rules.expiryMinutes > 0 ? `${rules.expiryValue} ${rules.expiryUnit}` : "None" },
+    { label: "File", value: uploadedFile?.name, truncate: true },
+    { label: "Storage", value: rules.storageMode === "server" ? "Server-Side" : "Client-Side" },
+    { label: "Expiry", value: rules.expiryMinutes > 0 ? `${rules.expiryValue} ${rules.expiryUnit}` : "None" },
     { label: "Password", value: rules.password ? "Set ✓" : "None" },
     ...(rules.storageMode === "server" ? [{ label: "Max Views", value: String(rules.maxViews) }] : []),
   ];
@@ -452,21 +452,73 @@ function ResultCard({ barResult, onDownload, onAnalytics, onReset, showToast }) 
                 </div>
               </div>
 
-              {/* QR */}
+              {/* QR — section */}
               {barResult.qr_code && (
-                <div style={{ display: "flex", justifyContent: "center", paddingTop: "0.25rem" }}>
+                <div
+                  style={{
+                    borderRadius: "0.625rem",
+                    border: `1px solid rgba(255,255,255,0.06)`,
+                    background: "rgba(255,255,255,0.025)",
+                    overflow: "hidden",
+                  }}
+                >
+                  {/* Section label row */}
                   <div
                     style={{
-                      padding: "0.5rem", borderRadius: "0.625rem",
-                      background: "#fff",
-                      border: `1px solid rgba(255,255,255,0.1)`,
+                      display: "flex", alignItems: "center", justifyContent: "space-between",
+                      padding: "0.5625rem 0.875rem 0.375rem",
                     }}
                   >
-                    <img
-                      src={barResult.qr_code}
-                      alt="QR Code"
-                      style={{ width: 88, height: 88, display: "block", borderRadius: "0.25rem" }}
-                    />
+                    <p style={{ fontSize: "0.625rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: T.textT, margin: 0 }}>
+                      Scan to open
+                    </p>
+                    <span style={{ fontSize: "0.625rem", color: T.textD, letterSpacing: "0.04em" }}>Point camera at code</span>
+                  </div>
+
+                  {/* QR viewport */}
+                  <div style={{ padding: "0 0.875rem 0.875rem", display: "flex", justifyContent: "center" }}>
+                    <div style={{ position: "relative", display: "inline-flex" }}>
+                      {/* Corner finder marks */}
+                      {[
+                        { top: 0, left: 0, borderWidth: "2px 0 0 2px" },
+                        { top: 0, right: 0, borderWidth: "2px 2px 0 0" },
+                        { bottom: 0, left: 0, borderWidth: "0 0 2px 2px" },
+                        { bottom: 0, right: 0, borderWidth: "0 2px 2px 0" },
+                      ].map((pos, i) => (
+                        <div
+                          key={i}
+                          style={{
+                            position: "absolute",
+                            width: 14, height: 14,
+                            borderStyle: "solid",
+                            borderColor: T.gold,
+                            borderRadius: i === 0 ? "3px 0 0 0" : i === 1 ? "0 3px 0 0" : i === 2 ? "0 0 0 3px" : "0 0 3px 0",
+                            zIndex: 2,
+                            ...pos,
+                          }}
+                        />
+                      ))}
+                      {/* White canvas — tight padding, sized to code */}
+                      <div
+                        style={{
+                          padding: "0.625rem",
+                          background: "#ffffff",
+                          borderRadius: "0.375rem",
+                          lineHeight: 0,
+                        }}
+                      >
+                        <img
+                          src={barResult.qr_code}
+                          alt="QR Code — scan to open the share link"
+                          style={{
+                            width: 160,
+                            height: 160,
+                            display: "block",
+                            imageRendering: "pixelated",
+                          }}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -514,9 +566,9 @@ function ResultCard({ barResult, onDownload, onAnalytics, onReset, showToast }) 
   Main App
 ──────────────────────────────────────────────*/
 function MainApp() {
-  const [uploadedFile, setUploadedFile]   = useState(null);
-  const [fileInfo, setFileInfo]           = useState(null);
-  const [filePreview, setFilePreview]     = useState(null);
+  const [uploadedFile, setUploadedFile] = useState(null);
+  const [fileInfo, setFileInfo] = useState(null);
+  const [filePreview, setFilePreview] = useState(null);
   const [rules, setRules] = useState({
     storageMode: "client",
     maxViews: 1,
@@ -531,12 +583,12 @@ function MainApp() {
     viewRefreshMinutes: 0,
     autoRefreshSeconds: 0,
   });
-  const [barResult, setBarResult]         = useState(null);
-  const [isSealing, setIsSealing]         = useState(false);
-  const [toast, setToast]                 = useState(null);
+  const [barResult, setBarResult] = useState(null);
+  const [isSealing, setIsSealing] = useState(false);
+  const [toast, setToast] = useState(null);
   const [showAnalytics, setShowAnalytics] = useState(false);
-  const [showDecrypt, setShowDecrypt]     = useState(false);
-  const [error, setError]                 = useState(null);
+  const [showDecrypt, setShowDecrypt] = useState(false);
+  const [error, setError] = useState(null);
 
   const showToast = (message, type = "success") => setToast({ message, type });
 
@@ -821,8 +873,8 @@ function MainApp() {
 function App() {
   return (
     <Routes>
-      <Route path="/"            element={<LandingPage />} />
-      <Route path="/app"         element={<MainApp />} />
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/app" element={<MainApp />} />
       <Route path="/share/:token" element={<SharePageWrapper />} />
     </Routes>
   );
