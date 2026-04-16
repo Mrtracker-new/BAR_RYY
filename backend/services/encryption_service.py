@@ -98,11 +98,24 @@ class EncryptionService:
             encrypted_data = crypto_utils.encrypt_file(file_data, key)
             bar_data = crypto_utils.pack_bar_file(encrypted_data, metadata, key)
         
-        # Generate unique BAR ID
+        # Generate unique BAR ID.
+        # The filename is the full UUID token — no user-supplied name component.
+        # Rationale:
+        #   - The old pattern "{original_name}_{bar_id[:8]}.bar" embedded a
+        #     user-controlled string directly into the filesystem path, creating
+        #     a path-injection surface and forcing get_bar_file_path() to
+        #     scan the directory with only 8 hex chars (C-05).
+        #   - Using the full UUID as the sole name component mirrors the
+        #     server-side convention (client-storage files were already renamed
+        #     to "{access_token}.bar" inside create_server_side_file), so both
+        #     storage modes now share a single, consistent on-disk naming scheme.
+        #   - The original display filename is preserved inside the BAR
+        #     container's encrypted metadata and is surfaced via the
+        #     Content-Disposition header on download — nothing is lost.
         bar_id = str(uuid.uuid4())
-        bar_filename = f"{os.path.splitext(filename)[0]}_{bar_id[:8]}.bar"
+        bar_filename = f"{bar_id}.bar"
         bar_path = os.path.join(self.generated_dir, bar_filename)
-        
+
         # Save .bar file
         with open(bar_path, "wb") as f:
             f.write(bar_data)
