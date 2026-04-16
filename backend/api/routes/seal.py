@@ -116,15 +116,30 @@ async def seal_container(
                 "message": "Container sealed and stored on server"
             }
         else:
-            # Client-side: Return .bar file data directly
+            # Client-side: Return .bar file data directly.
             bar_data_b64 = base64.b64encode(bar_result["bar_data"]).decode('utf-8')
+
+            # Securely wipe the temporary .bar file on disk.
+            # The caller receives the content as base64 in the JSON body;
+            # the server-side copy is no longer needed and must be wiped
+            # (not just unlinked) because the ciphertext contains the
+            # encryption key in key_stored mode.
             if os.path.exists(bar_result["bar_path"]):
-                os.remove(bar_result["bar_path"])
-            
+                crypto_utils.secure_delete_file(bar_result["bar_path"])
+
+            # Build the human-readable download filename the browser will use.
+            # The on-disk filename is a bare UUID ("{bar_id}.bar") for security
+            # reasons (no user-controlled data in the path), but that name is
+            # meaningless to the recipient.  We expose the original display
+            # filename + ".bar" as the suggested download name instead.
+            # display_filename is already in scope from line 46 above.
+            stem = os.path.splitext(display_filename)[0]
+            download_filename = f"{stem}.bar"
+
             result = {
                 "success": True,
                 "storage_mode": "client",
-                "bar_filename": bar_result["bar_filename"],
+                "bar_filename": download_filename,
                 "bar_data": bar_data_b64,
                 "metadata": bar_result["metadata"],
                 "message": "Container sealed successfully"
@@ -147,19 +162,46 @@ async def download_bar(
 ):
     """Download the generated .bar file."""
     try:
+        # get_bar_file_path validates UUID4 format, constructs the path
+        # deterministically, applies a path-traversal containment guard, and
+        # confirms the file exists — all before returning.  The secondary
+        # os.path.exists() guard below is a TOCTOU belt-and-suspenders check
+        # (the file could be deleted between the isfile() check inside
+        # get_bar_file_path and the FileResponse open() call here).
         bar_file = file_service.get_bar_file_path(bar_id)
-        
+
         if not bar_file or not os.path.exists(bar_file):
             raise HTTPException(status_code=404, detail="BAR file not found")
-        
-        safe_filename = os.path.basename(bar_file)
+
+        # Derive the human-readable download filename from the BAR container's
+        # embedded metadata.  The on-disk filename is a bare UUID ("{bar_id}.bar")
+        # for security reasons — no user-controlled data in the path — but that
+        # name is meaningless to the recipient.  peek_bar_metadata reads only
+        # the unencrypted plaintext header (no key derivation, no HMAC check)
+        # so it is fast and cannot fail due to a wrong password.
+        # Fall back to the UUID-based name if metadata is unreadable.
+        download_filename = os.path.basename(bar_file)  # safe fallback
+        try:
+            with open(bar_file, "rb") as f:
+                bar_bytes = f.read()
+            raw_meta = crypto_utils.peek_bar_metadata(bar_bytes)
+            original_filename = raw_meta.get("filename", "")
+            if original_filename:
+                stem = os.path.splitext(original_filename)[0]
+                download_filename = f"{stem}.bar"
+        except Exception:
+            # If metadata is unreadable (corrupt file, etc.) fall back silently.
+            pass
+
         return FileResponse(
             bar_file,
             media_type="application/octet-stream",
-            filename=safe_filename,
-            headers={"Content-Disposition": security.build_content_disposition(safe_filename, 'attachment')}
+            filename=download_filename,
+            headers={"Content-Disposition": security.build_content_disposition(download_filename, 'attachment')}
         )
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Download failed: {str(e)}")
 
@@ -172,17 +214,21 @@ async def get_bar_info(
 ):
     """Get metadata information about a BAR file without decrypting."""
     try:
+        # get_bar_file_path validates UUID4 format, constructs the path
+        # deterministically, applies a path-traversal containment guard, and
+        # confirms the file exists — all before returning.  The secondary
+        # os.path.exists() guard below is a TOCTOU belt-and-suspenders check.
         bar_file = file_service.get_bar_file_path(bar_id)
-        
+
         if not bar_file or not os.path.exists(bar_file):
             raise HTTPException(status_code=404, detail="BAR file not found")
-        
+
         # Read and unpack BAR file
         with open(bar_file, "rb") as f:
             bar_data = f.read()
-        
+
         _, metadata, _, _salt = crypto_utils.unpack_bar_file(bar_data)
-        
+
         # Return safe metadata (excluding encryption key)
         return {
             "filename": metadata.get("filename"),
@@ -193,6 +239,8 @@ async def get_bar_info(
             "password_protected": metadata.get("password_protected"),
             "views_remaining": max(0, metadata.get("max_views", 0) - metadata.get("current_views", 0))
         }
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Info retrieval failed: {str(e)}")
