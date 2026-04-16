@@ -60,7 +60,12 @@ async def decrypt_bar(
         security.check_rate_limit(req, limit=_DECRYPT_RATE_LIMIT)
 
         # ------------------------------------------------------------------ #
-        # 2. Resolve bar file                                                  #
+        # 2. Resolve bar file — UUID4 format validation, exact-path lookup,   #
+        #    path-traversal containment check, and file-existence check are    #
+        #    all performed inside get_bar_file_path (C-05 fix).  The secondary #
+        #    os.path.exists() guard below is a TOCTOU belt-and-suspenders      #
+        #    check: the file could be concurrently deleted between the isfile  #
+        #    check inside get_bar_file_path and the open() call at step 3.    #
         # ------------------------------------------------------------------ #
         bar_file = file_service.get_bar_file_path(bar_id)
 
@@ -175,7 +180,14 @@ async def decrypt_bar(
                 encrypted_data,  # original ciphertext — MUST NOT be re-encrypted
                 metadata,
                 key,
-                password=request.password if metadata.get("password_protected") else None,
+                # IMPORTANT: must use password_to_use (stripped) here, NOT
+                # request.password.  The PBKDF2 key derivation inside
+                # decrypt_bar_file() already stripped the password before
+                # deriving the key.  Using the unstripped raw value here would
+                # produce an HMAC signed with a different password than the one
+                # used to derive the key, causing TamperDetectedException on
+                # every subsequent read of this file.
+                password=password_to_use if metadata.get("password_protected") else None,
                 salt=salt,       # original PBKDF2 salt for password-derived files
             )
             with open(bar_file, "wb") as f:
