@@ -1,5 +1,6 @@
 """File operations service."""
 import os
+import re
 import uuid
 import base64
 from io import BytesIO
@@ -16,28 +17,47 @@ from core.config import settings
 from core import security
 
 
+# UUID4 format: 8-4-4-4-12 hex digits, version nibble = 4,
+# variant nibble ∈ {8, 9, a, b}  (RFC 4122 §4.4).
+# Compiled once at module load, not per-request.
+_UUID4_RE = re.compile(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+    re.IGNORECASE,
+)
+
+
 class FileService:
     """Service for file operations like upload, preview generation, etc."""
-    
+
     def __init__(self):
         self.upload_dir = settings.upload_dir
         self.generated_dir = settings.generated_dir
-    
+
+        # Resolve the canonical real paths once at startup.
+        # os.path.realpath is an OS-level syscall (lstat chain); calling it on
+        # every request inside get_bar_file_path / resolve_temp_file would be
+        # pure waste since these directories never change at runtime.
+        # Caching them here also ensures the containment check is performed
+        # against a consistent anchor even if the process working directory
+        # changes (e.g. in some test harnesses).
+        self._real_upload_dir: str = os.path.realpath(self.upload_dir)
+        self._real_generated_dir: str = os.path.realpath(self.generated_dir)
+
     async def save_uploaded_file(
-        self, 
+        self,
         file: UploadFile,
         validate: bool = True
     ) -> Tuple[str, str, int, Optional[str]]:
         """
         Save an uploaded file to the upload directory.
-        
+
         Args:
             file: FastAPI UploadFile object
             validate: Whether to validate filename and extension
-            
+
         Returns:
             Tuple of (file_id, safe_filename, file_size, preview_data)
-            
+
         Raises:
             HTTPException: If validation fails or file is too large
         """
@@ -45,23 +65,23 @@ class FileService:
             # Validate filename
             if not security.validate_filename(file.filename):
                 raise HTTPException(status_code=400, detail="Invalid filename")
-            
+
             # Validate file extension
             if not security.validate_file_extension(file.filename):
                 raise HTTPException(status_code=400, detail="File type not allowed")
-        
+
         # Sanitize filename
         safe_filename = security.sanitize_filename(file.filename)
-        
+
         # Generate unique file ID
         file_id = str(uuid.uuid4())
         temp_filename = f"{file_id}__{safe_filename}"
         temp_path = os.path.join(self.upload_dir, temp_filename)
-        
+
         # Save file with size limit
         file_size = 0
         chunk_size = 1024 * 1024  # 1MB chunks
-        
+
         with open(temp_path, "wb") as buffer:
             while chunk := await file.read(chunk_size):
                 file_size += len(chunk)
@@ -74,26 +94,26 @@ class FileService:
                         detail=f"File too large. Maximum size is {settings.max_file_size // (1024*1024)}MB"
                     )
                 buffer.write(chunk)
-        
+
         # Generate preview
         preview_data = self.generate_preview(temp_path, file.content_type)
-        
+
         return file_id, safe_filename, file_size, preview_data
-    
+
     def generate_preview(self, file_path: str, content_type: Optional[str]) -> Optional[str]:
         """
         Generate a preview for image files.
-        
+
         Args:
             file_path: Path to the file
             content_type: MIME type of the file
-            
+
         Returns:
             Base64-encoded preview image or None
         """
         if not PIL_AVAILABLE or not content_type:
             return None
-        
+
         try:
             if content_type.startswith('image/'):
                 # Image preview
@@ -113,9 +133,9 @@ class FileService:
         except Exception as e:
             print(f"Preview generation failed: {e}")
             return None
-        
+
         return None
-    
+
     def resolve_temp_file(self, temp_filename: str) -> Optional[str]:
         """
         Resolve a temp_filename token to an absolute filesystem path.
@@ -143,36 +163,106 @@ class FileService:
             ``None`` otherwise.
         """
         # Construct the candidate path without any directory traversal.
-        # os.path.join + os.path.realpath ensures symlinks are resolved too.
+        # os.path.realpath ensures symlinks are resolved too.
         candidate = os.path.realpath(
             os.path.join(self.upload_dir, temp_filename)
         )
         # Containment check: the resolved path must start with the real
         # upload directory.  os.sep suffix avoids a prefix-collision where
         # upload_dir="/uploads" incorrectly allows "/uploads_evil/...".
-        real_upload_dir = os.path.realpath(self.upload_dir)
-        if not candidate.startswith(real_upload_dir + os.sep) and \
-                candidate != real_upload_dir:
+        # Uses the cached _real_upload_dir computed at __init__ time.
+        if not candidate.startswith(self._real_upload_dir + os.sep) and \
+                candidate != self._real_upload_dir:
             return None
         if not os.path.isfile(candidate):
             return None
         return candidate
-    
+
     def get_bar_file_path(self, bar_id: str) -> Optional[str]:
         """
-        Find a BAR file by its ID.
-        
+        Resolve a *bar_id* token to an absolute filesystem path within the
+        generated-files directory.
+
+        Security model
+        --------------
+        This replaces the previous implementation that used ``os.listdir()``
+        and matched only the first 8 hex characters of the UUID (C-05).  That
+        design had two vulnerabilities:
+
+        1. **Partial-token enumeration** — 16^8 ≈ 4.3 billion combinations;
+           distributed brute-force is feasible in hours with moderate hardware.
+        2. **First-match collision** — any UUID sharing a prefix with a real
+           token would match first, potentially returning the wrong file.
+
+        The new implementation:
+
+        * **Validates format** — rejects anything that is not a well-formed
+          UUID4 string *before* it ever touches the filesystem.  Regex
+          validation is cheap and eliminates entire classes of path-injection
+          and enumeration input without relying on OS-level guards.
+        * **Constructs the path deterministically** — no directory scan,
+          no glob, no partial-prefix matching.  O(1) and immune to directory
+          pollution attacks where an attacker plants files with confusable
+          names.
+        * **Path-traversal containment** — ``os.path.realpath`` resolves all
+          ``..`` sequences and symlinks before the containment check, so a
+          crafted token cannot escape ``generated_dir`` even if symlinks are
+          present.  The ``os.sep`` suffix on the real-dir anchor prevents the
+          prefix-collision where ``generated_dir="/gen"`` could incorrectly
+          accept ``/gen_evil/...``.
+        * **File-existence check** — returns ``None`` rather than a path to a
+          directory or special file; avoids open(2) on non-regular-file inodes.
+
+        This mirrors the security properties of :meth:`resolve_temp_file`.
+
         Args:
-            bar_id: BAR file identifier
-            
+            bar_id: BAR file identifier (must be a well-formed UUID4 string).
+
         Returns:
-            Full path to the BAR file or None if not found
+            Absolute path string if the file exists inside ``generated_dir``,
+            ``None`` otherwise.
         """
-        for filename in os.listdir(self.generated_dir):
-            if bar_id[:8] in filename and filename.endswith('.bar'):
-                return os.path.join(self.generated_dir, filename)
-        
-        return None
+        # ------------------------------------------------------------------ #
+        # 1. Input validation — reject non-UUID4 tokens before touching FS.  #
+        #                                                                     #
+        # Uses the module-level _UUID4_RE constant (compiled once at import). #
+        # UUID4 format: 8-4-4-4-12 lowercase hex, version nibble = 4,        #
+        # variant nibble ∈ {8, 9, a, b}  (RFC 4122 §4.4).                   #
+        # Uppercase is accepted; normalised to lowercase before path join.    #
+        # ------------------------------------------------------------------ #
+        if not bar_id or not _UUID4_RE.match(bar_id):
+            return None
+
+        # Normalise to lowercase so the path is deterministic regardless of
+        # how the caller formatted the UUID.
+        bar_id_norm = bar_id.lower()
+
+        # ------------------------------------------------------------------ #
+        # 2. Construct and canonicalise the candidate path.                   #
+        #                                                                     #
+        # os.path.realpath resolves symlinks and any residual ".." components #
+        # that slipped through validation (belt-and-suspenders).              #
+        # ------------------------------------------------------------------ #
+        candidate = os.path.realpath(
+            os.path.join(self.generated_dir, f"{bar_id_norm}.bar")
+        )
+
+        # ------------------------------------------------------------------ #
+        # 3. Containment check — the resolved path must live inside           #
+        #    generated_dir; this guards against symlink-based escapes.        #
+        #    Uses the cached _real_generated_dir computed at __init__ time.   #
+        # ------------------------------------------------------------------ #
+        if not candidate.startswith(self._real_generated_dir + os.sep) and \
+                candidate != self._real_generated_dir:
+            return None
+
+        # ------------------------------------------------------------------ #
+        # 4. File-existence check — only regular files are accepted.          #
+        # ------------------------------------------------------------------ #
+        if not os.path.isfile(candidate):
+            return None
+
+        return candidate
 
 
 # Singleton instance
