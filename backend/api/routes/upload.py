@@ -1,4 +1,5 @@
 """Upload endpoints."""
+import logging
 from fastapi import APIRouter, File, UploadFile, Request, Depends, HTTPException
 from fastapi.responses import JSONResponse
 
@@ -8,6 +9,8 @@ from services.file_service import FileService
 from api.dependencies import get_file_service_dep
 from storage import client_storage
 from storage import server_storage
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -39,9 +42,9 @@ async def upload_file(
         
     except HTTPException:
         raise
-    except Exception as e:
-        error_msg = security.sanitize_error_message(str(e))
-        raise HTTPException(status_code=500, detail=error_msg)
+    except Exception:
+        logger.exception("Unhandled error in upload_file")
+        raise HTTPException(status_code=500, detail=security.OPAQUE_500_DETAIL)
 
 
 @router.get("/storage-info")
