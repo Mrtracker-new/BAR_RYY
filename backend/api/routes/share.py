@@ -2,7 +2,7 @@
 import os
 import json
 import asyncio
-import traceback
+import logging
 import mimetypes
 from datetime import datetime
 from fastapi import APIRouter, Request, Form, Depends, HTTPException, Header
@@ -16,6 +16,8 @@ from utils import crypto_utils
 from core import database
 from services import analytics
 from services import webhook_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -35,8 +37,9 @@ async def check_2fa(token: str, db=Depends(get_database)):
         }
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Unhandled error in check_2fa [token=%s]", token)
+        raise HTTPException(status_code=500, detail=security.OPAQUE_500_DETAIL)
 
 
 @router.post("/request-otp/{token}")
@@ -85,7 +88,8 @@ async def request_otp(
         )
         
         if not success:
-            raise HTTPException(status_code=500, detail=error_msg)
+            logger.error('OTP send failed for token %s: %s', token, error_msg)
+            raise HTTPException(status_code=500, detail=security.OPAQUE_500_DETAIL)
         
         # Mask email for privacy
         email_parts = otp_email.split('@')
@@ -102,9 +106,9 @@ async def request_otp(
         
     except HTTPException:
         raise
-    except Exception as e:
-        print(f"❌ OTP request failed: {str(e)}\n{traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Failed to send OTP: {str(e)}")
+    except Exception:
+        logger.exception("Unhandled error in request_otp [token=%s]", token)
+        raise HTTPException(status_code=500, detail=security.OPAQUE_500_DETAIL)
 
 
 
@@ -144,9 +148,9 @@ async def verify_otp(
         
     except HTTPException:
         raise
-    except Exception as e:
-        print(f"❌ OTP verification failed: {str(e)}\n{traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"OTP verification failed: {str(e)}")
+    except Exception:
+        logger.exception("Unhandled error in verify_otp [token=%s]", token)
+        raise HTTPException(status_code=500, detail=security.OPAQUE_500_DETAIL)
 
 
 @router.post("/share/{token}")
@@ -214,7 +218,10 @@ async def share_file(
             try:
                 failed_count = await security.check_and_delay_password_attempt(client_ip, token)
                 if failed_count > 0:
-                    print(f"⚠️ [{token}] {failed_count} previous failed attempt(s) from {client_ip}")
+                    logger.warning(
+                        '[%s] %d previous failed attempt(s) from %s',
+                        token, failed_count, client_ip,
+                    )
             except HTTPException:
                 raise
 
@@ -293,7 +300,7 @@ async def share_file(
                     
                     raise HTTPException(status_code=403, detail="File has expired")
         
-        print("✅ Access validation passed")
+        logger.info('[%s] Access validation passed', token)
 
         # Generate session fingerprint for view refresh control
         ip_address = analytics.get_client_ip(req)
@@ -358,9 +365,12 @@ async def share_file(
         )
         
         if is_new_view:
-            print(f"✓ New view counted - {views_remaining} views remaining")
+            logger.info('[%s] New view counted — %d views remaining', token, views_remaining)
         else:
-            print(f"⏱️ Within refresh threshold - view not counted ({views_remaining} remaining)")
+            logger.info(
+                '[%s] Within refresh threshold — view not counted (%d remaining)',
+                token, views_remaining,
+            )
         
         # Clear OTP verification
         if file_record.get('require_otp'):
@@ -381,12 +391,14 @@ async def share_file(
         if should_destroy:
             try:
                 crypto_utils.secure_delete_file(bar_file)
-                print(f"🔥 File destroyed after reaching max views")
+                logger.info('[%s] File destroyed after reaching max views', token)
             except Exception as _del_err:
                 # Log but don't abort — last viewer still gets their content.
                 # DB is already marked destroyed; file is unreachable regardless.
-                print(f"⚠️ secure_delete_file error (file inaccessible via DB): {_del_err}")
-
+                logger.warning(
+                    '[%s] secure_delete_file error (file inaccessible via DB): %s',
+                    token, _del_err,
+                )
 
             # Send destruction webhook
             webhook_url = metadata.get("webhook_url")
@@ -403,11 +415,10 @@ async def share_file(
                     max_views=_max_views
                 ))
 
-        
         # Return decrypted file
         view_only = metadata.get('view_only', False)
         filename = metadata['filename']
-        
+
         # Determine MIME type
         if view_only:
             mime_type, _ = mimetypes.guess_type(filename)
@@ -417,7 +428,7 @@ async def share_file(
         else:
             mime_type = "application/octet-stream"
             content_disposition = security.build_content_disposition(filename, 'attachment')
-        
+
         # Build security headers
         response_headers = {
             "Content-Disposition": content_disposition,
@@ -430,23 +441,23 @@ async def share_file(
             "X-BAR-Is-New-View": str(is_new_view).lower(),
             "X-BAR-Auto-Refresh-Seconds": str(metadata.get("auto_refresh_seconds", 0))
         }
-        
+
         # Add CSP sandbox for inline content to prevent XSS attacks
         if view_only:
             response_headers["Content-Security-Policy"] = "sandbox; default-src 'none';"
-        
+
         return Response(
             content=decrypted_data,
             media_type=mime_type,
             headers=response_headers
         )
-        
+
     except HTTPException:
         raise
-    except Exception as e:
-        error_detail = f"Access failed: {str(e)}\n{traceback.format_exc()}"
-        print(error_detail)
-        raise HTTPException(status_code=500, detail=f"Access failed: {str(e)}")
+    except Exception:
+        logger.exception("Unhandled error in share_file [token=%s]", token)
+        raise HTTPException(status_code=500, detail=security.OPAQUE_500_DETAIL)
+
 
 
 @router.get("/analytics/{token}")
@@ -496,5 +507,6 @@ async def get_analytics(
         
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve analytics: {str(e)}")
+    except Exception:
+        logger.exception("Unhandled error in get_analytics [token=%s]", token)
+        raise HTTPException(status_code=500, detail=security.OPAQUE_500_DETAIL)
