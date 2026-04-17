@@ -2,7 +2,7 @@
 import os
 import hashlib
 import asyncio
-import traceback
+import logging
 from fastapi import APIRouter, Request, File, UploadFile, Form, Depends, HTTPException
 from fastapi.responses import Response
 
@@ -15,6 +15,8 @@ from utils import crypto_utils
 from storage import client_storage
 from services import analytics
 from services import webhook_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -89,9 +91,15 @@ async def decrypt_bar(
         try:
             failed_count = await security.check_and_delay_password_attempt(client_ip, bar_id)
             if failed_count > 0:
-                print(f"⚠️ [{bar_id}] IP {client_ip} has {failed_count} previous failed attempt(s) — delay applied")
+                logger.warning(
+                    '[%s] IP %s has %d previous failed attempt(s) — delay applied',
+                    bar_id, client_ip, failed_count,
+                )
         except HTTPException as lockout_exc:
-            print(f"🚫 [{bar_id}] IP {client_ip} is locked out ({lockout_exc.detail})")
+            logger.warning(
+                '[%s] IP %s is locked out (%s)',
+                bar_id, client_ip, lockout_exc.detail,
+            )
             raise
 
         # ------------------------------------------------------------------ #
@@ -106,7 +114,7 @@ async def decrypt_bar(
             # counter advances and the progressive delay grows.
             if decrypt_exc.status_code == 403:
                 security.record_password_attempt(client_ip, False, bar_id)
-                print(f"🔑 [{bar_id}] Wrong password from {client_ip}")
+                logger.warning('[%s] Wrong password from %s', bar_id, client_ip)
 
                 # Notify the file owner via webhook if one is configured.
                 # We deliberately read the webhook URL from the raw bar_data
@@ -132,7 +140,10 @@ async def decrypt_bar(
             # tamper / integrity failure.  Still record a failed attempt so the
             # lockout counter increments, and fire a tamper webhook.
             security.record_password_attempt(client_ip, False, bar_id)
-            print(f"🚨 [{bar_id}] Possible tamper detected from {client_ip}: {tamper_exc}")
+            logger.warning(
+                '[%s] Possible tamper detected from %s: %s',
+                bar_id, client_ip, tamper_exc,
+            )
 
             try:
                 raw_meta = _peek_metadata(bar_data)
@@ -157,7 +168,7 @@ async def decrypt_bar(
         # ------------------------------------------------------------------ #
         if metadata.get("password_protected"):
             security.record_password_attempt(client_ip, True, bar_id)
-            print(f"✅ [{bar_id}] Correct password from {client_ip}")
+            logger.info('[%s] Correct password from %s', bar_id, client_ip)
 
         # ------------------------------------------------------------------ #
         # 7. Update view count and handle destruction                          #
@@ -195,7 +206,7 @@ async def decrypt_bar(
         else:
             # Securely wipe the .bar file.
             crypto_utils.secure_delete_file(bar_file)
-            print(f"🔥 [{bar_id}] File destroyed after reaching max views")
+            logger.info('[%s] File destroyed after reaching max views', bar_id)
 
         # ------------------------------------------------------------------ #
         # 8. Return decrypted file                                             #
@@ -216,8 +227,9 @@ async def decrypt_bar(
 
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Decryption failed: {str(e)}")
+    except Exception:
+        logger.exception("Unhandled error in decrypt_bar [bar_id=%s]", bar_id)
+        raise HTTPException(status_code=500, detail=security.OPAQUE_500_DETAIL)
 
 
 # --------------------------------------------------------------------------- #
@@ -258,7 +270,7 @@ async def decrypt_uploaded_bar_file(
         
         # Streaming size validation (prevents memory exhaustion)
         file_size = await security.validate_file_size_streaming(file, security.MAX_FILE_SIZE)
-        print(f"✓ File size validated: {file_size / (1024*1024):.2f}MB")
+        logger.info('File size validated: %.2f MB', file_size / (1024 * 1024))
         
         # Now safe to read entire file
         bar_data = await file.read()
@@ -278,9 +290,12 @@ async def decrypt_uploaded_bar_file(
         try:
             failed_count = await security.check_and_delay_password_attempt(client_ip, file_token)
             if failed_count > 0:
-                print(f"⚠️ Previous failed attempts: {failed_count} - applying delay")
+                logger.warning(
+                    'Previous failed attempts: %d for file token %s — applying delay',
+                    failed_count, file_token,
+                )
         except HTTPException as e:
-            print(f"🚫 IP {client_ip} is locked out for file {file_token}")
+            logger.warning('IP %s is locked out for file token %s', client_ip, file_token)
             raise
         
         # Decrypt BAR file
@@ -346,7 +361,7 @@ async def decrypt_uploaded_bar_file(
         if metadata.get('password_protected'):
             security.record_password_attempt(client_ip, True, file_token)
         
-        print(f"✓ Access granted! (Client-side - view limits NOT enforced)")
+        logger.info('Access granted (client-side — view limits NOT enforced)')
         
         # Return file data
         return Response(
@@ -370,7 +385,6 @@ async def decrypt_uploaded_bar_file(
         
     except HTTPException:
         raise
-    except Exception as e:
-        error_detail = f"Decryption failed: {str(e)}\n{traceback.format_exc()}"
-        print(error_detail)
-        raise HTTPException(status_code=500, detail=f"Decryption failed: {str(e)}")
+    except Exception:
+        logger.exception("Unhandled error in decrypt_uploaded_bar_file")
+        raise HTTPException(status_code=500, detail=security.OPAQUE_500_DETAIL)
