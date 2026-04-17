@@ -427,20 +427,37 @@ def validate_webhook_url(url: str) -> bool:
     return True
 
 
-def sanitize_error_message(error: str) -> str:
-    """Sanitize error messages to avoid information disclosure"""
-    # In production, return generic messages
-    if os.getenv("RENDER") or os.getenv("IS_PRODUCTION"):
-        if "file not found" in error.lower():
-            return "Resource not found"
-        if "permission" in error.lower():
-            return "Access denied"
-        if "database" in error.lower() or "sql" in error.lower():
-            return "Internal server error"
-        return "An error occurred. Please try again."
-    
-    # In development, return full error
-    return error
+# ---------------------------------------------------------------------------
+# Safe error-response helpers
+# ---------------------------------------------------------------------------
+
+# The single opaque message returned to clients on any unhandled 500.
+# Using a *public* constant (no leading underscore) ensures every call-site
+# can import and reference it directly without calling a wrapper function.
+# There is no environment switch — even in development we never echo raw
+# exception text into HTTP responses (server logs cover that need).
+OPAQUE_500_DETAIL = "An internal error occurred."
+
+# Backward-compatible alias kept so any external code that imported the
+# private name continues to work without modification.
+_OPAQUE_500_DETAIL = OPAQUE_500_DETAIL
+
+
+def sanitize_error_message() -> str:
+    """
+    Return the safe, opaque 500 detail constant.
+
+    Prefer importing :data:`OPAQUE_500_DETAIL` directly.  This function
+    exists purely as a convenience wrapper; it accepts no arguments because
+    the error string must **never** reach the HTTP response — it must be
+    emitted to server logs via ``logger.exception(...)`` before this is
+    called so on-call engineers can diagnose the failure without exposing
+    internal details to clients.
+
+    Returns:
+        A static, human-readable string that contains no implementation detail.
+    """
+    return OPAQUE_500_DETAIL
 
 
 # ---------------------------------------------------------------------------
