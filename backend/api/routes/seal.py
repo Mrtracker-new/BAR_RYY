@@ -1,7 +1,7 @@
 """Seal endpoints for creating BAR files."""
 import os
 import base64
-import traceback
+import logging
 from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
 
@@ -12,6 +12,8 @@ from services.encryption_service import EncryptionService
 from api.dependencies import get_file_service_dep, get_encryption_service_dep
 from utils import crypto_utils
 from services import qr_generator
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -98,11 +100,11 @@ async def seal_container(
             try:
                 qr_base64 = qr_generator.generate_themed_qr(server_result["share_url"], logo_path)
             except Exception as e:
-                print(f"Failed to generate themed QR code: {e}")
+                logger.warning('Failed to generate themed QR code: %s', e)
                 qr_base64 = qr_generator.generate_simple_qr(server_result["share_url"])
             
             if request.require_otp:
-                print(f"🔐 2FA enabled - OTP will be sent to: {request.otp_email}")
+                logger.info('2FA enabled — OTP will be sent to: %s', request.otp_email)
             
             result = {
                 "success": True,
@@ -149,10 +151,9 @@ async def seal_container(
         
     except HTTPException:
         raise
-    except Exception as e:
-        error_detail = f"Seal failed: {str(e)}\n{traceback.format_exc()}"
-        print(error_detail)
-        raise HTTPException(status_code=500, detail=security.sanitize_error_message(str(e)))
+    except Exception:
+        logger.exception("Unhandled error in seal_container")
+        raise HTTPException(status_code=500, detail=security.OPAQUE_500_DETAIL)
 
 
 @router.get("/download/{bar_id}")
@@ -202,8 +203,9 @@ async def download_bar(
 
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Download failed: {str(e)}")
+    except Exception:
+        logger.exception("Unhandled error in download_bar [bar_id=%s]", bar_id)
+        raise HTTPException(status_code=500, detail=security.OPAQUE_500_DETAIL)
 
 
 @router.get("/info/{bar_id}")
@@ -242,5 +244,6 @@ async def get_bar_info(
 
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Info retrieval failed: {str(e)}")
+    except Exception:
+        logger.exception("Unhandled error in get_bar_info [bar_id=%s]", bar_id)
+        raise HTTPException(status_code=500, detail=security.OPAQUE_500_DETAIL)
