@@ -1,12 +1,12 @@
-# 🔥 BAR Web - Burn After Reading
+# 🔥 BAR — Burn After Reading
 
 <div align="center">
 
 ![BAR Web Demo](BAR_web.gif)
 
-**Mission Impossible-style file sharing that self-destructs** 💣
+**Mission Impossible-style file sharing. It self-destructs. No drama.**
 
-*Because some things are meant to disappear after you read them.*
+*Upload. Encrypt. Share. Poof. 💨*
 
 [![Live Demo](https://img.shields.io/badge/🌐_Live_Demo-Try_It_Now-success?style=for-the-badge)](https://bar-rnr.vercel.app/)
 [![GitHub](https://img.shields.io/badge/GitHub-Stars_Welcome-black?style=for-the-badge&logo=github)](https://github.com/Mrtracker-new/BAR_RYY)
@@ -15,154 +15,97 @@
 
 ---
 
-## 🎬 What Is This?
+## 🤔 What is this thing?
 
-**BAR Web** is basically **Snapchat for files**, but with **military-grade encryption** and real teeth. 
+Think **Snapchat for files**, but actually secure.
 
-Upload → Encrypt → Share → *POOF* 💨 Gone forever.
+You drop a file in. It gets encrypted. You get a link. The other person opens it, reads it, and — depending on what you set — it's gone forever. No copy. No trace. No drama.
 
-Perfect for:
-- 🤐 Sharing passwords without email trails
+Great for:
+- 🤐 Sharing passwords without leaving an email trail
 - 💼 Sending contracts that shouldn't stick around
-- 🎁 One-time file shares
-- 🕵️ Feeling like a secret agent on a Tuesday
+- 🕵️ Feeling like a spy on a completely normal Tuesday
+- 🍪 Hiding cookie recipes from grandma (hey, no judgment)
 
 ---
 
-## ✨ Key Features
+## ✨ What it can do
 
-- 🔒 **AES-256 Encryption** - Bank-level security
-- 🔑 **Zero-Knowledge** - We literally can't read your files
-- ⏱️ **Auto-Destruct** - Set timers or view limits
-- 💾 **Two Modes** - Client-side (.bar file) or Server-side (link)
-- 🔄 **Smart Refresh Control** - Stop refreshes from eating views OR force auto-reload
-- 🔔 **Webhooks** - Get notified on Discord/Slack
-- 📧 **2FA Support** - Email OTP for extra security
-- 🛡️ **Brute-Force Protection** - 5 fails = 60 min lockout
-- 🎨 **Rich Previews** - View 50+ file types in-browser
+| Feature | Details |
+|---|---|
+| 🔒 AES-256 Encryption | Same stuff banks use |
+| 🔑 Zero-Knowledge | We literally can't read your files |
+| 💣 Auto-Destruct | Timer-based or view-count based |
+| 💾 Two Share Modes | Client-side `.bar` file *or* server-side link |
+| 🔄 Smart Refresh Control | Stops accidental view-count burns |
+| 🔔 Webhooks | Discord/Slack ping when someone opens it |
+| 📧 Email OTP | 2FA before the file is revealed |
+| 🛡️ Brute-Force Lockout | 5 wrong passwords = 60-minute timeout |
+| 🎨 Rich File Preview | View 50+ file types without downloading |
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Get started in 60 seconds
 
-### Use the Live Demo
-👉 **[Launch BAR Web](https://bar-rnr.vercel.app/)**
+### Option A — Just use it online
+👉 **[bar-rnr.vercel.app](https://bar-rnr.vercel.app/)**
 
-> ⏰ **First-time?** Backend sleeps when idle (~50s wake time). Click the "Wake Server" button to speed things up!
+> ⏰ **Heads up:** The backend sleeps when idle. Hit **"Wake Server"** and wait ~50s on first load.
 
-### Run Locally (Windows)
+---
+
+### Option B — Run it yourself (Windows)
+
 ```bash
 git clone https://github.com/Mrtracker-new/BAR_RYY.git
 cd BAR_RYY
-setup.bat   # Auto-installs everything
-start.bat   # Launches both servers
+setup.bat    # installs everything
+start.bat    # fires up both servers
 ```
 
-**Done!** Open http://localhost:5173
+Then open → **http://localhost:5173** 🎉
 
 ---
 
-## � Documentation
+## 🔐 Security in plain English
 
-Everything you need to know, organized nicely:
+**AES-256** encryption. **PBKDF2** key derivation with 100,000 iterations. **HMAC-SHA256** tamper detection.
 
-- **[Setup Guide](./docs/SETUP.md)** - Installation & first use
-- **[Features](./docs/FEATURES.md)** - Deep dive into all features
-- **[Troubleshooting](./docs/TROUBLESHOOTING.md)** - Fix common issues
+What does that mean for you?
 
----
+> Even if someone hacks the server, steals the database, or threatens us with strongly-worded emails — they still can't read your files. The key lives only in your head (and in the URL you share).
 
-## 🔐 How Secure Is It?
-
-**Encryption:** AES-256 (same as banks & governments)  
-**Key Derivation:** PBKDF2 with 100,000 iterations  
-**Brute-Force Time:** Longer than the age of the universe 🌌
-
-**Zero-Knowledge:** We never store encryption keys. Without the password, your file is just expensive random noise.
-
-**Translation:** Even if someone steals the server, hacks the database, or threatens us with strongly-worded emails - they still can't read your files.
+We never store encryption keys. Without the password, your file is expensive random noise.
 
 ---
 
-## � Client-Side vs 🌎 Server-Side
+## 🤝 Want to contribute?
 
-**Client-Side (.bar file):**
-- ✅ Full control (you hold the file)
-- ✅ Works offline
-- ❌ No auto-destruct
+Found a bug? Have a brilliant idea? Pull requests are very welcome.
 
-**Server-Side (Link):**
-- ✅ Auto-destruct timers
-- ✅ Enforced view limits
-- ✅ Webhook notifications
-- ❌ Requires server trust
-
-[Full comparison →](./docs/FEATURES.md#-sharing-modes)
-
----
-
-## �️ Tech Stack
-
-**Backend:** FastAPI, SQLite/PostgreSQL, Cryptography (AES-256)  
-**Frontend:** React 18, Vite, Tailwind CSS, Lucide Icons  
-**Security:** PBKDF2, HMAC-SHA256, CSPRNG
-
----
-
-## 🤝 Contributing
-
-Found a bug? Want to add lasers? 
-
-1. Fork this repo
+1. Fork it
 2. Make your changes
-3. Test them (please!)
-4. Submit a PR with a funny commit message
+3. Test them (please 🙏)
+4. PR with a decent description (and maybe a funny commit message)
 
-Bonus points for: 🧪 tests, 📝 docs, 🎨 UI improvements, 🔒 security fixes
+Bonus points for: `🧪 tests` · `📝 docs` · `🔒 security catches` · `🎨 UI magic`
 
 ---
 
 ## 📜 License
 
-**MIT License** - Do whatever you want!
+**MIT** — do whatever you want with it.
 
-Use it, modify it, sell it. Just:
-- ✅ Keep the license intact
-- ✅ Don't blame us if things go wrong
-- ❌ Don't use it for evil (or at least be subtle)
-
----
-
-## ⚠️ Legal Disclaimer
-
-This is **educational software** built to:
-- Learn about encryption & security
-- Practice production-ready app development
-- Have fun with spy movie aesthetics
-
-Use responsibly. Not responsible if you:
-- Hide cookie recipes from grandma 🍪
-- Accidentally delete something important
-- Get too paranoid about data security
-- Start wearing sunglasses indoors
-
----
-
-## 💝 Support
-
-If this saved your bacon:
-- ⭐ **Star the repo** (free dopamine!)
-- 🐛 **Report bugs** ([GitHub Issues](https://github.com/Mrtracker-new/BAR_RYY/issues))
-- 💬 **Share it** with your paranoid friends
-- ☕ **Buy me coffee** (GitHub Sponsors... someday)
+✅ Use it · ✅ Modify it · ✅ Deploy it  
+❌ Blame us if it breaks · ❌ Use it for evil *(or at least be subtle)*
 
 ---
 
 <div align="center">
 
-**Made with ☕, 🧠, and a healthy dose of paranoia**
+**Made with ☕, paranoia, and questionable late-night energy**
 
-*"Because some files deserve to disappear"*
+*"Because some files deserve to disappear."*
 
 🔥 **Burn After Reading** 🔥
 
