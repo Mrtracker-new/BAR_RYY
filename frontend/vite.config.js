@@ -10,11 +10,11 @@ export default defineConfig({
     host: true, // listen on 0.0.0.0 so phones on the same Wi‑Fi can reach it
     proxy: {
       // ── Core file operations ──────────────────────────────────────────────
-      '/upload':          { target: backendUrl, changeOrigin: true },
-      '/seal':            { target: backendUrl, changeOrigin: true },
-      '/download':        { target: backendUrl, changeOrigin: true },
-      '/info':            { target: backendUrl, changeOrigin: true },
-      '/storage-info':    { target: backendUrl, changeOrigin: true },
+      '/upload': { target: backendUrl, changeOrigin: true },
+      '/seal': { target: backendUrl, changeOrigin: true },
+      '/download': { target: backendUrl, changeOrigin: true },
+      '/info': { target: backendUrl, changeOrigin: true },
+      '/storage-info': { target: backendUrl, changeOrigin: true },
 
       // ── Server-side file access & file sharing ────────────────────────────
       // The /share namespace is dual-purpose:
@@ -34,19 +34,19 @@ export default defineConfig({
       },
 
       // ── Client-side / download-mode decrypt ──────────────────────────────
-      '/decrypt':         { target: backendUrl, changeOrigin: true },
-      '/decrypt-upload':  { target: backendUrl, changeOrigin: true },
+      '/decrypt': { target: backendUrl, changeOrigin: true },
+      '/decrypt-upload': { target: backendUrl, changeOrigin: true },
 
       // ── 2FA / OTP flow ────────────────────────────────────────────────────
-      '/check-2fa':       { target: backendUrl, changeOrigin: true },
-      '/request-otp':     { target: backendUrl, changeOrigin: true },
-      '/verify-otp':      { target: backendUrl, changeOrigin: true },
+      // Note: /check-2fa was removed — the endpoint no longer exists.
+      '/request-otp': { target: backendUrl, changeOrigin: true },
+      '/verify-otp': { target: backendUrl, changeOrigin: true },
 
       // ── Analytics ─────────────────────────────────────────────────────────
-      '/analytics':       { target: backendUrl, changeOrigin: true },
+      '/analytics': { target: backendUrl, changeOrigin: true },
 
       // ── Generic API namespace ─────────────────────────────────────────────
-      '/api':             { target: backendUrl, changeOrigin: true },
+      '/api': { target: backendUrl, changeOrigin: true },
     }
   },
   preview: {
