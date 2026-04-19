@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import axios from '../config/axios';
-import { Lock, Download, AlertCircle, FileCheck, Mail, Shield } from 'lucide-react';
+import { Download, AlertCircle, FileCheck, Mail, Shield, ChevronDown } from 'lucide-react';
 import ContentProtection from './ContentProtection';
 import BurningAnimation from './BurningAnimation';
 import LoadingStages from './LoadingStages';
@@ -19,7 +19,7 @@ const SharePage = ({ token }) => {
   const [otpVerified, setOtpVerified] = useState(false);
   const [otpCode, setOtpCode] = useState('');
   const [otpInfo, setOtpInfo] = useState(null);
-  const [showOtpUI, setShowOtpUI] = useState(false);
+  const [otpPanelOpen, setOtpPanelOpen] = useState(false);
   const [showBurning, setShowBurning] = useState(false);
 
   // Enhanced loading states
@@ -69,7 +69,7 @@ const SharePage = ({ token }) => {
       // window — avoids the race where a cold-start between verify and
       // a manual second-click wipes the in-memory OTP session on Render.
       setOtpVerified(true);
-      setShowOtpUI(false);
+      setOtpPanelOpen(false);
       setSuccessMessage('✅ OTP verified — loading your file...');
 
       // Small tick to let React flush state before the axios call
@@ -215,9 +215,10 @@ const SharePage = ({ token }) => {
           }
         }
 
-        // Check if it's a 2FA error
+        // Check if it's a 2FA error — auto-expand the OTP accordion so the
+        // user can immediately request a code without any extra interaction.
         if (detail.includes('2FA') || detail.includes('OTP')) {
-          setShowOtpUI(true);  // Show OTP UI when 2FA is required
+          setOtpPanelOpen(true);  // Auto-expand OTP accordion on 2FA gate
           errorMsg = detail;
         } else {
           errorMsg = '🚫 Access denied: ' + detail;
@@ -294,77 +295,103 @@ const SharePage = ({ token }) => {
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && !showOtpUI && handleDownload()}
+                    onKeyPress={(e) => e.key === 'Enter' && !otpPanelOpen && handleDownload()}
                     placeholder="Enter password if required..."
                     className="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-xl text-white focus:border-amber-500/50 focus:outline-none focus:ring-1 focus:ring-amber-500/50 transition-all text-sm placeholder-zinc-600"
                   />
                 </div>
 
-                {/* Step 2: Show OTP UI only after 2FA error */}
-                {showOtpUI && !otpVerified ? (
-                  <div className="animate-fade-in-down">
-                    {/* OTP Request Section */}
-                    {!otpSent ? (
-                      <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-5 text-left">
-                        <div className="flex items-center space-x-2 mb-3">
-                          <Shield className="text-blue-400" size={18} />
-                          <p className="text-blue-400 font-semibold text-sm">2FA Verification</p>
-                        </div>
-                        <p className="text-zinc-400 text-xs mb-4 leading-relaxed">
-                          Dual-factor authentication is enabled. Request a code to your email.
-                        </p>
-                        <button
-                          onClick={handleRequestOtp}
-                          disabled={isLoading}
-                          className="w-full py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg transition-all text-sm shadow-lg shadow-blue-500/20"
-                        >
-                          {isLoading ? 'Sending...' : 'Send Verification Code'}
-                        </button>
-                      </div>
-                    ) : (
-                      /* OTP Verification Section */
-                      <div className="bg-zinc-800/50 border border-white/10 rounded-xl p-5">
-                        <div className="flex items-center justify-center space-x-2 mb-4">
-                          <Mail className="text-green-500" size={18} />
-                          <p className="text-green-500 font-medium text-sm">Code Sent</p>
-                        </div>
-                        <p className="text-zinc-500 text-xs mb-4 text-center">
-                          Enter the 6-digit code sent to your email.
-                          {otpInfo && <span className="block mt-1">({otpInfo.max_attempts} attempts remaining)</span>}
-                        </p>
-                        <input
-                          type="text"
-                          value={otpCode}
-                          onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                          onKeyPress={(e) => e.key === 'Enter' && handleVerifyOtp()}
-                          placeholder="000 000"
-                          maxLength={6}
-                          className="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-lg text-white text-center text-2xl font-mono tracking-[0.5em] focus:border-amber-500/50 focus:outline-none mb-4 placeholder-zinc-700"
-                        />
-                        <button
-                          onClick={handleVerifyOtp}
-                          disabled={isLoading || otpCode.length !== 6}
-                          className={`w-full py-3 rounded-lg font-bold transition-all ${otpCode.length === 6 && !isLoading
-                            ? 'bg-amber-500 hover:bg-amber-600 text-black shadow-lg shadow-amber-500/20'
-                            : 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
-                            }`}
-                        >
-                          {isLoading ? 'Verifying...' : 'Verify & Unlock'}
-                        </button>
-                        <button
-                          onClick={handleRequestOtp}
-                          disabled={isLoading}
-                          className="w-full mt-3 text-xs text-zinc-500 hover:text-white transition-colors"
-                        >
-                          Resend Code
-                        </button>
+                {/* --- 2FA Accordion -------------------------------------------------- */}
+                {/* Always rendered so users can pre-emptively open it.                  */}
+                {/* Auto-expands when the /share/ call 403s with a 2FA message.          */}
+                {/* Collapses automatically after successful OTP verification.            */}
+                {!otpVerified && (
+                  <div>
+                    {/* Accordion header — always visible */}
+                    <button
+                      type="button"
+                      onClick={() => setOtpPanelOpen(v => !v)}
+                      className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl border border-white/10 bg-zinc-800/40 text-zinc-400 text-sm font-medium hover:border-white/20 hover:text-zinc-200 transition-all"
+                      aria-expanded={otpPanelOpen}
+                    >
+                      <span className="flex items-center gap-2">
+                        <Shield size={14} className="text-blue-400 shrink-0" />
+                        Requires 2-factor authentication?
+                      </span>
+                      <ChevronDown
+                        size={14}
+                        className={`transition-transform duration-200 ${otpPanelOpen ? 'rotate-180' : ''}`}
+                      />
+                    </button>
+
+                    {/* Accordion body — only when open */}
+                    {otpPanelOpen && (
+                      <div className="mt-2 animate-fade-in-down">
+                        {!otpSent ? (
+                          <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-5 text-left">
+                            <div className="flex items-center space-x-2 mb-3">
+                              <Shield className="text-blue-400" size={18} />
+                              <p className="text-blue-400 font-semibold text-sm">2FA Verification</p>
+                            </div>
+                            <p className="text-zinc-400 text-xs mb-4 leading-relaxed">
+                              Dual-factor authentication is enabled. Request a code to your email.
+                            </p>
+                            <button
+                              onClick={handleRequestOtp}
+                              disabled={isLoading}
+                              className="w-full py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg transition-all text-sm shadow-lg shadow-blue-500/20"
+                            >
+                              {isLoading ? 'Sending...' : 'Send Verification Code'}
+                            </button>
+                          </div>
+                        ) : (
+                          /* OTP code entry */
+                          <div className="bg-zinc-800/50 border border-white/10 rounded-xl p-5">
+                            <div className="flex items-center justify-center space-x-2 mb-4">
+                              <Mail className="text-green-500" size={18} />
+                              <p className="text-green-500 font-medium text-sm">Code Sent</p>
+                            </div>
+                            <p className="text-zinc-500 text-xs mb-4 text-center">
+                              Enter the 6-digit code sent to your email.
+                              {otpInfo && <span className="block mt-1">({otpInfo.max_attempts} attempts remaining)</span>}
+                            </p>
+                            <input
+                              type="text"
+                              value={otpCode}
+                              onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                              onKeyPress={(e) => e.key === 'Enter' && handleVerifyOtp()}
+                              placeholder="000 000"
+                              maxLength={6}
+                              className="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-lg text-white text-center text-2xl font-mono tracking-[0.5em] focus:border-amber-500/50 focus:outline-none mb-4 placeholder-zinc-700"
+                            />
+                            <button
+                              onClick={handleVerifyOtp}
+                              disabled={isLoading || otpCode.length !== 6}
+                              className={`w-full py-3 rounded-lg font-bold transition-all ${otpCode.length === 6 && !isLoading
+                                ? 'bg-amber-500 hover:bg-amber-600 text-black shadow-lg shadow-amber-500/20'
+                                : 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
+                                }`}
+                            >
+                              {isLoading ? 'Verifying...' : 'Verify & Unlock'}
+                            </button>
+                            <button
+                              onClick={handleRequestOtp}
+                              disabled={isLoading}
+                              className="w-full mt-3 text-xs text-zinc-500 hover:text-white transition-colors"
+                            >
+                              Resend Code
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
-                ) : null}
+                )}
 
-                {/* Step 3: Show download button (if no OTP UI showing, or after OTP verified) */}
-                {(!showOtpUI || otpVerified) && !fileData && (
+                {/* --- Access File button -------------------------------------------- */}
+                {/* Always shown when no file is loaded yet.                             */}
+                {/* The OTP accordion and this button coexist — no mutual exclusion.     */}
+                {!fileData && (
                   <>
                     {isLoading && loadingStage ? (
                       <LoadingStages
