@@ -22,24 +22,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/check-2fa/{token}")
-async def check_2fa(token: str, db=Depends(get_database)):
-    """Check if a file requires 2FA."""
-    try:
-        file_record = await db.get_file_record(token)
-        
-        if not file_record:
-            raise HTTPException(status_code=404, detail="File not found")
-        
-        return {
-            "require_otp": file_record.get('require_otp', False),
-            "has_password": bool(file_record.get('metadata', {}).get('password_protected'))
-        }
-    except HTTPException:
-        raise
-    except Exception:
-        logger.exception("Unhandled error in check_2fa [token=%s]", token)
-        raise HTTPException(status_code=500, detail=security.OPAQUE_500_DETAIL)
+# /check-2fa/{token} was intentionally removed.
+# It acted as a token-existence oracle: 404 vs 200 let an attacker enumerate
+# valid tokens without any authentication or rate limit cost.  The frontend
+# now always renders the full access form (password + OTP accordion) and
+# discovers security requirements at /share/{token} time instead.
 
 
 @router.post("/request-otp/{token}")
@@ -66,12 +53,12 @@ async def request_otp(
         # Get file record
         file_record = await db.get_file_record(token)
         
-        if not file_record:
-            raise HTTPException(status_code=404, detail="File not found or already destroyed")
-        
-        # Check if 2FA is required
-        if not file_record.get('require_otp'):
-            raise HTTPException(status_code=400, detail="This file does not require 2FA")
+        # ── Oracle-free token validation ───────────────────────────────────
+        # Both the "token does not exist" and "token exists but has no OTP"
+        # branches return the same opaque 403 so an attacker cannot use this
+        # endpoint to distinguish live tokens from dead ones.
+        if not file_record or not file_record.get('require_otp'):
+            raise HTTPException(status_code=403, detail="Access denied.")
         
         # Get OTP email
         otp_email = file_record.get('otp_email')
@@ -128,12 +115,11 @@ async def verify_otp(
         # Get file record
         file_record = await db.get_file_record(token)
         
-        if not file_record:
-            raise HTTPException(status_code=404, detail="File not found or already destroyed")
-        
-        # Check if 2FA is required
-        if not file_record.get('require_otp'):
-            raise HTTPException(status_code=400, detail="This file does not require 2FA")
+        # ── Oracle-free token validation ───────────────────────────────────
+        # Same pattern as request_otp: collapse "token not found" and
+        # "token has no OTP" into one indistinguishable 403.
+        if not file_record or not file_record.get('require_otp'):
+            raise HTTPException(status_code=403, detail="Access denied.")
         
         # Verify OTP
         is_valid, error_msg = otp_service.verify_otp(token, otp_code)
