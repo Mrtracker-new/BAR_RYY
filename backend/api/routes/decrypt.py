@@ -205,7 +205,7 @@ async def decrypt_bar(
                 f.write(updated_bar)
         else:
             # Securely wipe the .bar file.
-            crypto_utils.secure_delete_file(bar_file)
+            crypto_utils.delete_file(bar_file)
             logger.info('[%s] File destroyed after reaching max views', bar_id)
 
         # ------------------------------------------------------------------ #
