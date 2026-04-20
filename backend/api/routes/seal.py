@@ -67,8 +67,9 @@ async def seal_container(
             auto_refresh_seconds=request.auto_refresh_seconds
         )
         
-        # Clean up uploaded file (secure deletion)
-        crypto_utils.secure_delete_file(uploaded_file)
+        # Remove the plaintext temp upload — AES-256 is the protection layer,
+        # not overwriting (ineffective on SSDs / cloud block storage).
+        crypto_utils.delete_file(uploaded_file)
         
         # Generate response based on storage mode
         if request.storage_mode == 'server':
@@ -121,13 +122,12 @@ async def seal_container(
             # Client-side: Return .bar file data directly.
             bar_data_b64 = base64.b64encode(bar_result["bar_data"]).decode('utf-8')
 
-            # Securely wipe the temporary .bar file on disk.
-            # The caller receives the content as base64 in the JSON body;
-            # the server-side copy is no longer needed and must be wiped
-            # (not just unlinked) because the ciphertext contains the
-            # encryption key in key_stored mode.
+            # Remove the temporary .bar file from disk — the caller receives
+            # it as base64 in the JSON body and the server copy is not needed.
+            # AES-256 protects the ciphertext; overwriting is ineffective on
+            # SSDs and cloud block storage (see crypto_utils.delete_file).
             if os.path.exists(bar_result["bar_path"]):
-                crypto_utils.secure_delete_file(bar_result["bar_path"])
+                crypto_utils.delete_file(bar_result["bar_path"])
 
             # Build the human-readable download filename the browser will use.
             # The on-disk filename is a bare UUID ("{bar_id}.bar") for security
