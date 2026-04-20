@@ -67,14 +67,13 @@ async def cleanup_expired_bar_files():
             token = file_record['token']
             
             try:
-                if os.path.exists(file_path):
-                    crypto_utils.secure_delete_file(file_path)
-                    print(f"🧹 Deleted expired file: {file_record['filename']} (token: {token[:8]})")
-                
+                crypto_utils.delete_file(file_path)
+                print(f"🧹 Deleted expired file: {file_record['filename']} (token: {token[:8]})")
+
                 # Mark as destroyed in database
                 await database.db.mark_as_destroyed(token)
                 cleaned += 1
-                
+
             except Exception as e:
                 print(f"⚠️ Failed to clean expired file {token[:8]}: {e}")
         
@@ -86,14 +85,13 @@ async def cleanup_expired_bar_files():
             token = file_record['token']
             
             try:
-                if os.path.exists(file_path):
-                    crypto_utils.secure_delete_file(file_path)
-                    print(f"🧹 Deleted exhausted file: {file_record['filename']} (token: {token[:8]})")
-                
+                crypto_utils.delete_file(file_path)
+                print(f"🧹 Deleted exhausted file: {file_record['filename']} (token: {token[:8]})")
+
                 # Mark as destroyed in database
                 await database.db.mark_as_destroyed(token)
                 cleaned += 1
-                
+
             except Exception as e:
                 print(f"⚠️ Failed to clean exhausted file {token[:8]}: {e}")
         
