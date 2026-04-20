@@ -125,50 +125,54 @@ def verify_hmac_signature(data: bytes, key: bytes, signature: str) -> bool:
     return True
 
 
-def secure_delete_file(file_path: str, passes: int = 3) -> None:
+def delete_file(file_path: str) -> None:
     """
-    Securely delete a file by overwriting it before deletion.
-    
-    This prevents data recovery by:
-    1. Overwriting with random data (multiple passes)
-    2. Overwriting with zeros
-    3. Finally unlinking the file
-    
+    Delete a file from the filesystem.
+
+    Security model
+    --------------
+    BAR's data-at-rest protection comes entirely from **AES-256 encryption**
+    (Fernet with PBKDF2-HMAC-SHA256 key derivation).  Once a .bar file is
+    unlinked and its encryption key is gone, the ciphertext left on disk is
+    cryptographically unrecoverable — the overwrite state of the underlying
+    storage blocks is irrelevant.
+
+    Multi-pass Gutmann/DoD-style overwrites (the previous implementation) are
+    ineffective on every storage type BAR runs on in practice:
+
+    * **SSDs with wear-leveling** — the OS writes go to fresh LBAs chosen by
+      the FTL; the old physical cells are not touched by ``pwrite()``.
+    * **Cloud block storage** (AWS EBS, Render, GCP PD) — the hypervisor maps
+      virtual blocks to physical ones; a userspace write loop overwrites the
+      VM's view, not the platter/NAND.
+    * **Journaling filesystems** (ext4, NTFS) — the journal may retain a copy
+      of pre-overwrite content regardless of how many times the data region
+      is rewritten.
+
+    The authoritative at-rest protection for server deployments is **full-disk
+    encryption** offered by every major cloud provider (AWS EBS encryption,
+    Render encrypted volumes, GCP CMEK).  Enable it at the infrastructure layer.
+    For client-side .bar files the file itself is the encrypted artefact; the
+    plaintext never touches the server disk.
+
     Args:
-        file_path: Path to the file to securely delete
-        passes: Number of random overwrite passes (default: 3)
+        file_path: Absolute or relative path to the file to delete.
+
+    Raises:
+        Exception: Re-raises any ``os.remove`` exception so callers can decide
+                   whether a deletion failure is fatal or merely a warning.
     """
-    if not os.path.exists(file_path):
-        return  # File doesn't exist, nothing to do
-    
     try:
-        # Get file size
-        file_size = os.path.getsize(file_path)
-        
-        # Open file in write mode
-        with open(file_path, "r+b") as f:
-            # Pass 1-N: Overwrite with random data
-            for _ in range(passes):
-                f.seek(0)
-                f.write(os.urandom(file_size))
-                f.flush()
-                os.fsync(f.fileno())  # Force write to disk
-            
-            # Final pass: Overwrite with zeros
-            f.seek(0)
-            f.write(b'\x00' * file_size)
-            f.flush()
-            os.fsync(f.fileno())
-        
-        # Finally, unlink the file
         os.remove(file_path)
-        
-    except Exception as e:
-        # If secure deletion fails, fall back to normal deletion
-        # (Better to delete insecurely than not at all)
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        raise e
+    except FileNotFoundError:
+        # Already gone (deleted by a concurrent request or cleanup cycle).
+        # Treat as success — the goal (file is absent) is achieved.
+        pass
+    except Exception:
+        # Re-raise so the caller can log / handle appropriately.
+        # We do not silently swallow deletion failures; an undeleted file
+        # is visible to the next cleanup cycle and will be retried.
+        raise
 
 
 def encrypt_and_pack_with_password(file_data: bytes, metadata: dict, password: str) -> tuple:
