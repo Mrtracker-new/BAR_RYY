@@ -376,13 +376,13 @@ async def share_file(
         # Destroy file if view limit reached
         if should_destroy:
             try:
-                crypto_utils.secure_delete_file(bar_file)
+                crypto_utils.delete_file(bar_file)
                 logger.info('[%s] File destroyed after reaching max views', token)
             except Exception as _del_err:
                 # Log but don't abort — last viewer still gets their content.
                 # DB is already marked destroyed; file is unreachable regardless.
                 logger.warning(
-                    '[%s] secure_delete_file error (file inaccessible via DB): %s',
+                    '[%s] delete_file error (file inaccessible via DB): %s',
                     token, _del_err,
                 )
 
