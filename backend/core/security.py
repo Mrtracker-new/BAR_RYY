@@ -6,11 +6,16 @@ from fastapi.responses import Response
 from datetime import datetime, timedelta
 from collections import defaultdict
 from typing import Dict
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 import json
 import re
 import os
 import unicodedata
+import socket
+import ipaddress
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Rate limiting storage (in production, use Redis)
 rate_limit_storage: Dict[str, list] = defaultdict(list)
@@ -402,28 +407,155 @@ def validate_password_strength(password: str) -> tuple[bool, str]:
     return True, ""
 
 
+def _resolve_and_classify(hostname: str) -> bool:
+    """
+    Resolve *hostname* to all of its IP addresses and return ``True`` if **any**
+    of them fall into a protected range that must not be reachable from the
+    public internet-facing webhook path.
+
+    Protected ranges (deny if ANY resolved address matches):
+    - Loopback          — 127.0.0.0/8, ::1
+    - Unspecified       — 0.0.0.0, ::
+    - Private (RFC1918) — 10/8, 172.16/12, 192.168/16
+    - Link-local        — 169.254.0.0/16, fe80::/10
+    - ULA (IPv6)        — fc00::/7
+    - Multicast         — 224.0.0.0/4, ff00::/8
+    - Reserved / future — anything else flagged by ipaddress
+
+    Design choices
+    --------------
+    *  ``socket.getaddrinfo`` is used instead of ``socket.gethostbyname``
+       because the latter is IPv4-only; a domain with **only** an AAAA record
+       pointing to ``::1`` (IPv6 loopback) would pass a ``gethostbyname``-based
+       check entirely undetected.
+    *  We deny if **any** resolved address is internal — the OR-gate is the
+       conservative safe choice; an attacker should not be able to inject even
+       one internal address among many public ones.
+    *  Resolution failures are fail-safe: if we cannot resolve the hostname we
+       cannot guarantee it is safe, so we block it.
+
+    Args:
+        hostname: Bare hostname or IP literal (brackets stripped for IPv6).
+
+    Returns:
+        ``True``  — hostname should be **blocked** (internal / unresolvable).
+        ``False`` — hostname resolved and every address is publicly routable.
+    """
+    # Strip IPv6 brackets that urlparse leaves intact, e.g. "[::1]" → "::1"
+    hostname = hostname.strip('[]')
+
+    try:
+        # getaddrinfo returns (family, type, proto, canonname, sockaddr) tuples.
+        # sockaddr is (host, port) for AF_INET and (host, port, flow, scope) for AF_INET6.
+        results = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        # Cannot resolve — fail safe: block the URL.
+        logger.warning("SSRF guard: could not resolve hostname '%s' — blocking.", hostname)
+        return True
+
+    if not results:
+        # Resolver returned an empty set — treat as unresolvable.
+        return True
+
+    for _family, _type, _proto, _canonname, sockaddr in results:
+        raw_ip = sockaddr[0]
+        try:
+            addr = ipaddress.ip_address(raw_ip)
+        except ValueError:
+            # Malformed address from the resolver — fail safe.
+            logger.warning("SSRF guard: malformed address '%s' for '%s' — blocking.", raw_ip, hostname)
+            return True
+
+        if (
+            addr.is_private       # RFC1918 + ULA + loopback (Python ≥3.11 broadened this)
+            or addr.is_loopback   # 127.x.x.x / ::1
+            or addr.is_link_local # 169.254.x.x / fe80::
+            or addr.is_multicast  # 224.x.x.x / ff::
+            or addr.is_reserved   # 0.0.0.0 and other IANA-reserved blocks
+            or addr.is_unspecified  # 0.0.0.0 / ::
+        ):
+            logger.warning(
+                "SSRF guard: resolved address '%s' for '%s' is internal — blocking.",
+                raw_ip, hostname
+            )
+            return True
+
+    return False  # Every resolved address is publicly routable.
+
+
 def validate_webhook_url(url: str) -> bool:
-    """Validate webhook URL"""
+    """
+    Validate a user-supplied webhook URL for format correctness and SSRF safety.
+
+    Security model
+    --------------
+    This is a **two-phase** check:
+
+    Phase 1 — Syntactic validation
+        * URL must be non-empty.
+        * Scheme must be ``https`` in production environments
+          (``RENDER`` or ``IS_PRODUCTION`` env-var set).  Plain ``http`` is
+          accepted in development so local testing with ngrok or similar is
+          not blocked.
+        * ``urlparse`` must extract a non-empty hostname.
+
+    Phase 2 — DNS resolution + ``ipaddress`` classification
+        * The hostname is resolved with ``socket.getaddrinfo`` (IPv4 + IPv6).
+        * **Every** resolved address is checked with the ``ipaddress`` module.
+        * The URL is rejected if **any** address is private, loopback,
+          link-local, multicast, reserved, or unresolvable.
+        * This defeats all IP-encoding bypass vectors: abbreviated loopback
+          (``127.1``), octal (``0177.0.0.1``), decimal (``2130706433``),
+          IPv6 loopback (``::1``), IPv6 ULA (``fc00::/7``), link-local
+          (``fe80::/10``), etc.
+
+    DNS-rebinding note
+    ------------------
+    Validating at upload time cannot fully close the TOCTOU window for DNS
+    rebinding.  A second, request-time guard is applied inside
+    :class:`services.webhook_service.WebhookService` to reduce that window
+    to near-zero.  The only complete mitigation is routing all outbound
+    webhook calls through a network-isolated egress proxy.
+
+    Args:
+        url: The raw webhook URL string supplied by the client.
+
+    Returns:
+        ``True``  — URL is safe / field is empty (webhook is optional).
+        ``False`` — URL is malformed or resolves to an internal address.
+    """
     if not url:
-        return True  # Optional
-    
-    # Basic URL validation
-    url_pattern = re.compile(
-        r'^https?://'  # http:// or https://
-        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'  # domain
-        r'localhost|'  # localhost
-        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # or IP
-        r'(?::\d+)?'  # optional port
-        r'(?:/?|[/?]\S+)$', re.IGNORECASE)
-    
-    if not url_pattern.match(url):
-        return False
-    
-    # Block localhost/private IPs in production (SSRF protection)
-    if os.getenv("RENDER") or os.getenv("IS_PRODUCTION"):
-        if any(x in url.lower() for x in ['localhost', '127.0.0.1', '0.0.0.0', '192.168.', '10.', '172.16.']):
+        return True  # Webhook is an optional field; empty = no-op.
+
+    # ------------------------------------------------------------------ #
+    # Phase 1 — Syntactic checks                                          #
+    # ------------------------------------------------------------------ #
+
+    is_production = bool(os.getenv("RENDER") or os.getenv("IS_PRODUCTION"))
+
+    parsed = urlparse(url)
+    scheme = (parsed.scheme or "").lower()
+
+    # In production, require HTTPS — plain HTTP leaks the payload in transit
+    # and prevents TLS-based certificate validation of the target host.
+    if is_production:
+        if scheme != "https":
             return False
-    
+    else:
+        if scheme not in ("http", "https"):
+            return False
+
+    hostname = parsed.hostname  # urlparse normalises and strips brackets for IPv6
+    if not hostname:
+        return False
+
+    # ------------------------------------------------------------------ #
+    # Phase 2 — DNS resolution + ipaddress classification                 #
+    # ------------------------------------------------------------------ #
+
+    if _resolve_and_classify(hostname):
+        return False
+
     return True
 
 
