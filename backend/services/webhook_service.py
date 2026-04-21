@@ -13,9 +13,99 @@ Events we notify about:
 
 import httpx
 import asyncio
+import logging
+import socket
+import ipaddress
 from datetime import datetime
 from typing import Optional, Dict, Any
+from urllib.parse import urlparse
 import json
+
+logger = logging.getLogger(__name__)
+
+
+def _ssrf_safe_url(url: str) -> bool:
+    """
+    Request-time SSRF guard — the second line of defence against DNS-rebinding.
+
+    This mirrors the logic in :func:`core.security._resolve_and_classify` but
+    is called **immediately before every outbound HTTP request** inside
+    :class:`WebhookService`.  Re-validating here closes the TOCTOU window:
+    even if a DNS entry was changed to an internal IP after the initial
+    validation at ``/seal`` time, this guard will catch the re-delegate before
+    the connection is made.
+
+    Design (same as the validate-time guard):
+    * ``socket.getaddrinfo`` — resolves both A and AAAA records.
+    * ``ipaddress`` classification — blocks private, loopback, link-local,
+      multicast, reserved, and unspecified addresses.
+    * OR-gate on results — block if ANY resolved address is internal.
+    * Fail-safe — block if resolution fails or returns nothing.
+
+    Additionally, this function enforces that only ``http`` and ``https``
+    schemes reach the network layer; any other value (e.g. ``file://``,
+    ``ftp://``) is blocked unconditionally.
+
+    Args:
+        url: The raw webhook URL string that is about to be requested.
+
+    Returns:
+        ``True``  — URL is safe to request.
+        ``False`` — URL must be blocked (internal target or bad scheme).
+    """
+    try:
+        parsed = urlparse(url)
+        scheme = (parsed.scheme or "").lower()
+        if scheme not in ("http", "https"):
+            logger.warning("SSRF guard (request-time): rejected non-http/https scheme '%s'.", scheme)
+            return False
+
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+
+        # Strip IPv6 brackets that urlparse may leave on .hostname in some
+        # edge cases (Python version-dependent behaviour — strip defensively).
+        hostname = hostname.strip('[]')
+
+        results = socket.getaddrinfo(hostname, None)
+        if not results:
+            logger.warning("SSRF guard (request-time): no addresses for '%s' — blocking.", hostname)
+            return False
+
+        for _family, _type, _proto, _canonname, sockaddr in results:
+            raw_ip = sockaddr[0]
+            try:
+                addr = ipaddress.ip_address(raw_ip)
+            except ValueError:
+                logger.warning(
+                    "SSRF guard (request-time): malformed address '%s' for '%s' — blocking.",
+                    raw_ip, hostname
+                )
+                return False
+
+            if (
+                addr.is_private
+                or addr.is_loopback
+                or addr.is_link_local
+                or addr.is_multicast
+                or addr.is_reserved
+                or addr.is_unspecified
+            ):
+                logger.warning(
+                    "SSRF guard (request-time): resolved '%s' for '%s' is internal — blocking.",
+                    raw_ip, hostname
+                )
+                return False
+
+    except socket.gaierror:
+        logger.warning("SSRF guard (request-time): could not resolve '%s' — blocking.", url)
+        return False
+    except Exception:
+        logger.warning("SSRF guard (request-time): unexpected error checking '%s' — blocking.", url, exc_info=True)
+        return False
+
+    return True
 
 
 class WebhookService:
@@ -39,6 +129,21 @@ class WebhookService:
         if not webhook_url or webhook_url.strip() == "":
             return False, "No webhook URL provided"
         
+        # ------------------------------------------------------------------ #
+        # Request-time SSRF guard (Layer 2 — DNS-rebinding mitigation)        #
+        # ------------------------------------------------------------------ #
+        # This re-validates the resolved destination IP immediately before     #
+        # making the outbound connection, closing the TOCTOU window that       #
+        # exists between initial validation at /seal time and this call.       #
+        # ------------------------------------------------------------------ #
+        if not _ssrf_safe_url(webhook_url):
+            error_msg = "Webhook URL blocked by SSRF guard at request time"
+            logger.error(
+                "send_webhook: SSRF guard blocked outbound request to '%s' for event '%s'.",
+                webhook_url[:60], event_type
+            )
+            return False, error_msg
+
         try:
             # Prepare the payload
             payload = {
@@ -47,45 +152,49 @@ class WebhookService:
                 "service": "BAR Web",
                 **data
             }
-            
+
             # Detect webhook type and format accordingly
-            print(f"🔍 Webhook URL: {webhook_url[:60]}...")
             is_discord = "discord.com" in webhook_url.lower() or "discordapp.com" in webhook_url.lower()
-            print(f"🔍 Is Discord: {is_discord}")
+            logger.debug("send_webhook: dispatching event '%s' (discord=%s).", event_type, is_discord)
             if is_discord:
-                print("✅ Using Discord format")
                 payload = self._format_discord_webhook(event_type, data)
             elif "slack.com" in webhook_url.lower():
-                print("✅ Using Slack format")
                 payload = self._format_slack_webhook(event_type, data)
-            else:
-                print("ℹ️ Using generic format")
-            
-            # Send the webhook asynchronously with timeout
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            # else: generic JSON payload already constructed above
+
+            # ---------------------------------------------------------------- #
+            # Layer 3 — httpx hardening                                        #
+            # follow_redirects=False: a redirect to 127.0.0.1 would bypass     #
+            # all URL-level validation — we refuse to follow any redirect.     #
+            # ---------------------------------------------------------------- #
+            async with httpx.AsyncClient(
+                timeout=self.timeout,
+                follow_redirects=False,  # SSRF: never follow redirects
+            ) as client:
                 response = await client.post(
                     webhook_url,
                     json=payload,
                     headers={"Content-Type": "application/json"}
                 )
-                
+
                 if response.status_code in [200, 204]:
-                    print(f"✅ Webhook sent successfully: {event_type}")
+                    logger.info("send_webhook: event '%s' delivered successfully.", event_type)
                     return True, None
                 else:
                     error_msg = f"Webhook returned status {response.status_code}"
-                    print(f"⚠️ {error_msg}")
-                    print(f"Response body: {response.text}")
-                    print(f"Payload sent: {json.dumps(payload, indent=2)}")
+                    logger.warning(
+                        "send_webhook: event '%s' delivery failed — %s.",
+                        event_type, error_msg
+                    )
                     return False, error_msg
-        
+
         except asyncio.TimeoutError:
             error_msg = "Webhook request timed out"
-            print(f"⏱️ {error_msg}")
+            logger.warning("send_webhook: event '%s' timed out.", event_type)
             return False, error_msg
         except Exception as e:
             error_msg = f"Webhook failed: {str(e)}"
-            print(f"❌ {error_msg}")
+            logger.error("send_webhook: unexpected error for event '%s'.", event_type, exc_info=True)
             return False, error_msg
     
     def _format_discord_webhook(self, event_type: str, data: Dict[str, Any]) -> Dict[str, Any]:
