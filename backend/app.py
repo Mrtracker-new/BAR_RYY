@@ -3,7 +3,9 @@ BAR Web API - Burn After Reading
 Secure file sharing with encryption, view limits, and 2FA.
 """
 import os
+import sys
 import asyncio
+import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -213,11 +215,75 @@ async def health_check():
     return {"status": "healthy", "service": settings.app_name}
 
 
-# Main entry point
+# ---------------------------------------------------------------------------
+# Direct-launch entry point  (python app.py)
+# ---------------------------------------------------------------------------
+# WARNING: This block exists ONLY as a local-development convenience.
+# The canonical production entry points are:
+#   • python run.py          — local machine / Docker
+#   • Procfile               — Heroku / Render (process manager)
+#   • render.yaml startCommand — Render managed deployments
+#   • Dockerfile CMD          — containerised deployments
+#
+# Running 'python app.py' in production is explicitly blocked below.
+# ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    # Validate environment variables if running app.py directly
+    # -----------------------------------------------------------------------
+    # Production guard — hard-block direct launch when IS_PRODUCTION=true.
+    # Avoids misconfigured deployments where app.py is accidentally used as
+    # the entrypoint instead of run.py, which would silently start with the
+    # wrong host, wrong port, and no workers configuration.
+    # -----------------------------------------------------------------------
+    _is_prod = (
+        os.getenv("IS_PRODUCTION", "").lower() == "true"
+        or bool(os.getenv("RENDER"))       # Render sets this automatically
+    )
+    if _is_prod:
+        print(
+            "\n❌  Direct launch via 'python app.py' is not allowed in production.\n"
+            "    Use the canonical entry point instead:\n"
+            "      python run.py          (local / Docker)\n"
+            "      Procfile               (Heroku / Render)\n"
+            "      render.yaml            (Render managed)\n"
+            "    Refusing to start — exiting with code 1.\n"
+        )
+        sys.exit(1)
+
+    # Validate environment variables before starting the dev server.
     from core import env_validator
     env_validator.validate_and_exit_on_error()
-    
-    import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
+
+    # Read port from the environment so local overrides work the same way
+    # as run.py (e.g. PORT=9000 python app.py).
+    _port = int(os.getenv("PORT", 8000))
+
+    print(
+        f"\n⚠️   Development server — launched via app.py "
+        f"(use run.py / Procfile for production)\n"
+        f"🚀  Listening on http://127.0.0.1:{_port}\n"
+    )
+
+    # -------------------------------------------------------------------
+    # reload=False is intentional and MUST NOT be changed to True.
+    #
+    # reload=True enables uvicorn's watchdog / inotify file-scanner which:
+    #   • Spawns a separate child process, bypassing graceful-shutdown
+    #     signal propagation (SIGTERM / SIGINT do not reach the worker).
+    #   • Has had several CVEs in older watchdog versions (filesystem
+    #     traversal in untrusted directories).
+    #   • Consumes extra memory and CPU even when no files change.
+    #   • Is entirely unsupported in production ASGI deployments.
+    #
+    # If you need auto-reload during development, use an external tool
+    # such as `watchfiles` or the built-in `--reload` flag of the
+    # *dedicated* dev command (never this file):
+    #   watchfiles "uvicorn app:app --port 8000" .
+    # -------------------------------------------------------------------
+    uvicorn.run(
+        "app:app",
+        host="127.0.0.1",   # Loopback only — dev server must NOT bind to 0.0.0.0
+        port=_port,
+        log_level="info",
+        access_log=True,
+        reload=False,       # See comment block above — never flip this to True
+    )
