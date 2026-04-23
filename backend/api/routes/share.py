@@ -188,10 +188,14 @@ async def share_file(
         # ------------------------------------------------------------------ #
         # Parse DB metadata once — needed for webhook URL and password flag   #
         # before we have decrypted metadata from the BAR file.                #
+        #                                                                      #
+        # Contract: get_file_record() always returns metadata as a dict       #
+        # (_normalise_file_record in database.py handles the SQLite TEXT vs   #
+        # PostgreSQL JSONB type impedance at the DB boundary).  The `or {}`   #
+        # fallback is retained only as a belt-and-suspenders guard for any    #
+        # legacy NULL rows that pre-date the NOT NULL constraint.              #
         # ------------------------------------------------------------------ #
         db_metadata = file_record.get('metadata') or {}
-        if isinstance(db_metadata, str):
-            db_metadata = json.loads(db_metadata)
         is_password_protected = bool(db_metadata.get('password_protected'))
         client_ip = analytics.get_client_ip(req)
 
