@@ -86,6 +86,52 @@ def _verify_analytics_key(stored_hash: Optional[str], supplied_key: str) -> bool
         return False
 
 
+def _normalise_file_record(record: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Guarantee that the ``metadata`` field of a raw DB row dict is always a
+    ``dict`` before the record leaves the database layer.
+
+    **Why this exists**
+
+    SQLite stores the ``metadata`` column as ``TEXT`` (a serialised JSON
+    string).  asyncpg auto-deserialises PostgreSQL ``JSONB`` columns into
+    native Python dicts.  Without this normalisation every consumer must add
+    its own ``isinstance(meta, str)`` guard — which is how I-10 happened in
+    the first place (one call-site was missed).  Fixing the type impedance
+    once here, at the single egress point, makes the invariant impossible to
+    violate regardless of how many new callers are added in the future.
+
+    **Behaviour**
+
+    * ``str``  → parsed with ``json.loads``; on failure replaced with ``{}``
+      and logged at ERROR so operations can investigate without crashing the
+      request path.
+    * ``None`` → replaced with ``{}`` (handles legacy NULL rows from early
+      migrations before the column had a NOT NULL constraint).
+    * ``dict`` → returned as-is (PostgreSQL / already-normalised path).
+
+    The function mutates and returns the same dict (no copy overhead).
+    """
+    raw = record.get("metadata")
+    if isinstance(raw, str):
+        try:
+            record["metadata"] = json.loads(raw)
+        except (json.JSONDecodeError, ValueError):
+            import logging as _logging
+            _logging.getLogger(__name__).error(
+                "DB record for token=%r contains unparseable metadata — "
+                "replacing with {} to prevent downstream type errors. "
+                "Raw value (first 200 chars): %.200r",
+                record.get("token"),
+                raw,
+            )
+            record["metadata"] = {}
+    elif raw is None:
+        record["metadata"] = {}
+    # dict path: already correct, nothing to do
+    return record
+
+
 # ---------------------------------------------------------------------------
 # Column-level access control for the analytics endpoint
 # ---------------------------------------------------------------------------
@@ -518,7 +564,7 @@ class Database:
                         token
                     )
                     if row:
-                        return dict(row)
+                        return _normalise_file_record(dict(row))
             else:
                 async with aiosqlite.connect(self.db_path) as db:
                     db.row_factory = aiosqlite.Row
@@ -528,8 +574,8 @@ class Database:
                     ) as cursor:
                         row = await cursor.fetchone()
                         if row:
-                            return dict(row)
-            
+                            return _normalise_file_record(dict(row))
+
             return None
         except Exception as e:
             print(f"❌ Failed to get file record: {e}")
@@ -777,7 +823,7 @@ class Database:
                         AND expires_at < NOW()
                         AND destroyed = FALSE
                     """)
-                    return [dict(row) for row in rows]
+                    return [_normalise_file_record(dict(row)) for row in rows]
             else:
                 async with aiosqlite.connect(self.db_path) as db:
                     db.row_factory = aiosqlite.Row
@@ -788,7 +834,7 @@ class Database:
                         AND destroyed = 0
                     """, (now,)) as cursor:
                         rows = await cursor.fetchall()
-                        return [dict(row) for row in rows]
+                        return [_normalise_file_record(dict(row)) for row in rows]
             
         except Exception as e:
             print(f"❌ Failed to get expired files: {e}")
@@ -804,7 +850,7 @@ class Database:
                         WHERE current_views >= max_views
                         AND destroyed = FALSE
                     """)
-                    return [dict(row) for row in rows]
+                    return [_normalise_file_record(dict(row)) for row in rows]
             else:
                 async with aiosqlite.connect(self.db_path) as db:
                     db.row_factory = aiosqlite.Row
@@ -814,7 +860,7 @@ class Database:
                         AND destroyed = 0
                     """) as cursor:
                         rows = await cursor.fetchall()
-                        return [dict(row) for row in rows]
+                        return [_normalise_file_record(dict(row)) for row in rows]
             
         except Exception as e:
             print(f"❌ Failed to get exhausted files: {e}")
@@ -1017,9 +1063,9 @@ class Database:
                 for field in leaked:
                     file_info.pop(field, None)
 
-            # Parse metadata if it's a JSON string (SQLite stores it as text)
-            if isinstance(file_info.get("metadata"), str):
-                file_info["metadata"] = json.loads(file_info["metadata"])
+            # Normalise metadata to dict (SQLite returns TEXT; PostgreSQL JSONB
+            # is already a dict — _normalise_file_record handles both).
+            _normalise_file_record(file_info)
 
             return {
                 "file": file_info,
