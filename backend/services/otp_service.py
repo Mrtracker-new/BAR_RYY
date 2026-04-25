@@ -17,6 +17,7 @@ Design principles
 
 import os
 import hmac
+import html
 import asyncio
 import hashlib
 import secrets
@@ -257,6 +258,16 @@ class OTPService:
             return False, str(exc)
 
         # --- build HTML body ------------------------------------------------
+        # html.escape() is applied to every user-controlled value before it is
+        # interpolated into the HTML template.  This prevents HTML-injection /
+        # stored-XSS-via-email: a filename such as
+        #   </strong><script>alert(1)</script>
+        # must never reach the email client as raw markup.  quote=True also
+        # escapes double-quotes so the value is safe inside HTML attributes.
+        # This is the correct defence layer — output encoding at the rendering
+        # site — independent of the upload-time validate_filename() guard.
+        safe_filename = html.escape(filename, quote=True)
+
         html_body = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -292,7 +303,7 @@ class OTPService:
       </div>
       <div class="body">
         <p>Someone is attempting to access a protected file:</p>
-        <p><strong>{filename}</strong></p>
+        <p><strong>{safe_filename}</strong></p>
         <p>Use the one-time password below to verify access:</p>
         <div class="otp-block">
           <div class="otp">{otp_code}</div>
