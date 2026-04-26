@@ -2,10 +2,19 @@
 import os
 import re
 import uuid
+import json
 import base64
+import logging
 from io import BytesIO
+from datetime import datetime, timezone
 from typing import Optional, Tuple
 from fastapi import UploadFile, HTTPException
+
+logger = logging.getLogger(__name__)
+
+# Suffix appended to the UUID (not the full filename) for the sidecar file.
+# This is an internal implementation detail — never exposed to the client.
+_UPLOAD_META_SUFFIX = ".upload_meta.json"
 
 try:
     from PIL import Image
@@ -95,6 +104,11 @@ class FileService:
                     )
                 buffer.write(chunk)
 
+        # Write tamper-resistant sidecar with the authoritative server-generated
+        # upload timestamp.  This is used by cleanup_old_uploads() instead of
+        # os.path.getmtime() (E-07: mtime is user-controllable via touch -t).
+        self._write_upload_meta(file_id, safe_filename)
+
         # Generate preview
         preview_data = self.generate_preview(temp_path, file.content_type)
 
@@ -135,6 +149,99 @@ class FileService:
             return None
 
         return None
+
+    # ---------------------------------------------------------------------- #
+    # Sidecar timestamp helpers (E-07 fix)                                   #
+    # ---------------------------------------------------------------------- #
+
+    def _sidecar_path(self, file_id: str) -> str:
+        """Return the absolute path of the sidecar meta file for *file_id*."""
+        return os.path.join(self.upload_dir, f"{file_id}{_UPLOAD_META_SUFFIX}")
+
+    def _write_upload_meta(self, file_id: str, safe_filename: str) -> None:
+        """
+        Atomically write a sidecar JSON file containing the authoritative
+        server-generated upload timestamp.
+
+        The write is atomic on POSIX (rename over a tmp) and best-effort on
+        Windows (no rename-over-open-file support).  Either way the sidecar is
+        created before save_uploaded_file() returns, so cleanup will always
+        find it unless someone deletes it manually — in which case cleanup
+        falls back to os.path.getctime() as a safe secondary heuristic rather
+        than mtime.
+
+        The sidecar is stored in the same directory as the upload so it is
+        cleaned up together with the payload in every code path:
+          • Normal flow   → seal route calls delete_upload_with_meta()
+          • Stale upload  → cleanup_old_uploads() reads it and deletes both
+        """
+        meta = {
+            "file_id": file_id,
+            "safe_filename": safe_filename,
+            # Authoritative timestamp — set by server clock, never by OS mtime.
+            "uploaded_at": datetime.now(timezone.utc).isoformat(),
+        }
+        sidecar = self._sidecar_path(file_id)
+        tmp_path = sidecar + ".tmp"
+        try:
+            with open(tmp_path, "w", encoding="utf-8") as fh:
+                json.dump(meta, fh, separators=(",", ":"))
+            # Atomic replacement on POSIX; non-atomic but functionally
+            # correct on Windows (os.replace is still safer than open+write).
+            os.replace(tmp_path, sidecar)
+        except OSError:
+            logger.exception(
+                "Failed to write upload sidecar for file_id=%s — "
+                "cleanup will fall back to ctime for this file.",
+                file_id,
+            )
+            # Non-fatal: do NOT raise.  The upload itself succeeded.
+
+    def read_upload_meta(self, file_id: str) -> Optional[dict]:
+        """
+        Read the sidecar meta for *file_id*.
+
+        Returns:
+            A dict with at least ``uploaded_at`` (ISO-8601 UTC str) on success,
+            or ``None`` if the sidecar is missing or corrupt.
+        """
+        sidecar = self._sidecar_path(file_id)
+        try:
+            with open(sidecar, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            # Basic schema guard — must contain the timestamp key.
+            if "uploaded_at" not in data:
+                logger.warning(
+                    "Sidecar for file_id=%s is missing 'uploaded_at' key — ignoring.",
+                    file_id,
+                )
+                return None
+            return data
+        except FileNotFoundError:
+            return None
+        except (OSError, json.JSONDecodeError):
+            logger.exception(
+                "Failed to read/parse upload sidecar for file_id=%s.", file_id
+            )
+            return None
+
+    def delete_upload_sidecar(self, file_id: str) -> None:
+        """
+        Delete the sidecar meta file for *file_id*, if it exists.
+
+        This is called by the seal route immediately after it moves/reads the
+        payload file, ensuring the sidecar never outlives the payload.
+        Errors are logged but not raised — the upload itself already succeeded.
+        """
+        sidecar = self._sidecar_path(file_id)
+        try:
+            os.remove(sidecar)
+        except FileNotFoundError:
+            pass  # Already gone — fine
+        except OSError:
+            logger.exception(
+                "Failed to delete upload sidecar for file_id=%s.", file_id
+            )
 
     def resolve_temp_file(self, temp_filename: str) -> Optional[str]:
         """
