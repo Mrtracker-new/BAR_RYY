@@ -70,6 +70,11 @@ async def seal_container(
         # Remove the plaintext temp upload — AES-256 is the protection layer,
         # not overwriting (ineffective on SSDs / cloud block storage).
         crypto_utils.delete_file(uploaded_file)
+
+        # Remove the upload sidecar (fix: timestamp is stored there).
+        # The file_id is the UUID prefix of temp_filename before "__".
+        upload_file_id = request.temp_filename.split('__', 1)[0]
+        file_service.delete_upload_sidecar(upload_file_id)
         
         # Generate response based on storage mode
         if request.storage_mode == 'server':
