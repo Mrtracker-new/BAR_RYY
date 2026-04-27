@@ -322,6 +322,17 @@ async def cleanup_expired_bar_files() -> None:
         if old_records_cleaned > 0:
             logger.info("Purged %d old database record(s)", old_records_cleaned)
 
+        # Trim access_log rows that exceed the per-token cap.
+        # This catches historical backlog written before the cap was deployed
+        # and any rare ±1 overshoot from the SQLite count-then-insert path.
+        pruned_logs = await database.db.prune_access_logs()
+        if pruned_logs > 0:
+            logger.info(
+                "Pruned %d excess access_log row(s) (cap=%d per token)",
+                pruned_logs,
+                database.ACCESS_LOG_MAX_ROWS,
+            )
+
     except Exception:
         logger.exception("Database cleanup error")
 
