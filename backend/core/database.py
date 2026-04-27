@@ -13,10 +13,13 @@ import json
 import hashlib
 import hmac
 import asyncio
+import logging
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any
 import aiosqlite
 from contextlib import asynccontextmanager
+
+_logger = logging.getLogger(__name__)
 
 # Database configuration
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///bar_files.db")
@@ -32,6 +35,17 @@ if IS_POSTGRES:
         print("⚠️ asyncpg not installed - PostgreSQL support disabled")
 else:
     HAS_POSTGRES = False
+
+# ---------------------------------------------------------------------------
+# Per-token access-log growth cap (E-08)
+# ---------------------------------------------------------------------------
+# Maximum number of access_log rows kept per file token.
+#   - log_access()         refuses to insert when the per-token count hits this.
+#   - get_analytics()      fetches at most this many rows (newest first).
+#   - prune_access_logs()  trims historical backlog to this ceiling each cycle.
+# Set ACCESS_LOG_MAX_ROWS=0 in the environment to disable the cap entirely
+# (not recommended for public-URL deployments subject to bot traffic).
+ACCESS_LOG_MAX_ROWS: int = max(0, int(os.getenv("ACCESS_LOG_MAX_ROWS", "1000")))
 
 
 def _hash_analytics_key(raw_key: str) -> str:
@@ -265,7 +279,14 @@ class Database:
                 ON access_logs(token, accessed_at DESC)
                 WHERE is_counted_as_view = 1
             """)
-            
+
+            # Non-partial companion — supports the per-token prune query which
+            # must cover ALL rows, not just is_counted_as_view = 1 rows.
+            await db.execute("""
+                CREATE INDEX IF NOT EXISTS idx_access_token_ts
+                ON access_logs(token, accessed_at DESC)
+            """)
+
             await db.commit()
             
             # ── Migration: analytics_key (plaintext) → analytics_key_hash ───────
@@ -414,7 +435,13 @@ class Database:
                     ON access_logs(token, accessed_at DESC)
                     WHERE is_counted_as_view = TRUE
                 """)
-                
+
+                # Non-partial companion — supports the prune query (all rows).
+                await conn.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_access_token_ts
+                    ON access_logs(token, accessed_at DESC)
+                """)
+
                 # ── Migration: analytics_key (plaintext) → analytics_key_hash ─
                 # This block is fully idempotent — safe to run on every startup.
                 #
@@ -898,6 +925,160 @@ class Database:
             print(f"❌ Failed to cleanup old records: {e}")
             return 0
     
+    async def prune_access_logs(
+        self,
+        token: Optional[str] = None,
+        keep: int = ACCESS_LOG_MAX_ROWS,
+    ) -> int:
+        """Delete the oldest access_log rows beyond *keep* per token.
+
+        Args:
+            token: When supplied, prunes only rows for that specific token.
+                   When ``None`` (default), prunes across **all** tokens in one
+                   bulk operation — this is the mode used by the cleanup loop.
+            keep:  Number of most-recent rows to retain per token.
+                   Defaults to ``ACCESS_LOG_MAX_ROWS``.  Pass 0 to skip (no-op).
+
+        Returns:
+            Number of rows deleted (0 on no-op or error).
+
+        Implementation notes
+        --------------------
+        *  PostgreSQL: uses a window-function DELETE with ``ROW_NUMBER() OVER
+           (PARTITION BY token ORDER BY accessed_at DESC)``.  One round-trip,
+           no per-token Python loop.
+        *  SQLite per-token path: uses ``LIMIT -1 OFFSET keep`` in the
+           sub-SELECT, which avoids window functions and works on any SQLite.
+        *  SQLite bulk path: uses the same ROW_NUMBER() window; requires
+           SQLite ≥ 3.25 (2018).  Python 3.8+ always bundles ≥ 3.31, so this
+           is safe on any supported runtime.  A safe Python-loop fallback is
+           provided for exotic builds just in case.
+        """
+        if keep <= 0:
+            return 0  # Cap disabled — nothing to prune.
+
+        deleted = 0
+        try:
+            if self.is_postgres:
+                async with self.pool.acquire() as conn:
+                    if token is not None:
+                        # Per-token prune: keep the newest `keep` rows.
+                        tag = await conn.execute(
+                            """
+                            DELETE FROM access_logs
+                            WHERE id IN (
+                                SELECT id
+                                FROM   access_logs
+                                WHERE  token = $1
+                                ORDER  BY accessed_at DESC
+                                OFFSET $2
+                            )
+                            """,
+                            token, keep,
+                        )
+                    else:
+                        # Bulk prune across all tokens in one statement.
+                        tag = await conn.execute(
+                            """
+                            DELETE FROM access_logs
+                            WHERE id IN (
+                                SELECT id FROM (
+                                    SELECT id,
+                                           ROW_NUMBER() OVER (
+                                               PARTITION BY token
+                                               ORDER BY accessed_at DESC
+                                           ) AS rn
+                                    FROM access_logs
+                                ) ranked
+                                WHERE rn > $1
+                            )
+                            """,
+                            keep,
+                        )
+                    # asyncpg returns a command tag string e.g. "DELETE 42"
+                    try:
+                        deleted = int(tag.split()[-1])
+                    except (AttributeError, ValueError, IndexError):
+                        deleted = 0
+
+            else:
+                import sqlite3 as _sqlite3
+                sqlite_ver = tuple(
+                    int(x) for x in _sqlite3.sqlite_version.split(".")
+                )
+                async with aiosqlite.connect(self.db_path) as db:
+                    if token is not None:
+                        # Per-token: LIMIT -1 OFFSET works on all SQLite versions.
+                        cur = await db.execute(
+                            """
+                            DELETE FROM access_logs
+                            WHERE id IN (
+                                SELECT id FROM access_logs
+                                WHERE  token = ?
+                                ORDER  BY accessed_at DESC
+                                LIMIT  -1 OFFSET ?
+                            )
+                            """,
+                            (token, keep),
+                        )
+                        deleted = cur.rowcount if cur.rowcount >= 0 else 0
+
+                    elif sqlite_ver >= (3, 25, 0):
+                        # Bulk prune via ROW_NUMBER() window function.
+                        cur = await db.execute(
+                            """
+                            DELETE FROM access_logs
+                            WHERE id IN (
+                                SELECT id FROM (
+                                    SELECT id,
+                                           ROW_NUMBER() OVER (
+                                               PARTITION BY token
+                                               ORDER BY accessed_at DESC
+                                           ) AS rn
+                                    FROM access_logs
+                                )
+                                WHERE rn > ?
+                            )
+                            """,
+                            (keep,),
+                        )
+                        deleted = cur.rowcount if cur.rowcount >= 0 else 0
+
+                    else:
+                        # Fallback for exotic SQLite < 3.25 builds.
+                        # Python 3.8+ always bundles ≥ 3.31, so this path is
+                        # effectively unreachable in normal deployments.
+                        _logger.warning(
+                            "SQLite < 3.25 detected — using per-token prune loop. "
+                            "Upgrade SQLite for better performance."
+                        )
+                        async with db.execute(
+                            "SELECT DISTINCT token FROM access_logs"
+                        ) as cur:
+                            all_tokens = [r[0] for r in await cur.fetchall()]
+                        for tok in all_tokens:
+                            c = await db.execute(
+                                """
+                                DELETE FROM access_logs
+                                WHERE id IN (
+                                    SELECT id FROM access_logs
+                                    WHERE  token = ?
+                                    ORDER  BY accessed_at DESC
+                                    LIMIT  -1 OFFSET ?
+                                )
+                                """,
+                                (tok, keep),
+                            )
+                            deleted += c.rowcount if c.rowcount >= 0 else 0
+
+                    await db.commit()
+
+        except Exception as exc:
+            print(f"❌ Failed to prune access logs: {exc}")
+            return 0
+
+        return deleted
+
     async def log_access(
         self,
         token: str,
@@ -909,31 +1090,99 @@ class Database:
         session_fingerprint: Optional[str] = None,
         is_counted_as_view: bool = True
     ) -> bool:
-        """Log a file access for analytics with session tracking."""
+        """Log a file access for analytics with session tracking.
+
+        Enforces the ACCESS_LOG_MAX_ROWS per-token cap (E-08):
+
+        *  **PostgreSQL** — uses an atomic ``INSERT … SELECT … WHERE count <
+           cap`` CTE so the count-check and insert execute in a single
+           round-trip, eliminating any TOCTOU window under concurrent load.
+        *  **SQLite** — performs a count-check then insert.  SQLite serialises
+           all writes behind a global write lock, so this two-step sequence is
+           effectively race-free.  Any rare ±1 overshoot is corrected by the
+           ``prune_access_logs()`` call in the cleanup loop.
+
+        When the cap is reached the insert is silently skipped and ``True`` is
+        returned — the access *happened*; we just stop recording it to protect
+        the database from unbounded growth.  The caller's view-counting logic
+        is completely unaffected.
+        """
         try:
             accessed_at = datetime.now(timezone.utc)
-            
+
             if self.is_postgres:
                 accessed_at_naive = accessed_at.replace(tzinfo=None)
                 async with self.pool.acquire() as conn:
-                    await conn.execute("""
-                        INSERT INTO access_logs 
-                        (token, accessed_at, ip_address, user_agent, country, city, 
-                         device_type, session_fingerprint, is_counted_as_view)
-                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                    """, token, accessed_at_naive, ip_address, user_agent, country, 
-                        city, device_type, session_fingerprint, is_counted_as_view)
+                    if ACCESS_LOG_MAX_ROWS > 0:
+                        # Atomic conditional insert: the CTE guard counts rows
+                        # for this token and the INSERT only proceeds when the
+                        # count is below the cap.  Both steps run as one
+                        # server-side operation — no race window.
+                        await conn.execute(
+                            """
+                            WITH guard AS (
+                                SELECT (COUNT(*) < $10) AS can_insert
+                                FROM   access_logs
+                                WHERE  token = $1
+                            )
+                            INSERT INTO access_logs
+                                (token, accessed_at, ip_address, user_agent,
+                                 country, city, device_type,
+                                 session_fingerprint, is_counted_as_view)
+                            SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9
+                            FROM   guard
+                            WHERE  guard.can_insert
+                            """,
+                            token, accessed_at_naive, ip_address, user_agent,
+                            country, city, device_type, session_fingerprint,
+                            is_counted_as_view, ACCESS_LOG_MAX_ROWS,
+                        )
+                    else:
+                        # Cap disabled — unconditional insert.
+                        await conn.execute(
+                            """
+                            INSERT INTO access_logs
+                            (token, accessed_at, ip_address, user_agent, country, city,
+                             device_type, session_fingerprint, is_counted_as_view)
+                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                            """,
+                            token, accessed_at_naive, ip_address, user_agent,
+                            country, city, device_type, session_fingerprint,
+                            is_counted_as_view,
+                        )
+
             else:
                 async with aiosqlite.connect(self.db_path) as db:
-                    await db.execute("""
-                        INSERT INTO access_logs 
-                        (token, accessed_at, ip_address, user_agent, country, city, 
+                    if ACCESS_LOG_MAX_ROWS > 0:
+                        # Count check before insert.  Safe under SQLite's
+                        # single-writer model; the prune job corrects any rare
+                        # ±1 overshoot from a concurrent-read edge case.
+                        async with db.execute(
+                            "SELECT COUNT(*) FROM access_logs WHERE token = ?",
+                            (token,),
+                        ) as cur:
+                            (count,) = await cur.fetchone()
+                        if count >= ACCESS_LOG_MAX_ROWS:
+                            _logger.debug(
+                                "access_log cap reached for token=%.8s… "
+                                "(rows=%d, cap=%d) — insert skipped.",
+                                token, count, ACCESS_LOG_MAX_ROWS,
+                            )
+                            return True
+
+                    await db.execute(
+                        """
+                        INSERT INTO access_logs
+                        (token, accessed_at, ip_address, user_agent, country, city,
                          device_type, session_fingerprint, is_counted_as_view)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (token, accessed_at.isoformat(), ip_address, user_agent, country, 
-                          city, device_type, session_fingerprint, is_counted_as_view))
+                        """,
+                        (token, accessed_at.isoformat(), ip_address, user_agent,
+                         country, city, device_type, session_fingerprint,
+                         is_counted_as_view),
+                    )
                     await db.commit()
-            
+
             return True
         except Exception as e:
             print(f"❌ Failed to log access: {e}")
@@ -989,18 +1238,47 @@ class Database:
                     if not file_row:
                         return None
 
-                    # Get access logs
-                    log_rows = await conn.fetch(
-                        """
-                        SELECT id, token, accessed_at, ip_address, user_agent,
-                               country, city, device_type, session_fingerprint,
-                               is_counted_as_view
-                        FROM access_logs
-                        WHERE token = $1
-                        ORDER BY accessed_at DESC
-                        """,
-                        token,
+                    # Real total count (before the LIMIT below) so callers
+                    # can tell when the returned list has been capped.
+                    total_log_count: int = (
+                        await conn.fetchval(
+                            "SELECT COUNT(*) FROM access_logs WHERE token = $1",
+                            token,
+                        )
+                        or 0
                     )
+
+                    # Fetch only the most recent ACCESS_LOG_MAX_ROWS entries.
+                    # Bounding the fetch prevents a memory spike when a public
+                    # URL has accumulated thousands of bot-traffic rows (E-08).
+                    # LIMIT is passed as a bound parameter ($2) — never injected
+                    # into the SQL string — so the query is safe even if the
+                    # source of the value were to change in the future.
+                    if ACCESS_LOG_MAX_ROWS > 0:
+                        log_rows = await conn.fetch(
+                            """
+                            SELECT id, token, accessed_at, ip_address, user_agent,
+                                   country, city, device_type, session_fingerprint,
+                                   is_counted_as_view
+                            FROM access_logs
+                            WHERE token = $1
+                            ORDER BY accessed_at DESC
+                            LIMIT $2
+                            """,
+                            token, ACCESS_LOG_MAX_ROWS,
+                        )
+                    else:
+                        log_rows = await conn.fetch(
+                            """
+                            SELECT id, token, accessed_at, ip_address, user_agent,
+                                   country, city, device_type, session_fingerprint,
+                                   is_counted_as_view
+                            FROM access_logs
+                            WHERE token = $1
+                            ORDER BY accessed_at DESC
+                            """,
+                            token,
+                        )
                     logs = [dict(row) for row in log_rows]
 
             else:
@@ -1030,19 +1308,42 @@ class Database:
                     if not file_row:
                         return None
 
-                    # Get access logs
+                    # Real total count (before the LIMIT below).
                     async with db.execute(
-                        """
-                        SELECT id, token, accessed_at, ip_address, user_agent,
-                               country, city, device_type, session_fingerprint,
-                               is_counted_as_view
-                        FROM access_logs
-                        WHERE token = ?
-                        ORDER BY accessed_at DESC
-                        """,
+                        "SELECT COUNT(*) FROM access_logs WHERE token = ?",
                         (token,),
-                    ) as cursor:
-                        log_rows = await cursor.fetchall()
+                    ) as _cnt_cur:
+                        (total_log_count,) = await _cnt_cur.fetchone()
+
+                    # Bounded fetch — newest rows first, capped at ACCESS_LOG_MAX_ROWS.
+                    # LIMIT is passed as a bound parameter (?) — never f-string injected.
+                    if ACCESS_LOG_MAX_ROWS > 0:
+                        async with db.execute(
+                            """
+                            SELECT id, token, accessed_at, ip_address, user_agent,
+                                   country, city, device_type, session_fingerprint,
+                                   is_counted_as_view
+                            FROM access_logs
+                            WHERE token = ?
+                            ORDER BY accessed_at DESC
+                            LIMIT ?
+                            """,
+                            (token, ACCESS_LOG_MAX_ROWS),
+                        ) as cursor:
+                            log_rows = await cursor.fetchall()
+                    else:
+                        async with db.execute(
+                            """
+                            SELECT id, token, accessed_at, ip_address, user_agent,
+                                   country, city, device_type, session_fingerprint,
+                                   is_counted_as_view
+                            FROM access_logs
+                            WHERE token = ?
+                            ORDER BY accessed_at DESC
+                            """,
+                            (token,),
+                        ) as cursor:
+                            log_rows = await cursor.fetchall()
                     logs = [dict(row) for row in log_rows]
 
             file_info = dict(file_row)
@@ -1070,7 +1371,14 @@ class Database:
             return {
                 "file": file_info,
                 "access_logs": logs,
-                "total_accesses": len(logs),
+                # total_accesses reflects the true DB count (not capped).
+                # Use this for displaying "showing X of Y" in the UI.
+                "total_accesses": total_log_count,
+                # True when the returned access_logs list was capped at
+                # ACCESS_LOG_MAX_ROWS and older rows exist in the database.
+                "logs_capped": total_log_count > len(logs),
+                # Statistics below are computed from the *capped* list.
+                # When logs_capped is True these are approximate.
                 "unique_ips": len(
                     set(log.get("ip_address") for log in logs if log.get("ip_address"))
                 ),
