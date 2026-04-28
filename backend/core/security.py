@@ -54,7 +54,8 @@ ALLOWED_FILE_EXTENSIONS = {
 RATE_LIMITS = {
     "/upload": 10,
     "/seal": 10,
-    "/decrypt/": 10,   # client-side decrypt — kept low: each hit triggers PBKDF2
+    "/info/": 30,          # public metadata probe — header-only, no crypto work
+    "/decrypt/": 10,       # client-side decrypt — kept low: each hit triggers PBKDF2
     "/decrypt-upload": 20,
     "/share/": 30,
 }
