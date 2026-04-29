@@ -9,6 +9,27 @@ from cryptography.hazmat.backends import default_backend
 from datetime import datetime, timedelta
 import hashlib
 
+# ---------------------------------------------------------------------------
+# BAR file canonical JSON contract
+# ---------------------------------------------------------------------------
+# ALL JSON that enters the HMAC signing or verification pipeline MUST be
+# produced with these exact parameters.  Using a named constant here — rather
+# than repeating the literal kwargs at every call-site — means:
+#
+#   1. The canonical form is a single, auditable definition, not a convention
+#      that could silently drift between pack and unpack.
+#   2. Any future developer who wants to change serialisation (e.g. a
+#      different encoder) has one obvious place to update and will naturally
+#      see the HMAC implications in this comment.
+#   3. The on-disk .bar bytes and the signed bytes are *identical* (minus the
+#      hmac_signature field), making out-of-band verification trivially
+#      reproducible with any standard JSON tool.
+#
+# NEVER add `indent=` to this dict — whitespace changes the byte sequence and
+# would silently break HMAC verification on every file written before the
+# change.
+_CANONICAL_JSON_KWARGS: dict = {"sort_keys": True, "separators": (',', ':')}
+
 
 class TamperDetectedException(Exception):
     """Exception raised when BAR file tampering is detected"""
@@ -83,45 +104,65 @@ def generate_session_fingerprint(token: str, ip_address: str, user_agent: str) -
 def generate_hmac_signature(data: bytes, key: bytes) -> str:
     """
     Generate HMAC-SHA256 signature for data integrity verification.
-    
+
     Args:
-        data: The data to sign (should be the entire BAR structure minus signature)
-        key: The encryption key used as HMAC key
-        
+        data: The data to sign (should be the entire BAR structure minus signature).
+        key: The HMAC key — in practice the Fernet encryption key bytes.
+
     Returns:
-        Hex-encoded HMAC signature string
-        
+        Hex-encoded HMAC-SHA256 signature string.
+
     Security:
         HMAC provides cryptographic proof that data hasn't been modified.
-        Any changes to the data will result in signature mismatch.
+        Any change to the signed bytes produces a completely different digest
+        (avalanche effect), making undetected tampering computationally
+        infeasible.
+
+    Note on API choice:
+        ``digestmod`` is passed as a keyword argument (required since Python 3.8).
+        Passing it positionally raised a DeprecationWarning from Python 3.4 and
+        was tightened further in Python 3.13.  Using the keyword form is the
+        documented, forward-compatible public API.
     """
-    return hmac.new(key, data, hashlib.sha256).hexdigest()
+    return hmac.new(key, data, digestmod=hashlib.sha256).hexdigest()
 
 
 def verify_hmac_signature(data: bytes, key: bytes, signature: str) -> bool:
     """
     Verify HMAC-SHA256 signature to detect tampering.
-    
+
     Args:
-        data: The data to verify
-        key: The encryption key used as HMAC key
-        signature: The expected signature (hex string)
-        
+        data: The data to verify (canonical JSON bytes, identical to what was
+              passed to :func:`generate_hmac_signature` at signing time).
+        key: The HMAC key — must match the key used during signing.
+        signature: The expected hex-encoded HMAC digest (from the BAR file).
+
     Returns:
-        True if signature is valid, raises TamperDetectedException if invalid
-        
+        ``True`` if the signature is valid.
+
     Raises:
-        TamperDetectedException: If signature doesn't match (file was tampered with)
+        TamperDetectedException: If the computed digest does not match
+            ``signature``, indicating the file has been modified or corrupted.
+
+    Security:
+        Comparison is done with :func:`hmac.compare_digest` to prevent
+        timing-based side-channel attacks.  The digest is recomputed fresh
+        on every call; no cached values are used.
+
+    Note on API choice:
+        ``digestmod`` is passed as a keyword argument — see
+        :func:`generate_hmac_signature` for rationale.
     """
-    expected_signature = hmac.new(key, data, hashlib.sha256).hexdigest()
-    
-    # Use constant-time comparison to prevent timing attacks
+    expected_signature = hmac.new(key, data, digestmod=hashlib.sha256).hexdigest()
+
+    # Constant-time comparison prevents an attacker from inferring the correct
+    # signature one byte at a time via response-time differences.
     if not hmac.compare_digest(expected_signature, signature):
         raise TamperDetectedException(
             "BAR file integrity check failed! File has been modified or corrupted. "
             "This could indicate tampering or data corruption."
         )
-    
+
     return True
 
 
@@ -209,64 +250,81 @@ def encrypt_and_pack_with_password(file_data: bytes, metadata: dict, password: s
 def pack_bar_file(encrypted_data: bytes, metadata: dict, key: bytes, password: str = None, salt: bytes = None) -> bytes:
     """
     Pack encrypted file and metadata into BAR format.
-    
+
     Args:
         encrypted_data: The encrypted file data (must be encrypted with the provided key)
         metadata: File metadata dictionary
         key: Encryption key (used for encryption)
         password: Optional password for password-derived encryption
         salt: Optional salt (required if password is provided)
-        
+
     Returns:
         BAR file data as bytes
-        
+
     Security:
-        - If password is provided: Uses password-derived encryption (zero-knowledge)
-          Only salt is stored, key must be derived from password each time
-        - If password is None: Stores key in file (backward compatible, less secure)
-        
+        - If password is provided: Uses password-derived encryption (zero-knowledge).
+          Only the salt is stored; the key must be re-derived from the password on
+          every access.
+        - If password is None: Stores key in file (backward compatible, less secure).
+
+    HMAC canonical form
+    -------------------
+    The HMAC is computed over the compact JSON representation of the BAR structure
+    **before** the ``hmac_signature`` field is added, using ``_CANONICAL_JSON_KWARGS``.
+    The same compact representation is then stored on disk (after the signature is
+    appended).  This means:
+
+        signed_bytes == stored_json_bytes_minus_signature_field
+
+    Any code that reconstructs the signed form for verification MUST use the same
+    ``_CANONICAL_JSON_KWARGS`` — see :func:`unpack_bar_file`.
+
     Note:
-        For password-protected files, use encrypt_and_pack_with_password() instead.
-        This function is lower-level and requires you to manage salt/key derivation yourself.
+        For password-protected files, prefer :func:`encrypt_and_pack_with_password`.
+        This function is lower-level and requires you to manage salt/key derivation.
     """
-    # Create BAR file structure
+    # Build the core BAR structure (without signature).
     bar_structure = {
         "metadata": metadata,
-        "encrypted_data": base64.b64encode(encrypted_data).decode('utf-8')
+        "encrypted_data": base64.b64encode(encrypted_data).decode('utf-8'),
     }
-    
-    # Determine encryption method based on password
+
+    # Determine encryption method based on password.
     if password:
-        # Password-derived encryption: Store only salt, NOT the key!
-        # This is true zero-knowledge encryption
-        
+        # Password-derived encryption: store only the salt, NOT the key.
+        # This is true zero-knowledge encryption — the key never touches disk.
         if salt is None:
             raise ValueError("Salt is required when password is provided")
-        
+
         bar_structure["encryption_method"] = "password_derived"
         bar_structure["salt"] = base64.b64encode(salt).decode('utf-8')
-        # ⚠️ Key is NOT stored! Must be derived from password each time
     else:
-        # Legacy mode: Store key in file (less secure, backward compatible)
+        # Legacy mode: key stored directly in file (backward compatible).
         bar_structure["encryption_method"] = "key_stored"
         bar_structure["encryption_key"] = base64.b64encode(key).decode('utf-8')
-    
-    # Generate HMAC signature for integrity verification
-    # Sign the entire structure (metadata + encrypted_data + salt/key)
-    # Use consistent JSON formatting for signing and verification
-    bar_json_for_signing = json.dumps(bar_structure, sort_keys=True, separators=(',', ':'))
-    signature = generate_hmac_signature(bar_json_for_signing.encode('utf-8'), key)
+
+    # --- HMAC signing ------------------------------------------------------ #
+    # Produce the canonical JSON for the structure *before* adding the         #
+    # signature field.  This is the byte sequence that will be signed and,     #
+    # after the signature is appended, stored verbatim on disk.  Using the     #
+    # named constant _CANONICAL_JSON_KWARGS ensures sign and verify always use #
+    # exactly the same serialisation.                                          #
+    # ----------------------------------------------------------------------- #
+    canonical_json = json.dumps(bar_structure, **_CANONICAL_JSON_KWARGS)
+    signature = generate_hmac_signature(canonical_json.encode('utf-8'), key)
     bar_structure["hmac_signature"] = signature
-    
-    # Convert to JSON and encode (now includes signature)
-    # Use pretty printing for human readability, but signature is already computed
-    bar_json = json.dumps(bar_structure, indent=2)
+
+    # Serialise the final structure (with signature) using the SAME canonical
+    # kwargs.  This guarantees that the bytes stored on disk can be audited
+    # out-of-band: strip the hmac_signature key, re-sort, and the HMAC must
+    # match.  Using a different serialisation here (e.g. indent=2) would create
+    # an invisible divergence between the stored form and the canonical form.
+    bar_json = json.dumps(bar_structure, **_CANONICAL_JSON_KWARGS)
     bar_bytes = bar_json.encode('utf-8')
-    
-    # Obfuscate: Base64 encode the JSON so it's not readable in text editors
+
+    # Base64-encode the JSON to obfuscate it in text editors, then prepend the
+    # fixed BAR file header.
     obfuscated_data = base64.b64encode(bar_bytes)
-    
-    # Add BAR file header
     header = b"BAR_FILE_V1\n"
     return header + obfuscated_data
 
@@ -343,25 +401,38 @@ def unpack_bar_file(bar_data: bytes, password: str = None) -> tuple:
         # Legacy mode: Key is stored in file
         key = base64.b64decode(bar_structure["encryption_key"])
 
-    # Verify HMAC signature for integrity (if present)
+    # --- HMAC verification ------------------------------------------------- #
+    # Reconstruct the canonical JSON from the *parsed* structure with the      #
+    # hmac_signature key removed, then re-serialise using _CANONICAL_JSON_KWARGS. #
+    # This is intentionally symmetric with the signing step in pack_bar_file:  #
+    # both sides independently produce the same byte sequence from the same    #
+    # dict contents.  Raises TamperDetectedException on mismatch.              #
+    # ----------------------------------------------------------------------- #
     if "hmac_signature" in bar_structure:
         stored_signature = bar_structure["hmac_signature"]
 
-        # Reconstruct the structure without signature for verification
-        # MUST use same JSON formatting as during signing
-        structure_for_verification = {k: v for k, v in bar_structure.items() if k != "hmac_signature"}
-        verification_json = json.dumps(structure_for_verification, sort_keys=True, separators=(',', ':'))
+        structure_for_verification = {
+            k: v for k, v in bar_structure.items() if k != "hmac_signature"
+        }
+        # MUST use _CANONICAL_JSON_KWARGS — identical to the kwargs used in
+        # pack_bar_file during signing.  Any deviation here would cause every
+        # valid file to fail verification.
+        verification_json = json.dumps(structure_for_verification, **_CANONICAL_JSON_KWARGS)
 
-        # Verify signature — raises TamperDetectedException if invalid
+        # Raises TamperDetectedException if signature does not match.
         verify_hmac_signature(verification_json.encode('utf-8'), key, stored_signature)
     else:
         # No signature present — old file format (pre-HMAC).
         # Allow for backward compatibility but warn the operator.
         import warnings
         warnings.warn(
-            "BAR file does not contain HMAC signature (old format). "
-            "Tampering cannot be detected. Consider re-encrypting with current version.",
-            UserWarning
+            "BAR file does not contain an HMAC signature (pre-HMAC legacy format). "
+            "File integrity cannot be verified — tampering cannot be detected. "
+            "Re-encrypt the file with the current version to gain integrity protection.",
+            UserWarning,
+            stacklevel=2,  # Points the warning at the caller of unpack_bar_file,
+                           # not at this internal utility, making it actionable
+                           # in logs and -W error / pytest -W error environments.
         )
 
     return encrypted_data, metadata, key, salt
