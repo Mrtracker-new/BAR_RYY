@@ -5,6 +5,7 @@ import hmac
 import hashlib
 import warnings
 from datetime import datetime, timedelta
+from typing import TypedDict
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -29,7 +30,25 @@ from cryptography.hazmat.backends import default_backend
 # NEVER add `indent=` to this dict — whitespace changes the byte sequence and
 # would silently break HMAC verification on every file written before the
 # change.
-_CANONICAL_JSON_KWARGS: dict = {"sort_keys": True, "separators": (',', ':')}
+#
+# _CanonicalJsonKwargs is a closed TypedDict: only `sort_keys` and
+# `separators` are structurally valid keys.  Any attempt to extend this dict
+# (e.g. ``indent=2``) is a **static type error** caught at the definition
+# site rather than silently corrupting the on-disk canonical form at runtime.
+class _CanonicalJsonKwargs(TypedDict):
+    """Exact set of ``json.dumps`` keyword arguments permitted in canonical BAR serialisation.
+
+    This TypedDict is intentionally *closed* (total=True, no extras).  A type
+    checker that understands TypedDict structural compatibility will reject any
+    dict literal that adds keys not listed here — such as ``indent``, which
+    would silently break HMAC verification across every file on disk.
+    """
+
+    sort_keys: bool
+    separators: tuple[str, str]
+
+
+_CANONICAL_JSON_KWARGS: _CanonicalJsonKwargs = {"sort_keys": True, "separators": (',', ':')}
 
 
 class TamperDetectedException(Exception):
