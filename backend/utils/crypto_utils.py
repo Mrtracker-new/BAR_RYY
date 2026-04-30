@@ -50,6 +50,21 @@ class _CanonicalJsonKwargs(TypedDict):
 
 _CANONICAL_JSON_KWARGS: _CanonicalJsonKwargs = {"sort_keys": True, "separators": (',', ':')}
 
+# ---------------------------------------------------------------------------
+# BAR file binary format
+# ---------------------------------------------------------------------------
+# The on-disk .bar format is:
+#
+#   <_BAR_HEADER><base64-encoded JSON payload>
+#
+# _BAR_HEADER is the single authoritative source of truth for the magic
+# string and its length.  Both the writer (pack_bar_file) and every reader
+# (unpack_bar_file, peek_bar_metadata) derive the header check and payload
+# slice offset from this constant, so that any future version bump (e.g.
+# b"BAR_FILE_V2\n") requires exactly ONE line change here — not a grep-and-
+# pray hunt for magic numbers scattered across the module.
+_BAR_HEADER: bytes = b"BAR_FILE_V1\n"
+
 
 class TamperDetectedException(Exception):
     """Exception raised when BAR file tampering is detected"""
@@ -343,10 +358,10 @@ def pack_bar_file(encrypted_data: bytes, metadata: dict, key: bytes, password: s
     bar_bytes = bar_json.encode('utf-8')
 
     # Base64-encode the JSON to obfuscate it in text editors, then prepend the
-    # fixed BAR file header.
+    # fixed BAR file header.  _BAR_HEADER is the module-level constant; do not
+    # repeat the literal here.
     obfuscated_data = base64.b64encode(bar_bytes)
-    header = b"BAR_FILE_V1\n"
-    return header + obfuscated_data
+    return _BAR_HEADER + obfuscated_data
 
 
 def unpack_bar_file(bar_data: bytes, password: str = None) -> tuple:
@@ -379,11 +394,13 @@ def unpack_bar_file(bar_data: bytes, password: str = None) -> tuple:
         ValueError: If password is required but not provided
         TamperDetectedException: If the HMAC signature does not match
     """
-    # Remove header
-    if not bar_data.startswith(b"BAR_FILE_V1\n"):
+    # Validate the magic header then strip it.  Both the sentinel and the
+    # slice offset are derived from _BAR_HEADER so they stay in sync
+    # automatically if the constant is ever updated.
+    if not bar_data.startswith(_BAR_HEADER):
         raise ValueError("Invalid BAR file format")
 
-    obfuscated_data = bar_data[12:]  # Remove header
+    obfuscated_data = bar_data[len(_BAR_HEADER):]  # Strip header
 
     # Deobfuscate: Base64 decode to get the JSON
     bar_json = base64.b64decode(obfuscated_data)
@@ -479,10 +496,10 @@ def peek_bar_metadata(bar_data: bytes) -> dict:
     Raises:
         ValueError: If the data is not a valid BAR file.
     """
-    if not bar_data.startswith(b"BAR_FILE_V1\n"):
+    if not bar_data.startswith(_BAR_HEADER):
         raise ValueError("Invalid BAR file format")
 
-    obfuscated_data = bar_data[12:]  # Strip the fixed header
+    obfuscated_data = bar_data[len(_BAR_HEADER):]  # Strip the fixed header
     bar_json = base64.b64decode(obfuscated_data)
     bar_structure = json.loads(bar_json.decode("utf-8"))
 
