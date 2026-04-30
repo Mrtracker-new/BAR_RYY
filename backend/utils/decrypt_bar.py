@@ -1,13 +1,44 @@
 #!/usr/bin/env python3
 """
 BAR File Decryptor - Command Line Tool
-Decrypt .bar files and extract the original file
+Decrypt .bar files and extract the original file.
+
+Usage:
+    python decrypt_bar.py <file.bar> [password] [output_dir]
+
+This tool uses the authoritative access validators from the storage layer:
+  - client_storage.validate_client_access  for storage_mode='client' files
+  - server_storage.validate_server_access  for storage_mode='server' files
+
+The routing is determined by the 'storage_mode' field embedded in the BAR
+file's plaintext metadata — the same field written by create_client_metadata()
+and create_server_metadata() at seal time.
 """
 
 import sys
 import os
-import json
+
+# ---------------------------------------------------------------------------
+# sys.path wiring
+# ---------------------------------------------------------------------------
+# This CLI lives inside `utils/`.  The storage package lives one level up at
+# `backend/storage/`.  When the script is run directly (e.g.
+# `python utils/decrypt_bar.py`) Python adds `utils/` to sys.path but not the
+# `backend/` root, so `from storage import ...` would fail with ModuleNotFoundError.
+#
+# We detect this situation and insert the backend root so both the direct-run
+# and the installed-package invocation paths work without any wrapper script.
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_BACKEND_ROOT = os.path.dirname(_SCRIPT_DIR)  # parent of utils/
+if _BACKEND_ROOT not in sys.path:
+    sys.path.insert(0, _BACKEND_ROOT)
+# utils/ itself must also be on the path (crypto_utils lives there).
+if _SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPT_DIR)
+
 import crypto_utils
+from storage import client_storage
+from storage import server_storage
 
 
 def decrypt_bar_file(bar_file_path, password=None, output_dir=None):
@@ -42,9 +73,25 @@ def decrypt_bar_file(bar_file_path, password=None, output_dir=None):
         print(f"🔐 Password Protected: {'Yes' if metadata.get('password_protected') else 'No'}")
         print("=" * 50)
         
-        # Validate access
-        is_valid, errors = crypto_utils.validate_bar_access(metadata, password)
-        
+        # Validate access using the authoritative storage-layer validator.
+        #
+        # The storage_mode field is stamped into every BAR file's plaintext
+        # metadata by create_client_metadata() / create_server_metadata() at
+        # seal time.  It is the single source of truth for which rule-set
+        # governs this file:
+        #
+        #   'client' → validate_client_access  (expiry + password presence)
+        #   'server' → validate_server_access  (expiry + view limits + password)
+        #
+        # Defaulting to 'server' for unrecognised / missing values ensures that
+        # the stricter rule-set applies rather than silently downgrading access
+        # control on legacy or tampered files.
+        storage_mode = metadata.get("storage_mode", "server")
+        if storage_mode == "client":
+            is_valid, errors = client_storage.validate_client_access(metadata, password)
+        else:
+            is_valid, errors = server_storage.validate_server_access(metadata, password)
+
         if not is_valid:
             print("❌ Cannot decrypt file:")
             for error in errors:
