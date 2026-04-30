@@ -37,6 +37,13 @@ def create_server_metadata(
     if expiry_minutes > 0:
         expires_at = (now + timedelta(minutes=expiry_minutes)).isoformat().replace('+00:00', 'Z')
     
+    # NOTE: `encryption_method` is intentionally absent from this dict.
+    # The authoritative `encryption_method` field is written at the *top level*
+    # of the BAR structure by `pack_bar_file` (crypto_utils.py) and read from
+    # that same top-level location by `unpack_bar_file`.  Duplicating it here
+    # inside `bar_structure["metadata"]` would create two independent copies that
+    # could silently drift out of sync, giving a false impression that editing the
+    # metadata field affects cryptographic behaviour.  It does not — keep it out.
     metadata = {
         "filename": filename,
         "created_at": created_at,
@@ -51,7 +58,6 @@ def create_server_metadata(
         "storage_mode": "server",
         "file_hash": "",
         "version": "1.0",
-        "encryption_method": "password_derived" if password_protected else "key_stored"
     }
     
     return metadata
