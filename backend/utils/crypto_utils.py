@@ -493,4 +493,3 @@ def peek_bar_metadata(bar_data: bytes) -> dict:
     return metadata
 
 
-# DEPRECATED: Use client_storage.validate_client_access() or server_storage.validate_server_access() instead
