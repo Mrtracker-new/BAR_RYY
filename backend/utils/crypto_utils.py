@@ -2,12 +2,13 @@ import os
 import json
 import base64
 import hmac
+import hashlib
+import warnings
+from datetime import datetime, timedelta
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.backends import default_backend
-from datetime import datetime, timedelta
-import hashlib
 
 # ---------------------------------------------------------------------------
 # BAR file canonical JSON contract
@@ -424,15 +425,16 @@ def unpack_bar_file(bar_data: bytes, password: str = None) -> tuple:
     else:
         # No signature present — old file format (pre-HMAC).
         # Allow for backward compatibility but warn the operator.
-        import warnings
+        #
+        # stacklevel=2 points the warning at the *caller* of unpack_bar_file,
+        # not at this internal helper.  That makes the source location
+        # actionable in logs and in -W error / pytest -W error environments.
         warnings.warn(
             "BAR file does not contain an HMAC signature (pre-HMAC legacy format). "
             "File integrity cannot be verified — tampering cannot be detected. "
             "Re-encrypt the file with the current version to gain integrity protection.",
             UserWarning,
-            stacklevel=2,  # Points the warning at the caller of unpack_bar_file,
-                           # not at this internal utility, making it actionable
-                           # in logs and -W error / pytest -W error environments.
+            stacklevel=2,
         )
 
     return encrypted_data, metadata, key, salt
