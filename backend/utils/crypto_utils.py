@@ -364,6 +364,137 @@ def pack_bar_file(encrypted_data: bytes, metadata: dict, key: bytes, password: s
     return _BAR_HEADER + obfuscated_data
 
 
+def update_bar_view_count(bar_data: bytes, key: bytes) -> bytes:
+    """
+    Increment ``metadata["current_views"]`` in a packed BAR file and re-sign.
+
+    This is the **only correct** entry point for persisting a view-count change
+    on a client-side BAR file.  It exists to decouple the "update one mutable
+    counter" operation from the full :func:`pack_bar_file` seal pipeline.
+
+    Why not call ``pack_bar_file`` directly?
+    ----------------------------------------
+    ``pack_bar_file`` is designed for *creating* BAR files — it accepts
+    ``encrypted_data``, ``metadata``, ``key``, ``password``, and ``salt`` as
+    independent parameters and rebuilds the entire ``bar_structure`` dict from
+    scratch.  Reusing it for a view-count update introduces two failure modes:
+
+    1. **Parameter drift** — the caller must thread ``encrypted_data``,
+       ``salt``, and the stripped ``password`` through the route handler just to
+       write a single integer.  Any mismatch (e.g. passing ``request.password``
+       instead of the stripped ``password_to_use``) produces an HMAC signed
+       with a different key, causing ``TamperDetectedException`` on every
+       subsequent read.
+
+    2. **Structural drift** — if ``pack_bar_file`` is ever extended (new top-
+       level key, different ordering), calling it after an update changes the
+       canonical form of files it touches, invalidating signatures written by
+       the old version.  This function works directly on the *already-parsed
+       on-disk structure* and only touches the one key that changed.
+
+    Algorithm
+    ---------
+    1. Decode the BAR bytes (strip header → base64-decode → JSON-parse).
+    2. **Verify** the existing HMAC before mutating anything — if the file is
+       already tampered with, refuse to re-sign and legitimise the corruption.
+    3. Increment ``bar_structure["metadata"]["current_views"]`` in-place.
+    4. Remove the stale ``hmac_signature`` key.
+    5. Produce a fresh canonical JSON (same ``_CANONICAL_JSON_KWARGS`` as
+       :func:`pack_bar_file`) and sign it with ``key``.
+    6. Re-append ``hmac_signature`` and serialise once more with the same kwargs.
+    7. Return ``_BAR_HEADER + base64(new_json_bytes)``.
+
+    The signed bytes and the stored bytes are therefore **identical by
+    construction** — not by convention — for every file this function writes.
+
+    Legacy files (no ``hmac_signature``)
+    -------------------------------------
+    Files written before HMAC support was added contain no signature.  This
+    function **refuses** to update them.  Updating an unauthenticated file is
+    semantically equivalent to silently corrupting it: we cannot verify that
+    the view count (or any other field) has not already been tampered with
+    before applying our mutation.  A ``UserWarning`` is emitted so operators
+    can identify and re-seal affected files.
+
+    Args:
+        bar_data: The current raw BAR file bytes (as read from disk).
+        key:      The Fernet encryption key (bytes, URL-safe base64 encoded).
+                  Used exclusively for HMAC signing/verification; the
+                  ciphertext is not touched.
+
+    Returns:
+        New BAR file bytes with the incremented view count and a fresh,
+        valid HMAC signature.  The caller is responsible for writing these
+        bytes to disk atomically (i.e. open → write → close in one pass).
+
+    Raises:
+        ValueError: If the BAR file is malformed, missing required fields, or
+            is a legacy pre-HMAC file (update refused for safety).
+        TamperDetectedException: If the existing HMAC does not match ``key``,
+            indicating tampering or key mismatch before this call.
+    """
+    if not bar_data.startswith(_BAR_HEADER):
+        raise ValueError("Invalid BAR file format")
+
+    # ── 1. Decode ─────────────────────────────────────────────────────────── #
+    obfuscated = bar_data[len(_BAR_HEADER):]
+    bar_structure: dict = json.loads(base64.b64decode(obfuscated).decode("utf-8"))
+
+    # ── 2. Guard: refuse legacy unsigned files ────────────────────────────── #
+    if "hmac_signature" not in bar_structure:
+        warnings.warn(
+            "update_bar_view_count: BAR file has no HMAC signature (pre-HMAC "
+            "legacy format).  View-count update refused — the file's integrity "
+            "cannot be verified before mutation.  Re-seal the file with the "
+            "current version to gain integrity protection and view-count "
+            "persistence.",
+            UserWarning,
+            stacklevel=2,
+        )
+        raise ValueError(
+            "Cannot update view count: BAR file has no HMAC signature. "
+            "Re-seal the file to enable view-count persistence."
+        )
+
+    # ── 3. Verify existing signature before mutating anything ─────────────── #
+    # If the file has been tampered with we must not re-sign it — doing so
+    # would legitimise the corruption.  Raises TamperDetectedException on
+    # mismatch; let it propagate so the caller can surface it as a 403.
+    stored_sig = bar_structure["hmac_signature"]
+    structure_for_verification = {
+        k: v for k, v in bar_structure.items() if k != "hmac_signature"
+    }
+    verification_json = json.dumps(structure_for_verification, **_CANONICAL_JSON_KWARGS)
+    verify_hmac_signature(verification_json.encode("utf-8"), key, stored_sig)
+
+    # ── 4. Mutate only the view count ─────────────────────────────────────── #
+    metadata = bar_structure.get("metadata")
+    if metadata is None:
+        raise ValueError("BAR file is missing 'metadata' field")
+    if "current_views" not in metadata:
+        raise ValueError("BAR file metadata is missing 'current_views' field")
+
+    # Direct in-place increment — bar_structure["metadata"] IS this dict.
+    metadata["current_views"] += 1
+
+    # ── 5. Re-sign ────────────────────────────────────────────────────────── #
+    # Remove the stale signature so it is NOT included in the canonical bytes
+    # that are fed to the HMAC.  This mirrors the signing step in pack_bar_file
+    # exactly: sign(structure_without_signature) → append signature.
+    bar_structure.pop("hmac_signature", None)
+    canonical_json = json.dumps(bar_structure, **_CANONICAL_JSON_KWARGS)
+    bar_structure["hmac_signature"] = generate_hmac_signature(
+        canonical_json.encode("utf-8"), key
+    )
+
+    # ── 6. Re-encode ──────────────────────────────────────────────────────── #
+    # Serialise with _CANONICAL_JSON_KWARGS — identical to pack_bar_file.
+    # The stored bytes and the signed bytes therefore differ only by the
+    # presence of the hmac_signature key, which is the defined invariant.
+    final_json = json.dumps(bar_structure, **_CANONICAL_JSON_KWARGS)
+    return _BAR_HEADER + base64.b64encode(final_json.encode("utf-8"))
+
+
 def unpack_bar_file(bar_data: bytes, password: str = None) -> tuple:
     """
     Unpack BAR file into components.
