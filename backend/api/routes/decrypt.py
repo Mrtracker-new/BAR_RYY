@@ -108,7 +108,7 @@ async def decrypt_bar(
         password_to_use = request.password if request.password and request.password.strip() else None
 
         try:
-            decrypted_data, metadata, key, encrypted_data, salt = encryption_service.decrypt_bar_file(bar_data, password_to_use)
+            decrypted_data, metadata, key, _enc, _salt = encryption_service.decrypt_bar_file(bar_data, password_to_use)
         except HTTPException as decrypt_exc:
             # Wrong password (403) – record the failure so the brute-force
             # counter advances and the progressive delay grows.
@@ -173,38 +173,50 @@ async def decrypt_bar(
         # ------------------------------------------------------------------ #
         # 7. Update view count and handle destruction                          #
         # ------------------------------------------------------------------ #
-        metadata["current_views"] += 1
+        # Pre-compute what current_views WILL be after the increment.  We do
+        # this before touching any bytes on disk so that:
+        #   a) should_destroy is decided atomically with the write decision, and
+        #   b) the response headers below are correct without relying on a
+        #      side-effected metadata dict.
+        # NOTE: metadata["current_views"] is NOT mutated here — the mutation
+        # lives exclusively inside update_bar_view_count, which operates on the
+        # already-parsed on-disk structure.  This removes the hidden aliasing
+        # between the in-memory metadata dict and bar_structure["metadata"].
+        current_views = metadata["current_views"] + 1
 
         should_destroy = (
             metadata.get("max_views", 0) > 0
-            and metadata["current_views"] >= metadata["max_views"]
+            and current_views >= metadata["max_views"]
         )
 
         if not should_destroy:
-            # Persist the updated view count by re-packing the file with the
-            # ORIGINAL ciphertext.  Re-encrypting the plaintext would produce a
-            # new Fernet token (Fernet encryption is non-deterministic), which
-            # would invalidate the HMAC signature computed over the ciphertext
-            # at seal time, causing every future access to fail with
-            # TamperDetectedException even though no actual tampering occurred.
-            updated_bar = crypto_utils.pack_bar_file(
-                encrypted_data,  # original ciphertext — MUST NOT be re-encrypted
-                metadata,
-                key,
-                # IMPORTANT: must use password_to_use (stripped) here, NOT
-                # request.password.  The PBKDF2 key derivation inside
-                # decrypt_bar_file() already stripped the password before
-                # deriving the key.  Using the unstripped raw value here would
-                # produce an HMAC signed with a different password than the one
-                # used to derive the key, causing TamperDetectedException on
-                # every subsequent read of this file.
-                password=password_to_use if metadata.get("password_protected") else None,
-                salt=salt,       # original PBKDF2 salt for password-derived files
-            )
-            with open(bar_file, "wb") as f:
-                f.write(updated_bar)
+            # update_bar_view_count is the single authoritative entry point for
+            # persisting a view-count change.  It:
+            #   1. Verifies the existing HMAC before mutating anything.
+            #   2. Increments only metadata["current_views"] inside the
+            #      already-parsed on-disk structure — no ciphertext re-encoding,
+            #      no caller-side parameter threading.
+            #   3. Re-signs with _CANONICAL_JSON_KWARGS, identical to
+            #      pack_bar_file, guaranteeing signed bytes == stored bytes by
+            #      construction rather than by convention.
+            #
+            # ValueError from update_bar_view_count signals a legacy pre-HMAC
+            # file (no signature present).  We cannot safely re-sign it, so we
+            # skip the write — the view count is not persisted — but we still
+            # serve the decrypted content.  A WARNING is emitted so operators
+            # can identify and re-seal affected files.  This is intentionally
+            # NOT a 500: decryption succeeded; only persistence failed.
+            try:
+                updated_bar = crypto_utils.update_bar_view_count(bar_data, key)
+                with open(bar_file, "wb") as f:
+                    f.write(updated_bar)
+            except ValueError as legacy_err:
+                logger.warning(
+                    '[%s] View-count not persisted (legacy unsigned file): %s',
+                    bar_id, legacy_err,
+                )
         else:
-            # Securely wipe the .bar file.
+            # Destroy the file — view limit reached.
             crypto_utils.delete_file(bar_file)
             logger.info('[%s] File destroyed after reaching max views', bar_id)
 
@@ -212,7 +224,7 @@ async def decrypt_bar(
         # 8. Return decrypted file                                             #
         # ------------------------------------------------------------------ #
         original_filename = metadata.get("filename", "decrypted_file")
-        views_remaining = max(0, metadata.get("max_views", 0) - metadata["current_views"])
+        views_remaining = max(0, metadata.get("max_views", 0) - current_views)
 
         response = Response(
             content=decrypted_data,
