@@ -55,7 +55,16 @@ _CANONICAL_JSON_KWARGS: _CanonicalJsonKwargs = {"sort_keys": True, "separators":
 # ---------------------------------------------------------------------------
 # The on-disk .bar format is:
 #
-#   <_BAR_HEADER><base64-encoded JSON payload>
+#   <_BAR_HEADER><Base64-encoded JSON payload>
+#
+# The JSON payload is Base64-encoded so the binary .bar container is safe to
+# transport and store as an opaque byte stream — Base64 is a *transport
+# encoding*, not a security measure.  The actual security comes from:
+#
+#   • Fernet symmetric encryption (AES-128-CBC + PKCS7, random IV per message)
+#     applied to the file content inside ``encrypted_data``.
+#   • PBKDF2-HMAC-SHA256 (100 000 iterations) for password-derived key stretching.
+#   • HMAC-SHA256 over the entire BAR structure for tamper detection.
 #
 # _BAR_HEADER is the single authoritative source of truth for the magic
 # string and its length.  Both the writer (pack_bar_file) and every reader
@@ -357,11 +366,15 @@ def pack_bar_file(encrypted_data: bytes, metadata: dict, key: bytes, password: s
     bar_json = json.dumps(bar_structure, **_CANONICAL_JSON_KWARGS)
     bar_bytes = bar_json.encode('utf-8')
 
-    # Base64-encode the JSON to obfuscate it in text editors, then prepend the
-    # fixed BAR file header.  _BAR_HEADER is the module-level constant; do not
-    # repeat the literal here.
-    obfuscated_data = base64.b64encode(bar_bytes)
-    return _BAR_HEADER + obfuscated_data
+    # Base64-encode the canonical JSON so the binary .bar container is
+    # byte-stream-safe for filesystem storage and HTTP transfer.  This is a
+    # *transport encoding only* — it provides no confidentiality.  The
+    # confidentiality guarantee comes from Fernet encryption of the file
+    # content stored in ``encrypted_data``, and integrity is guaranteed by
+    # the HMAC-SHA256 signature appended above.  _BAR_HEADER is the
+    # module-level constant; do not repeat the literal here.
+    encoded_payload = base64.b64encode(bar_bytes)
+    return _BAR_HEADER + encoded_payload
 
 
 def update_bar_view_count(bar_data: bytes, key: bytes) -> bytes:
@@ -437,8 +450,11 @@ def update_bar_view_count(bar_data: bytes, key: bytes) -> bytes:
         raise ValueError("Invalid BAR file format")
 
     # ── 1. Decode ─────────────────────────────────────────────────────────── #
-    obfuscated = bar_data[len(_BAR_HEADER):]
-    bar_structure: dict = json.loads(base64.b64decode(obfuscated).decode("utf-8"))
+    # Strip the fixed header to isolate the Base64-encoded JSON payload, then
+    # decode it.  Base64 here is purely a transport encoding (see module-level
+    # format comment); all security properties come from Fernet and HMAC below.
+    encoded_payload = bar_data[len(_BAR_HEADER):]
+    bar_structure: dict = json.loads(base64.b64decode(encoded_payload).decode("utf-8"))
 
     # ── 2. Guard: refuse legacy unsigned files ────────────────────────────── #
     if "hmac_signature" not in bar_structure:
@@ -531,10 +547,13 @@ def unpack_bar_file(bar_data: bytes, password: str = None) -> tuple:
     if not bar_data.startswith(_BAR_HEADER):
         raise ValueError("Invalid BAR file format")
 
-    obfuscated_data = bar_data[len(_BAR_HEADER):]  # Strip header
+    # Strip the fixed header to isolate the Base64-encoded JSON payload.
+    # Base64 is a transport encoding (not a security layer) — see the
+    # module-level format comment for the full security architecture.
+    encoded_payload = bar_data[len(_BAR_HEADER):]
 
-    # Deobfuscate: Base64 decode to get the JSON
-    bar_json = base64.b64decode(obfuscated_data)
+    # Decode the Base64 transport encoding to recover the canonical JSON bytes.
+    bar_json = base64.b64decode(encoded_payload)
     bar_structure = json.loads(bar_json.decode('utf-8'))
 
     metadata = bar_structure["metadata"]
@@ -630,8 +649,13 @@ def peek_bar_metadata(bar_data: bytes) -> dict:
     if not bar_data.startswith(_BAR_HEADER):
         raise ValueError("Invalid BAR file format")
 
-    obfuscated_data = bar_data[len(_BAR_HEADER):]  # Strip the fixed header
-    bar_json = base64.b64decode(obfuscated_data)
+    # Strip the fixed header, then decode the Base64 transport encoding to
+    # recover the canonical JSON bytes.  No key derivation or HMAC check is
+    # performed here — this is an intentional best-effort read for metadata
+    # extraction only (e.g. to obtain webhook_url when full decryption is
+    # unavailable).  See module-level format comment for security architecture.
+    encoded_payload = bar_data[len(_BAR_HEADER):]
+    bar_json = base64.b64decode(encoded_payload)
     bar_structure = json.loads(bar_json.decode("utf-8"))
 
     metadata = bar_structure.get("metadata")
