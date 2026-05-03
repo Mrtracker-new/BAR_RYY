@@ -17,6 +17,7 @@ and create_server_metadata() at seal time.
 
 import sys
 import os
+import traceback
 
 # ---------------------------------------------------------------------------
 # sys.path wiring
@@ -89,7 +90,16 @@ def decrypt_bar_file(bar_file_path, password=None, output_dir=None):
         storage_mode = metadata.get("storage_mode", "server")
         if storage_mode == "client":
             is_valid, errors = client_storage.validate_client_access(metadata, password)
+        elif storage_mode == "server":
+            is_valid, errors = server_storage.validate_server_access(metadata, password)
         else:
+            # Unknown storage_mode — alert the operator and apply the stricter
+            # server ruleset as a secure default rather than silently skipping
+            # access control.  This can occur with tampered or future-format files.
+            print(
+                f"⚠️  Warning: Unrecognised storage_mode={storage_mode!r} in metadata. "
+                "Applying server (stricter) access rules as a secure default."
+            )
             is_valid, errors = server_storage.validate_server_access(metadata, password)
 
         if not is_valid:
@@ -128,18 +138,35 @@ def decrypt_bar_file(bar_file_path, password=None, output_dir=None):
         print(f"💾 Saved to: {output_path}")
         print(f"📊 Size: {len(decrypted_data)} bytes")
         
-        # Update view count (in real implementation)
-        views_remaining = metadata.get('max_views', 0) - metadata.get('current_views', 0) - 1
-        if metadata.get('max_views', 0) > 0:
-            print(f"⚠️  Views remaining: {max(0, views_remaining)}")
-            if views_remaining <= 0:
-                print("🔥 This was the last view - file should be destroyed!")
+        # Report remaining views.  The access just granted consumed one view, so
+        # subtract (current_views + 1) from max_views to reflect post-access state.
+        # Note: for CLI use, view count persistence is not written back to disk
+        # here because this tool operates offline and has no server DB to update.
+        # Operators who need enforced view counting must use the server-side API.
+        max_views = metadata.get('max_views', 0)
+        if max_views > 0:
+            views_consumed = metadata.get('current_views', 0) + 1  # +1 for this access
+            views_remaining = max_views - views_consumed
+            if views_remaining > 0:
+                print(f"⚠️  Views remaining after this access: {views_remaining}")
+            elif views_remaining == 0:
+                print("🔥 This was the last permitted view — the server copy should now be destroyed!")
+            else:
+                # views_remaining < 0: current_views already exceeded max_views before this access.
+                # validate_client_access intentionally skips view-limit enforcement (client files
+                # can be copied locally so limits cannot be enforced).  Log the anomaly so an
+                # operator can investigate rather than silently printing a misleading message.
+                print(
+                    f"⚠️  Anomaly: view count already exceeded limit before this access "
+                    f"({metadata.get('current_views', 0)}/{max_views}). "
+                    "This file may have been tampered with or is a client-mode file with "
+                    "a view limit that cannot be enforced offline."
+                )
         
         return True
         
     except Exception as e:
         print(f"❌ Decryption failed: {str(e)}")
-        import traceback
         traceback.print_exc()
         return False
 
