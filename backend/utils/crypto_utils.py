@@ -163,12 +163,14 @@ def generate_hmac_signature(data: bytes, key: bytes) -> str:
         infeasible.
 
     Note on API choice:
-        ``digestmod`` is passed as a keyword argument (required since Python 3.8).
-        Passing it positionally raised a DeprecationWarning from Python 3.4 and
-        was tightened further in Python 3.13.  Using the keyword form is the
-        documented, forward-compatible public API.
+        Uses :func:`hmac.digest` (Python 3.7+) — the one-shot, allocation-free
+        HMAC API.  Unlike ``hmac.new(key, msg, digestmod=...).hexdigest()``,
+        ``hmac.digest`` does not instantiate an intermediate HMAC object; when
+        OpenSSL is available (the default on CPython), it dispatches directly
+        to ``HMAC_CTX`` via ``_hashlib.hmac_digest``, making it both faster and
+        more memory-efficient for single-use signing calls like this one.
     """
-    return hmac.new(key, data, digestmod=hashlib.sha256).hexdigest()
+    return hmac.digest(key, data, digest=hashlib.sha256).hex()
 
 
 def verify_hmac_signature(data: bytes, key: bytes, signature: str) -> bool:
@@ -194,10 +196,12 @@ def verify_hmac_signature(data: bytes, key: bytes, signature: str) -> bool:
         on every call; no cached values are used.
 
     Note on API choice:
-        ``digestmod`` is passed as a keyword argument — see
-        :func:`generate_hmac_signature` for rationale.
+        Uses :func:`hmac.digest` (Python 3.7+) — see
+        :func:`generate_hmac_signature` for full rationale.  The same one-shot
+        API is used on both the sign and verify paths to guarantee byte-for-byte
+        parity between what was signed and what is recomputed here.
     """
-    expected_signature = hmac.new(key, data, digestmod=hashlib.sha256).hexdigest()
+    expected_signature = hmac.digest(key, data, digest=hashlib.sha256).hex()
 
     # Constant-time comparison prevents an attacker from inferring the correct
     # signature one byte at a time via response-time differences.
