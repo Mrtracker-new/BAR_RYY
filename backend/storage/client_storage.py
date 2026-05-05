@@ -30,6 +30,13 @@ def create_client_metadata(
     if expiry_minutes > 0:
         expires_at = (datetime.utcnow() + timedelta(minutes=expiry_minutes)).isoformat() + 'Z'
     
+    # NOTE: `encryption_method` is intentionally absent from this dict.
+    # The authoritative `encryption_method` field is written at the *top level*
+    # of the BAR structure by `pack_bar_file` (crypto_utils.py) and read from
+    # that same top-level location by `unpack_bar_file`.  Duplicating it here
+    # inside `bar_structure["metadata"]` would create two independent copies that
+    # could silently drift out of sync, giving a false impression that editing the
+    # metadata field affects cryptographic behaviour.  It does not — keep it out.
     metadata = {
         "filename": filename,
         "created_at": created_at,
@@ -40,7 +47,6 @@ def create_client_metadata(
         "storage_mode": "client",
         "file_hash": "",
         "version": "1.0",
-        "encryption_method": "password_derived" if password_protected else "key_stored",
         # 👀 Notice: No max_views or current_views here!
         # Why? Because users can keep copies of the file, so we can't track views anyway
     }
