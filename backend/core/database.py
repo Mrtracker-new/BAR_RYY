@@ -15,7 +15,7 @@ import hmac
 import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import aiosqlite
 from contextlib import asynccontextmanager
 
@@ -103,7 +103,8 @@ def _verify_analytics_key(stored_hash: Optional[str], supplied_key: str) -> bool
 def _normalise_file_record(record: Dict[str, Any]) -> Dict[str, Any]:
     """
     Guarantee that the ``metadata`` field of a raw DB row dict is always a
-    ``dict`` before the record leaves the database layer.
+    ``dict`` and that the ``otp_emails`` field is always a ``list`` before
+    the record leaves the database layer.
 
     **Why this exists**
 
@@ -115,17 +116,23 @@ def _normalise_file_record(record: Dict[str, Any]) -> Dict[str, Any]:
     once here, at the single egress point, makes the invariant impossible to
     violate regardless of how many new callers are added in the future.
 
+    The same logic applies to ``otp_emails`` which is stored as a JSON array
+    string in both SQLite and PostgreSQL TEXT columns.
+
     **Behaviour**
 
-    * ``str``  → parsed with ``json.loads``; on failure replaced with ``{}``
-      and logged at ERROR so operations can investigate without crashing the
-      request path.
-    * ``None`` → replaced with ``{}`` (handles legacy NULL rows from early
-      migrations before the column had a NOT NULL constraint).
-    * ``dict`` → returned as-is (PostgreSQL / already-normalised path).
+    * ``metadata`` str  → parsed with ``json.loads``; on failure replaced with
+      ``{}`` and logged at ERROR.
+    * ``metadata`` None → replaced with ``{}``.
+    * ``metadata`` dict → returned as-is.
+    * ``otp_emails`` str  → parsed with ``json.loads``; on failure replaced
+      with ``[]`` and logged at WARNING.
+    * ``otp_emails`` None → replaced with ``[]``.
+    * ``otp_emails`` list → returned as-is.
 
     The function mutates and returns the same dict (no copy overhead).
     """
+    # ── metadata normalisation (unchanged logic) ────────────────────────────
     raw = record.get("metadata")
     if isinstance(raw, str):
         try:
@@ -143,6 +150,23 @@ def _normalise_file_record(record: Dict[str, Any]) -> Dict[str, Any]:
     elif raw is None:
         record["metadata"] = {}
     # dict path: already correct, nothing to do
+
+    # ── otp_emails normalisation (new) ──────────────────────────────────────
+    raw_emails = record.get("otp_emails")
+    if isinstance(raw_emails, str):
+        try:
+            parsed = json.loads(raw_emails)
+            record["otp_emails"] = parsed if isinstance(parsed, list) else [parsed]
+        except (json.JSONDecodeError, ValueError):
+            _logger.warning(
+                "DB record for token=%r has unparseable otp_emails — replacing with [].",
+                record.get("token"),
+            )
+            record["otp_emails"] = []
+    elif raw_emails is None:
+        record["otp_emails"] = []
+    # list path: already correct
+
     return record
 
 
@@ -178,7 +202,7 @@ _PUBLIC_FILE_COLUMNS: tuple[str, ...] = (
     "destroyed",
     "require_otp",
     # analytics_key_hash  ← derived secret: intentionally excluded
-    # otp_email           ← PII:            intentionally excluded
+    # otp_emails          ← PII:            intentionally excluded
 )
 
 # Pre-build the SQL fragment once at import time — joining inside a hot path
@@ -192,7 +216,7 @@ _PUBLIC_FILE_COLUMNS_SQL: str = ", ".join(
 # last-resort post-fetch strip in get_analytics().
 _FORBIDDEN_RESPONSE_FIELDS: frozenset[str] = frozenset({
     "analytics_key_hash",  # SHA-256 digest — still a secret, never expose
-    "otp_email",
+    "otp_emails",          # PII — list of recipient email addresses
 })
 
 
@@ -228,7 +252,7 @@ class Database:
                     last_accessed_at TEXT,
                     destroyed BOOLEAN DEFAULT 0,
                     require_otp BOOLEAN DEFAULT 0,
-                    otp_email TEXT,
+                    otp_emails TEXT,
                     analytics_key_hash TEXT   -- SHA-256 hex digest; raw key never persisted
                 )
             """)
@@ -352,6 +376,59 @@ class Database:
                     "used. Upgrade SQLite to ≥ 3.35 to remove it."
                 )
 
+            # ── Migration: otp_email (single TEXT) → otp_emails (JSON array TEXT) ──
+            # Idempotent — safe to run on every startup.
+            #
+            # Step 1 — inspect current columns.
+            async with db.execute("PRAGMA table_info(bar_files)") as _ci:
+                _all_cols = {row[1] for row in await _ci.fetchall()}
+
+            if "otp_email" in _all_cols and "otp_emails" not in _all_cols:
+                # Old schema: single otp_email column present, new column absent.
+                # Add new column, back-fill as JSON array, then drop old column.
+                await db.execute(
+                    "ALTER TABLE bar_files ADD COLUMN otp_emails TEXT"
+                )
+                # Back-fill: wrap the old single address in a JSON array.
+                # Rows with NULL otp_email get an empty JSON array '[]'.
+                await db.execute("""
+                    UPDATE bar_files
+                    SET otp_emails = CASE
+                        WHEN otp_email IS NOT NULL AND otp_email != ''
+                        THEN json_array(otp_email)
+                        ELSE '[]'
+                    END
+                    WHERE otp_emails IS NULL
+                """)
+                await db.commit()
+                print("✅ Migration: back-filled otp_emails from otp_email")
+
+                # Drop the old single-email column (requires SQLite 3.35+).
+                if _sqlite_version >= (3, 35, 0):
+                    try:
+                        await db.execute(
+                            "ALTER TABLE bar_files DROP COLUMN otp_email"
+                        )
+                        await db.commit()
+                        print("✅ Migration: dropped otp_email column")
+                    except Exception as _exc:
+                        print(f"⚠️ Could not drop otp_email column: {_exc}")
+                else:
+                    print(
+                        "⚠️  SQLite < 3.35: otp_email column retained (unused). "
+                        "Upgrade SQLite to ≥ 3.35 to auto-drop it."
+                    )
+
+            elif "otp_emails" not in _all_cols:
+                # Fresh DB created before this migration ran (shouldn't happen
+                # since CREATE TABLE now uses otp_emails, but belt-and-suspenders).
+                await db.execute(
+                    "ALTER TABLE bar_files ADD COLUMN otp_emails TEXT"
+                )
+                await db.commit()
+                print("✅ Migration: added otp_emails column to fresh schema")
+            # else: otp_emails already present — no-op.
+
             print("✅ SQLite database initialized")
     
     async def _init_postgres(self):
@@ -384,7 +461,7 @@ class Database:
                         last_accessed_at TIMESTAMP,
                         destroyed BOOLEAN DEFAULT FALSE,
                         require_otp BOOLEAN DEFAULT FALSE,
-                        otp_email TEXT,
+                        otp_emails TEXT,
                         analytics_key_hash TEXT   -- SHA-256 hex digest; raw key never persisted
                     )
                 """)
@@ -495,6 +572,55 @@ class Database:
                 # If legacy_col_exists is False the table was created fresh with
                 # only analytics_key_hash — no migration work needed.
 
+                # ── Migration: otp_email (single TEXT) → otp_emails (JSON array TEXT) ─
+                # Idempotent — safe to run on every startup.
+                #
+                # Step 1 — check whether the old column exists.
+                old_email_col_exists: bool = await conn.fetchval("""
+                    SELECT EXISTS (
+                        SELECT 1
+                        FROM   information_schema.columns
+                        WHERE  table_name  = 'bar_files'
+                          AND  column_name = 'otp_email'
+                    )
+                """)
+                new_emails_col_exists: bool = await conn.fetchval("""
+                    SELECT EXISTS (
+                        SELECT 1
+                        FROM   information_schema.columns
+                        WHERE  table_name  = 'bar_files'
+                          AND  column_name = 'otp_emails'
+                    )
+                """)
+
+                if old_email_col_exists and not new_emails_col_exists:
+                    # Add new column and back-fill as JSON array.
+                    await conn.execute("""
+                        ALTER TABLE bar_files ADD COLUMN otp_emails TEXT
+                    """)
+                    await conn.execute("""
+                        UPDATE bar_files
+                        SET otp_emails = CASE
+                            WHEN otp_email IS NOT NULL AND otp_email <> ''
+                            THEN json_build_array(otp_email)::text
+                            ELSE '[]'
+                        END
+                        WHERE otp_emails IS NULL
+                    """)
+                    print("✅ Migration: back-filled otp_emails from otp_email (PostgreSQL)")
+                    # Drop the obsolete single-email column.
+                    await conn.execute("""
+                        ALTER TABLE bar_files DROP COLUMN IF EXISTS otp_email
+                    """)
+                    print("✅ Migration: dropped otp_email column (PostgreSQL)")
+                elif not new_emails_col_exists:
+                    # Fresh table missing the new column — add it.
+                    await conn.execute("""
+                        ALTER TABLE bar_files ADD COLUMN IF NOT EXISTS otp_emails TEXT
+                    """)
+                    print("✅ Migration: added otp_emails column (PostgreSQL)")
+                # else: otp_emails already present — no-op.
+
             print("✅ PostgreSQL database initialized")
         except Exception as e:
             print(f"⚠️ PostgreSQL init failed: {e}")
@@ -510,7 +636,7 @@ class Database:
         file_path: str,
         metadata: Dict[str, Any],
         require_otp: bool = False,
-        otp_email: Optional[str] = None,
+        otp_emails: Optional[List[str]] = None,
         analytics_key_hash: Optional[str] = None
     ) -> bool:
         """Create a new file record in the database.
@@ -519,12 +645,20 @@ class Database:
         (produced by ``_hash_analytics_key``).  The raw key must never be
         passed here — it should exist only in the seal response returned to
         the file creator.
+
+        ``otp_emails`` is a list of authorised recipient email addresses.  It
+        is serialised to a JSON array string for storage in both SQLite TEXT
+        and PostgreSQL TEXT columns.
         """
         try:
             max_views = metadata.get("max_views", 1)
             expires_at = metadata.get("expires_at")
             created_at = metadata.get("created_at", datetime.now(timezone.utc).isoformat())
-            
+
+            # Serialise the email list to a JSON string for storage.
+            # Both SQLite (TEXT) and PostgreSQL (TEXT) store it as JSON.
+            otp_emails_json = json.dumps(otp_emails or [])
+
             if self.is_postgres:
                 # Convert to naive UTC datetime for PostgreSQL TIMESTAMP columns
                 # (TIMESTAMP doesn't store timezone, so we use naive UTC)
@@ -557,22 +691,22 @@ class Database:
                     await conn.execute("""
                         INSERT INTO bar_files 
                         (token, filename, bar_filename, file_path, metadata, 
-                         current_views, max_views, expires_at, created_at, require_otp, otp_email,
+                         current_views, max_views, expires_at, created_at, require_otp, otp_emails,
                          analytics_key_hash)
                         VALUES ($1, $2, $3, $4, $5, 0, $6, $7, $8, $9, $10, $11)
                     """, token, filename, bar_filename, file_path, 
-                       json.dumps(metadata), max_views, expires_at_dt, created_at_dt, require_otp, otp_email,
+                       json.dumps(metadata), max_views, expires_at_dt, created_at_dt, require_otp, otp_emails_json,
                        analytics_key_hash)
             else:
                 async with aiosqlite.connect(self.db_path) as db:
                     await db.execute("""
                         INSERT INTO bar_files 
                         (token, filename, bar_filename, file_path, metadata, 
-                         current_views, max_views, expires_at, created_at, require_otp, otp_email,
+                         current_views, max_views, expires_at, created_at, require_otp, otp_emails,
                          analytics_key_hash)
                         VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
                     """, (token, filename, bar_filename, file_path, 
-                          json.dumps(metadata), max_views, expires_at, created_at, require_otp, otp_email,
+                          json.dumps(metadata), max_views, expires_at, created_at, require_otp, otp_emails_json,
                           analytics_key_hash))
                     await db.commit()
             
@@ -1199,7 +1333,7 @@ class Database:
 
         Layer 1 — Query-time column allowlist
             The SQL SELECT fetches only the columns listed in
-            ``_PUBLIC_FILE_COLUMNS``.  ``analytics_key`` and ``otp_email`` are
+            ``_PUBLIC_FILE_COLUMNS``.  ``analytics_key`` and ``otp_emails`` are
             never retrieved from the database, so they cannot appear in memory
             at any point during this call.
 
