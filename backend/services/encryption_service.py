@@ -3,7 +3,7 @@ import os
 import uuid
 import base64
 import secrets
-from typing import Optional, Tuple, Dict, Any
+from typing import Optional, Tuple, Dict, Any, List
 from datetime import datetime
 from fastapi import HTTPException
 
@@ -31,7 +31,7 @@ class EncryptionService:
         view_only: bool,
         storage_mode: str,
         require_otp: bool = False,
-        otp_email: Optional[str] = None,
+        otp_emails: Optional[List[str]] = None,
         view_refresh_minutes: int = 0,
         auto_refresh_seconds: int = 0
     ) -> Dict[str, Any]:
@@ -48,7 +48,7 @@ class EncryptionService:
             view_only: Whether file should be view-only (no download)
             storage_mode: 'client' or 'server'
             require_otp: Whether to require 2FA
-            otp_email: Email for OTP delivery
+            otp_emails: List of authorised recipient emails for OTP delivery
             
         Returns:
             Dictionary with BAR file information
@@ -133,7 +133,7 @@ class EncryptionService:
         bar_result: Dict[str, Any],
         filename: str,
         require_otp: bool,
-        otp_email: Optional[str],
+        otp_emails: Optional[List[str]],
         frontend_base_url: str
     ) -> Dict[str, Any]:
         """
@@ -143,7 +143,7 @@ class EncryptionService:
             bar_result: Result from create_bar_file()
             filename: Original filename
             require_otp: Whether 2FA is required
-            otp_email: Email for OTP
+            otp_emails: List of authorised recipient emails for OTP delivery
             frontend_base_url: Base URL for share links
             
         Returns:
@@ -173,7 +173,7 @@ class EncryptionService:
             file_path=token_bar_path,
             metadata=bar_result["metadata"],
             require_otp=require_otp,
-            otp_email=otp_email,
+            otp_emails=otp_emails,
             analytics_key_hash=analytics_key_hash,
         )
         
