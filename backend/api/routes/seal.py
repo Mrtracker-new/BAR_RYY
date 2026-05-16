@@ -62,7 +62,7 @@ async def seal_container(
             view_only=request.view_only,
             storage_mode=request.storage_mode,
             require_otp=request.require_otp,
-            otp_email=request.otp_email,
+            otp_emails=request.otp_emails,
             view_refresh_minutes=request.view_refresh_minutes,
             auto_refresh_seconds=request.auto_refresh_seconds
         )
@@ -97,7 +97,7 @@ async def seal_container(
                 bar_result=bar_result,
                 filename=display_filename,
                 require_otp=request.require_otp,
-                otp_email=request.otp_email,
+                otp_emails=request.otp_emails,
                 frontend_base_url=base_url
             )
             
@@ -110,7 +110,8 @@ async def seal_container(
                 qr_base64 = qr_generator.generate_simple_qr(server_result["share_url"])
             
             if request.require_otp:
-                logger.info('2FA enabled — OTP will be sent to: %s', request.otp_email)
+                count = len(request.otp_emails or [])
+                logger.info('2FA enabled — OTP will be sent to %d recipient(s)', count)
             
             result = {
                 "success": True,
