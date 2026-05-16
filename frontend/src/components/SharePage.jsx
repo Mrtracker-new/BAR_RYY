@@ -20,6 +20,8 @@ const SharePage = ({ token }) => {
   const [otpCode, setOtpCode] = useState('');
   const [otpInfo, setOtpInfo] = useState(null);
   const [otpPanelOpen, setOtpPanelOpen] = useState(false);
+  const [recipientEmail, setRecipientEmail] = useState('');
+  const [emailError, setEmailError] = useState('');
   const [showBurning, setShowBurning] = useState(false);
 
   // Enhanced loading states
@@ -28,14 +30,23 @@ const SharePage = ({ token }) => {
   const [estimatedTime, setEstimatedTime] = useState(null);
   const [requestStartTime, setRequestStartTime] = useState(null);
 
+  const EMAIL_RE = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
   const handleRequestOtp = async () => {
+    // Client-side email guard
+    const email = recipientEmail.trim();
+    if (!email) { setEmailError('Please enter your email address'); return; }
+    if (!EMAIL_RE.test(email)) { setEmailError('Please enter a valid email address'); return; }
+    setEmailError('');
     setIsLoading(true);
     setError(null);
 
     try {
-      // Use relative path so Vite proxy handles it in dev.
-      // In prod, axios.defaults.baseURL is set to VITE_BACKEND_URL via config/axios.js.
-      const response = await axios.post(`/request-otp/${token}`);
+      const response = await axios.post(
+        `/request-otp/${token}`,
+        { email },                          // JSON body — receiver's email
+        { headers: { 'Content-Type': 'application/json' } }
+      );
 
       setOtpSent(true);
       setOtpInfo(response.data);
@@ -334,8 +345,22 @@ const SharePage = ({ token }) => {
                               <p className="text-blue-400 font-semibold text-sm">2FA Verification</p>
                             </div>
                             <p className="text-zinc-400 text-xs mb-4 leading-relaxed">
-                              Dual-factor authentication is enabled. Request a code to your email.
+                              Enter your email address to receive a one-time code.
                             </p>
+
+                            {/* Email input */}
+                            <input
+                              type="email"
+                              value={recipientEmail}
+                              onChange={e => { setRecipientEmail(e.target.value); setEmailError(''); }}
+                              onKeyPress={e => e.key === 'Enter' && handleRequestOtp()}
+                              placeholder="your@email.com"
+                              className="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-lg text-white text-sm focus:border-blue-500/50 focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all mb-2 placeholder-zinc-600"
+                            />
+                            {emailError && (
+                              <p className="text-red-400 text-xs mb-3">{emailError}</p>
+                            )}
+
                             <button
                               onClick={handleRequestOtp}
                               disabled={isLoading}
@@ -351,10 +376,13 @@ const SharePage = ({ token }) => {
                               <Mail className="text-green-500" size={18} />
                               <p className="text-green-500 font-medium text-sm">Code Sent</p>
                             </div>
-                            <p className="text-zinc-500 text-xs mb-4 text-center">
+                            <p className="text-zinc-500 text-xs mb-1 text-center">
                               Enter the 6-digit code sent to your email.
-                              {otpInfo && <span className="block mt-1">({otpInfo.max_attempts} attempts remaining)</span>}
                             </p>
+                            {otpInfo?.message && (
+                              <p className="text-zinc-600 text-xs mb-1 text-center font-mono">{otpInfo.message}</p>
+                            )}
+                            {otpInfo && <span className="block text-zinc-700 text-xs text-center mb-4">({otpInfo.max_attempts} attempts remaining)</span>}
                             <input
                               type="text"
                               value={otpCode}
@@ -374,13 +402,23 @@ const SharePage = ({ token }) => {
                             >
                               {isLoading ? 'Verifying...' : 'Verify & Unlock'}
                             </button>
-                            <button
-                              onClick={handleRequestOtp}
-                              disabled={isLoading}
-                              className="w-full mt-3 text-xs text-zinc-500 hover:text-white transition-colors"
-                            >
-                              Resend Code
-                            </button>
+                            {/* Change email / Resend row */}
+                            <div className="flex justify-between mt-3">
+                              <button
+                                onClick={() => { setOtpSent(false); setOtpCode(''); setSuccessMessage(null); }}
+                                disabled={isLoading}
+                                className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+                              >
+                                ← Change email
+                              </button>
+                              <button
+                                onClick={handleRequestOtp}
+                                disabled={isLoading}
+                                className="text-xs text-zinc-500 hover:text-white transition-colors"
+                              >
+                                Resend Code
+                              </button>
+                            </div>
                           </div>
                         )}
                       </div>
