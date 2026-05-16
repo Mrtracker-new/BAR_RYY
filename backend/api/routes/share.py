@@ -8,7 +8,7 @@ from datetime import datetime
 from fastapi import APIRouter, Request, Form, Depends, HTTPException, Header
 from fastapi.responses import Response
 
-from models.schemas import DecryptRequest
+from models.schemas import DecryptRequest, OTPEmailRequest
 from core import security
 from services.encryption_service import EncryptionService
 from api.dependencies import get_encryption_service_dep, get_otp_service_dep, get_database
@@ -33,69 +33,89 @@ router = APIRouter()
 async def request_otp(
     token: str,
     req: Request,
+    body: OTPEmailRequest,
     db=Depends(get_database),
     otp_service=Depends(get_otp_service_dep)
 ):
-    """Request OTP code to be sent via email for 2FA-protected files."""
+    """Request OTP code to be sent via email for 2FA-protected files.
+
+    The receiver supplies their own email address in the request body.
+    The backend checks it against the stored allow-list and — if valid —
+    generates a fresh OTP and delivers it to that specific address.
+
+    Security
+    --------
+    * Rate-limited at two layers (global per-IP + per-token per-IP).
+    * Non-listed emails return the same opaque 403 as invalid/expired tokens
+      so an attacker cannot distinguish live tokens from dead ones, nor can
+      they enumerate valid recipient addresses.
+    """
     try:
-        # ── Rate limiting ───────────────────────────────────────────────────
+        # ── Rate limiting ─────────────────────────────────────────────────────────
         # Layer 1: global per-IP limit (5 req/min across all tokens)
         security.check_rate_limit(req, limit=5)
 
         # Layer 2: per-token per-IP limit — prevents an attacker who knows a
         # valid token from spamming the owner's inbox even after rotating IPs.
-        # We reuse the password brute-force storage with a dedicated namespace
-        # prefix so the OTP counter is tracked independently.
         client_ip = analytics.get_client_ip(req)
         otp_key = f"otp:{token}:{client_ip}"
         security.check_rate_limit_keyed(otp_key, limit=3, window_seconds=300)
-        
-        # Get file record
+
+        # ── Token validation ─────────────────────────────────────────────────────────
         file_record = await db.get_file_record(token)
-        
-        # ── Oracle-free token validation ───────────────────────────────────
-        # Both the "token does not exist" and "token exists but has no OTP"
-        # branches return the same opaque 403 so an attacker cannot use this
-        # endpoint to distinguish live tokens from dead ones.
+
+        # Oracle-free validation: collapse "token missing", "OTP not enabled",
+        # and "email not in allow-list" into a single indistinguishable 403.
         if not file_record or not file_record.get('require_otp'):
             raise HTTPException(status_code=403, detail="Access denied.")
-        
-        # Get OTP email
-        otp_email = file_record.get('otp_email')
-        if not otp_email:
-            raise HTTPException(status_code=500, detail="2FA email not configured")
-        
-        # Generate and send OTP
-        otp_code = otp_service.create_otp_session(token, otp_email)
-        
+
+        # ── Email allow-list check ───────────────────────────────────────────────────
+        # otp_emails is already a list (normalised by _normalise_file_record).
+        otp_emails = file_record.get('otp_emails', [])
+        if not otp_service.is_email_allowed(otp_emails, body.email):
+            # Same opaque 403 — no hint about whether the token or the email
+            # was the reason for rejection.
+            raise HTTPException(status_code=403, detail="Access denied.")
+
+        # Use the receiver-supplied (already validated & stripped) email.
+        recipient_email = body.email.strip()
+
+        # ── Generate and deliver OTP ──────────────────────────────────────────────────
+        otp_code = otp_service.create_otp_session(token, recipient_email)
+
         success, error_msg = await otp_service.send_otp_email(
-            email=otp_email,
+            email=recipient_email,
             otp_code=otp_code,
             filename=file_record['filename']
         )
-        
+
         if not success:
             logger.error('OTP send failed for token %s: %s', token, error_msg)
             raise HTTPException(status_code=500, detail=security.OPAQUE_500_DETAIL)
-        
-        # Mask email for privacy
-        email_parts = otp_email.split('@')
-        masked_email = f"{email_parts[0][:2]}***@{email_parts[1]}" if len(email_parts) == 2 else "***"
-        
+
+        # Mask the email for privacy in the response
+        # e.g. alice@example.com → al***@example.com
+        email_parts = recipient_email.split('@')
+        masked_email = (
+            f"{email_parts[0][:2]}***@{email_parts[1]}"
+            if len(email_parts) == 2 else "***"
+        )
+
         from services.otp_service import OTP_EXPIRY_MINUTES, MAX_OTP_ATTEMPTS
-        
+
         return {
             "success": True,
             "message": f"OTP sent to {masked_email}",
             "expires_in_minutes": OTP_EXPIRY_MINUTES,
             "max_attempts": MAX_OTP_ATTEMPTS
         }
-        
+
     except HTTPException:
         raise
     except Exception:
         logger.exception("Unhandled error in request_otp [token=%s]", token)
         raise HTTPException(status_code=500, detail=security.OPAQUE_500_DETAIL)
+
 
 
 
