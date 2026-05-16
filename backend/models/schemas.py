@@ -1,6 +1,6 @@
 """Pydantic models for request/response validation."""
 import re
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel, Field, field_validator, model_validator
 from core import security
 
@@ -34,7 +34,7 @@ class SealRequest(BaseModel):
     view_only: bool = False
     storage_mode: str = 'client'  # 'client' or 'server'
     require_otp: bool = False  # Enable 2FA
-    otp_email: Optional[str] = None  # Email for OTP delivery
+    otp_emails: Optional[List[str]] = None  # Authorised recipient emails for OTP delivery (max 10)
     view_refresh_minutes: int = 0  # Time threshold for view refresh control (0 = disabled)
     auto_refresh_seconds: int = 0  # Auto-refresh interval in seconds (0 = disabled)
 
@@ -109,16 +109,43 @@ class SealRequest(BaseModel):
             raise ValueError('Invalid webhook URL')
         return v
 
-    @field_validator('otp_email', mode='after')
+    @field_validator('otp_emails', mode='after')
     @classmethod
-    def validate_otp_email(cls, v: Optional[str]) -> Optional[str]:
-        # Basic email format validation (presence check is handled by the
-        # model_validator below, which has guaranteed access to all fields).
-        if v:
-            email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-            if not re.match(email_pattern, v):
-                raise ValueError('Invalid email address')
-        return v
+    def validate_otp_emails(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+        """Validate each email in the list.
+
+        Rules:
+        * Each entry must match a basic email-address pattern.
+        * Duplicates are removed (case-insensitive dedup keeps first occurrence).
+        * The list is capped at 10 addresses.
+        """
+        if not v:
+            return v
+
+        _MAX_OTP_EMAILS = 10
+        email_pattern = re.compile(
+            r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        )
+
+        # Deduplicate (case-insensitive), preserving first-seen order.
+        seen: set[str] = set()
+        deduped: List[str] = []
+        for email in v:
+            key = email.strip().lower()
+            if key not in seen:
+                seen.add(key)
+                deduped.append(email.strip())
+
+        if len(deduped) > _MAX_OTP_EMAILS:
+            raise ValueError(
+                f'Too many OTP recipient emails — maximum is {_MAX_OTP_EMAILS}.'
+            )
+
+        for email in deduped:
+            if not email_pattern.match(email):
+                raise ValueError(f'Invalid email address: {email!r}')
+
+        return deduped
 
     @field_validator('view_refresh_minutes', mode='after')
     @classmethod
@@ -136,16 +163,18 @@ class SealRequest(BaseModel):
 
     @model_validator(mode='after')
     def validate_otp_consistency(self) -> 'SealRequest':
-        """Enforce that otp_email is present whenever require_otp is True.
+        """Enforce that otp_emails is non-empty whenever require_otp is True.
 
         This check is intentionally placed in a model_validator (runs after
         all field_validators have succeeded) so it has guaranteed, reliable
-        access to both require_otp and otp_email — unlike the old @validator
+        access to both require_otp and otp_emails — unlike the old @validator
         approach where a field could be missing from the ``values`` dict if
         an earlier validator on that field had failed.
         """
-        if self.require_otp and not self.otp_email:
-            raise ValueError('Email address required when 2FA is enabled')
+        if self.require_otp and not self.otp_emails:
+            raise ValueError(
+                'At least one recipient email address is required when 2FA is enabled'
+            )
         return self
 
 
@@ -164,3 +193,23 @@ class OTPVerifyRequest(BaseModel):
     token: str
     otp_code: str
     password: Optional[str] = None
+
+
+class OTPEmailRequest(BaseModel):
+    """Request body sent by the receiver to /request-otp/{token}.
+
+    The receiver supplies their own email address; the backend checks it
+    against the stored allow-list before generating and sending an OTP.
+    An opaque 403 is returned for unlisted addresses so no information about
+    valid recipient addresses is leaked to an attacker.
+    """
+    email: str
+
+    @field_validator('email', mode='after')
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        v = v.strip()
+        pattern = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+        if not pattern.match(v):
+            raise ValueError('Invalid email address')
+        return v
