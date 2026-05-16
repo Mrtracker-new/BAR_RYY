@@ -24,7 +24,7 @@ import secrets
 import logging
 import traceback
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 import httpx
 
@@ -233,6 +233,38 @@ class OTPService:
             del self.otp_storage[t]
         if expired:
             logger.info("Cleaned up %d expired OTP session(s).", len(expired))
+
+    # ------------------------------------------------------------------
+    # Email allow-list check
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def is_email_allowed(otp_emails: List[str], provided_email: str) -> bool:
+        """
+        Return True if *provided_email* is in the authorised *otp_emails* list.
+
+        Comparison is **case-insensitive** so that
+        ``User@Example.COM`` matches ``user@example.com`` — a common source
+        of friction when recipients copy-paste their address.
+
+        The method is a ``@staticmethod`` because it requires no instance state;
+        keeping it on the class makes it easy to find and mock in tests.
+
+        Args:
+            otp_emails:      The list of authorised recipient addresses stored
+                             in the DB record (already normalised to a list by
+                             ``_normalise_file_record``).
+            provided_email:  The raw email string supplied by the receiver at
+                             request time (not yet strip/lowered).
+
+        Returns:
+            True  if the email is in the allowlist.
+            False if the list is empty, None, or the email is not found.
+        """
+        if not otp_emails or not provided_email:
+            return False
+        needle = provided_email.strip().lower()
+        return any(addr.strip().lower() == needle for addr in otp_emails)
 
     # ------------------------------------------------------------------
     # Email delivery  (fully async — never blocks the event loop)
