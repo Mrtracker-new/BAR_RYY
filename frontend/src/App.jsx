@@ -579,7 +579,7 @@ function MainApp() {
     webhookUrl: "",
     viewOnly: false,
     requireOtp: false,
-    otpEmail: "",
+    otpEmails: [],
     viewRefreshMinutes: 0,
     autoRefreshSeconds: 0,
   });
@@ -631,7 +631,7 @@ function MainApp() {
         view_only: rules.viewOnly || false,
         storage_mode: rules.storageMode || "client",
         require_otp: rules.requireOtp || false,
-        otp_email: (rules.otpEmail && rules.otpEmail.trim()) || null,
+        otp_emails: (rules.otpEmails && rules.otpEmails.length > 0) ? rules.otpEmails : null,
         view_refresh_minutes: rules.viewRefreshMinutes || 0,
         auto_refresh_seconds: rules.autoRefreshSeconds || 0,
       };
@@ -667,7 +667,7 @@ function MainApp() {
     setRules({
       storageMode: "client", maxViews: 1, expiryMinutes: 0,
       expiryValue: 0, expiryUnit: "minutes", password: "", webhookUrl: "",
-      viewOnly: false, requireOtp: false, otpEmail: "", viewRefreshMinutes: 0, autoRefreshSeconds: 0,
+      viewOnly: false, requireOtp: false, otpEmails: [], viewRefreshMinutes: 0, autoRefreshSeconds: 0,
     });
   };
 

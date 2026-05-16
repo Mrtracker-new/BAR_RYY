@@ -1,5 +1,5 @@
-import React from 'react';
-import { Eye, Clock, Lock, Webhook, Server, Download, RefreshCw, Mail, Check } from 'lucide-react';
+import React, { useState } from 'react';
+import { Eye, Clock, Lock, Webhook, Server, Download, RefreshCw, Mail, Check, X, Plus, Users } from 'lucide-react';
 
 /* ── Design tokens ── */
 const T = {
@@ -130,6 +130,135 @@ function ToggleRow({ checked, onChange, label, description }) {
         <span className="toggle-track" />
       </label>
     </label>
+  );
+}
+
+/* ── OTP Email List Manager ── */
+const EMAIL_RE = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+const MAX_OTP_EMAILS = 10;
+
+function OtpEmailManager({ emails, onChange }) {
+  const [draft, setDraft] = useState('');
+  const [inputError, setInputError] = useState('');
+
+  const addEmail = () => {
+    const val = draft.trim().toLowerCase();
+    if (!val) return;
+    if (!EMAIL_RE.test(val)) { setInputError('Invalid email address'); return; }
+    if (emails.some(e => e.toLowerCase() === val)) { setInputError('Already added'); return; }
+    if (emails.length >= MAX_OTP_EMAILS) { setInputError(`Max ${MAX_OTP_EMAILS} recipients`); return; }
+    onChange([...emails, val]);
+    setDraft('');
+    setInputError('');
+  };
+
+  const removeEmail = (idx) => onChange(emails.filter((_, i) => i !== idx));
+
+  const handleKey = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); addEmail(); }
+    else setInputError('');
+  };
+
+  return (
+    <div style={{ padding: '0 0.5rem 0.75rem' }}>
+      {/* Count badge */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginBottom: '0.5rem' }}>
+        <Users size={10} style={{ color: '#404040' }} />
+        <span style={{ fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: '#404040' }}>
+          Recipients
+        </span>
+        <span style={{
+          marginLeft: 'auto',
+          fontSize: '0.625rem', fontWeight: 700,
+          color: emails.length >= MAX_OTP_EMAILS ? '#E8A020' : '#404040',
+          background: emails.length >= MAX_OTP_EMAILS ? 'rgba(232,160,32,0.08)' : 'rgba(255,255,255,0.04)',
+          border: `1px solid ${emails.length >= MAX_OTP_EMAILS ? 'rgba(232,160,32,0.22)' : 'rgba(255,255,255,0.06)'}`,
+          borderRadius: '999px', padding: '0.1rem 0.45rem',
+        }}>
+          {emails.length} / {MAX_OTP_EMAILS}
+        </span>
+      </div>
+
+      {/* Add row */}
+      <div style={{ display: 'flex', gap: '0.4rem' }}>
+        <input
+          type="email"
+          value={draft}
+          onChange={e => { setDraft(e.target.value); setInputError(''); }}
+          onKeyDown={handleKey}
+          className="input-field"
+          placeholder="recipient@example.com"
+          disabled={emails.length >= MAX_OTP_EMAILS}
+          style={{ flex: 1, minWidth: 0 }}
+        />
+        <button
+          onClick={addEmail}
+          disabled={emails.length >= MAX_OTP_EMAILS || !draft.trim()}
+          title="Add email"
+          style={{
+            flexShrink: 0, width: 32, height: 32,
+            borderRadius: '0.4rem',
+            background: emails.length >= MAX_OTP_EMAILS || !draft.trim()
+              ? 'rgba(255,255,255,0.03)' : 'rgba(232,160,32,0.10)',
+            border: `1px solid ${emails.length >= MAX_OTP_EMAILS || !draft.trim()
+              ? 'rgba(255,255,255,0.06)' : 'rgba(232,160,32,0.28)'}`,
+            cursor: emails.length >= MAX_OTP_EMAILS || !draft.trim() ? 'not-allowed' : 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: emails.length >= MAX_OTP_EMAILS || !draft.trim() ? '#333' : '#E8A020',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <Plus size={13} />
+        </button>
+      </div>
+
+      {/* Inline error */}
+      {inputError && (
+        <p style={{ fontSize: '0.6875rem', color: '#e05050', marginTop: '0.3rem' }}>{inputError}</p>
+      )}
+
+      {/* Email tags */}
+      {emails.length > 0 && (
+        <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+          {emails.map((email, idx) => (
+            <div
+              key={email}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '0.3rem 0.5rem 0.3rem 0.625rem',
+                borderRadius: '0.375rem',
+                background: 'rgba(232,160,32,0.05)',
+                border: '1px solid rgba(232,160,32,0.14)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', minWidth: 0 }}>
+                <Mail size={10} style={{ color: '#E8A020', flexShrink: 0 }} />
+                <span style={{
+                  fontSize: '0.75rem', color: '#b0b0b0', fontFamily: "'JetBrains Mono', monospace",
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                }}>{email}</span>
+              </div>
+              <button
+                onClick={() => removeEmail(idx)}
+                title="Remove"
+                style={{
+                  flexShrink: 0, marginLeft: '0.5rem',
+                  width: 18, height: 18, borderRadius: '0.25rem',
+                  background: 'transparent', border: 'none',
+                  cursor: 'pointer', color: '#3a3a3a',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'color 0.15s ease',
+                }}
+                onMouseOver={e => e.currentTarget.style.color = '#e05050'}
+                onMouseOut={e => e.currentTarget.style.color = '#3a3a3a'}
+              >
+                <X size={11} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -342,16 +471,10 @@ const RulesPanel = ({ rules, onRulesChange }) => {
               description="6-digit code sent to recipient's email"
             />
             {rules.requireOtp && (
-              <div style={{ paddingLeft: '0.5rem', paddingRight: '0.5rem', paddingBottom: '0.5rem' }}>
-                <input
-                  type="email"
-                  value={rules.otpEmail || ''}
-                  onChange={e => set({ otpEmail: e.target.value })}
-                  className="input-field"
-                  placeholder="recipient@example.com"
-                  required={rules.requireOtp}
-                />
-              </div>
+              <OtpEmailManager
+                emails={rules.otpEmails || []}
+                onChange={emails => set({ otpEmails: emails })}
+              />
             )}
           </div>
         </>
