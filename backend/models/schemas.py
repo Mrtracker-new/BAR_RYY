@@ -213,3 +213,37 @@ class OTPEmailRequest(BaseModel):
         if not pattern.match(v):
             raise ValueError('Invalid email address')
         return v
+
+
+# ---------------------------------------------------------------------------
+# Burn Chat schemas
+# ---------------------------------------------------------------------------
+
+class ChatCreateRequest(BaseModel):
+    """Request model for creating an ephemeral Burn Chat session.
+
+    ``ttl_seconds`` is the total lifetime of the session.  When it expires
+    every message is purged from server RAM and all connected clients receive
+    a ``{"type": "destroyed"}`` WebSocket event.
+
+    Limits
+    ------
+    * Minimum TTL: 30 seconds.
+    * Maximum TTL: 72 hours (259 200 seconds).
+    """
+
+    ttl_seconds: int = Field(
+        ...,
+        description="Session lifetime in seconds (30 – 259200).",
+        ge=30,
+        le=259_200,
+    )
+
+    @field_validator('ttl_seconds', mode='after')
+    @classmethod
+    def validate_ttl(cls, v: int) -> int:
+        if not (30 <= v <= 259_200):
+            raise ValueError(
+                'ttl_seconds must be between 30 (30 s) and 259200 (72 h)'
+            )
+        return v
