@@ -25,7 +25,7 @@ from core import database
 from services import cleanup
 
 # Import API routes
-from api.routes import upload, seal, decrypt, share
+from api.routes import upload, seal, decrypt, share, chat
 
 
 # Create FastAPI application
@@ -118,7 +118,8 @@ app.add_middleware(
         "X-BAR-Destroyed",
         "X-BAR-Metadata",
         "X-BAR-Is-New-View",
-        "X-BAR-Auto-Refresh-Seconds"
+        "X-BAR-Auto-Refresh-Seconds",
+        "X-BAR-Chat-Token",
     ],
 )
 
@@ -188,6 +189,7 @@ app.include_router(upload.router, tags=["Upload"])
 app.include_router(seal.router, tags=["Seal"])
 app.include_router(decrypt.router, tags=["Decrypt"])
 app.include_router(share.router, tags=["Share"])
+app.include_router(chat.router, tags=["Chat"])
 
 
 # Health check endpoints
