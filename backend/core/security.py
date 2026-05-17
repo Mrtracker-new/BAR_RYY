@@ -343,13 +343,20 @@ def add_security_headers(response: Response) -> Response:
     
     # Content Security Policy - strict defaults
     frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    # Derive WebSocket equivalents of the frontend URL for Burn Chat WS connections.
+    # Browsers treat ws:// and wss:// as distinct origins in connect-src, so both
+    # must be listed explicitly alongside the http(s) origin.
+    _ws_url  = frontend_url.replace("https://", "wss://").replace("http://", "ws://")
+    _backend_url = os.getenv("BACKEND_URL", "")
+    _ws_backend  = _backend_url.replace("https://", "wss://").replace("http://", "ws://") if _backend_url else ""
+    _extra_ws    = f" {_ws_backend}" if _ws_backend else ""
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "script-src 'self'; "
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data: blob: https:; "
         "font-src 'self' data: https:; "
-        f"connect-src 'self' {frontend_url}; "
+        f"connect-src 'self' {frontend_url} {_ws_url}{_extra_ws}; "
         "frame-ancestors 'none'; "
         "base-uri 'self'; "
         "form-action 'self'; "
