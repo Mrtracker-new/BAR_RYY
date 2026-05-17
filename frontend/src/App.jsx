@@ -32,6 +32,8 @@ import SEO from "./components/SEO";
 import SEOContent from "./components/SEOContent";
 import LandingPage from "./components/LandingPage";
 import ErrorModal from "./components/ErrorModal";
+import BurnChatPage from "./components/BurnChatPage";
+import BurnChatLandingPage from "./components/BurnChatLandingPage";
 
 /*──────────────────────────────────────────────
   Constants
@@ -66,6 +68,11 @@ const shadow = "0 2px 8px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.5)";
 const SharePageWrapper = () => {
   const { token } = useParams();
   return <SharePage token={token} />;
+};
+
+const BurnChatWrapper = () => {
+  const { token } = useParams();
+  return <BurnChatPage token={token} />;
 };
 
 /*──────────────────────────────────────────────
@@ -118,28 +125,30 @@ function AppNav({ showDecrypt, onToggleDecrypt }) {
           </span>
         </a>
 
-        {/* Nav button */}
-        <button
-          onClick={onToggleDecrypt}
-          style={{
-            display: "inline-flex", alignItems: "center", gap: "0.375rem",
-            padding: "0.3125rem 0.75rem",
-            fontSize: "0.8125rem", fontWeight: 500,
-            color: showDecrypt ? T.gold : T.textS,
-            background: showDecrypt ? "rgba(232,160,32,0.08)" : "transparent",
-            border: `1px solid ${showDecrypt ? "rgba(232,160,32,0.20)" : T.border}`,
-            borderRadius: "var(--r-full)",
-            cursor: "pointer",
-            transition: "all 0.2s ease",
-            letterSpacing: "-0.01em",
-          }}
-        >
-          {showDecrypt ? (
-            <><ArrowLeft size={11} /> Create</>
-          ) : (
-            <><Lock size={11} /> Decrypt</>
-          )}
-        </button>
+        {/* Nav buttons */}
+        <div style={{ display:"flex", gap:"0.375rem" }}>
+          <button
+            onClick={onToggleDecrypt}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: "0.375rem",
+              padding: "0.3125rem 0.75rem",
+              fontSize: "0.8125rem", fontWeight: 500,
+              color: showDecrypt ? T.gold : T.textS,
+              background: showDecrypt ? "rgba(232,160,32,0.08)" : "transparent",
+              border: `1px solid ${showDecrypt ? "rgba(232,160,32,0.20)" : T.border}`,
+              borderRadius: "var(--r-full)",
+              cursor: "pointer",
+              transition: "all 0.2s ease",
+              letterSpacing: "-0.01em",
+            }}
+          >
+            {showDecrypt ? (
+              <><ArrowLeft size={11} /> Create</>
+            ) : (
+              <><Lock size={11} /> Decrypt</>
+            )}
+          </button>
+        </div>
       </div>
     </nav>
   );
@@ -807,7 +816,6 @@ function MainApp() {
                       background: `linear-gradient(90deg, rgba(232,160,32,0.45) 0%, rgba(232,160,32,0.14) 55%, transparent 100%)`,
                     }}
                   />
-                  <CardHeader icon={Shield} label="Security Configuration" color={T.gold} />
                   <div style={{ padding: "1.125rem" }}>
                     <RulesPanel rules={rules} onRulesChange={setRules} />
                   </div>
@@ -875,7 +883,9 @@ function App() {
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/app" element={<MainApp />} />
+      <Route path="/burn-chat" element={<BurnChatLandingPage />} />
       <Route path="/share/:token" element={<SharePageWrapper />} />
+      <Route path="/chat/:token" element={<BurnChatWrapper />} />
     </Routes>
   );
 }
