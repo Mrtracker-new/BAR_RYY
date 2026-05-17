@@ -226,7 +226,7 @@ function HeroSubtitle() {
 /* ─────────────────────────────────────────────
    Hero CTA
 ───────────────────────────────────────────── */
-function HeroCTA({ onLaunch }) {
+function HeroCTA({ onLaunch, onBurnChat }) {
   return (
     <motion.div
       {...fadeUp(0.4)}
@@ -246,6 +246,37 @@ function HeroCTA({ onLaunch }) {
           Start Sealing
           <ArrowRight size={15} />
         </button>
+
+        {/* Burn Chat CTA — lives only here on the landing page */}
+        <button
+          onClick={onBurnChat}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: "0.5rem",
+            padding: "0.875rem 1.75rem",
+            fontSize: "0.9375rem", fontWeight: 600,
+            color: "rgba(249,115,22,0.9)",
+            background: "rgba(249,115,22,0.08)",
+            border: "1px solid rgba(249,115,22,0.22)",
+            borderRadius: "var(--r-full)",
+            cursor: "pointer",
+            letterSpacing: "-0.015em",
+            transition: "all 0.2s ease",
+            backdropFilter: "blur(4px)",
+          }}
+          onMouseOver={e => {
+            e.currentTarget.style.background = "rgba(249,115,22,0.14)";
+            e.currentTarget.style.borderColor = "rgba(249,115,22,0.38)";
+            e.currentTarget.style.color = "rgba(249,115,22,1)";
+          }}
+          onMouseOut={e => {
+            e.currentTarget.style.background = "rgba(249,115,22,0.08)";
+            e.currentTarget.style.borderColor = "rgba(249,115,22,0.22)";
+            e.currentTarget.style.color = "rgba(249,115,22,0.9)";
+          }}
+        >
+          🔥 Burn Chat
+        </button>
+
         <div style={{ flexShrink: 0 }}>
           <WakeUpButton compact />
         </div>
@@ -411,7 +442,7 @@ const LandingPage = () => {
             <HeroBadge />
             <HeroTitle />
             <HeroSubtitle />
-            <HeroCTA onLaunch={() => navigate("/app")} />
+            <HeroCTA onLaunch={() => navigate("/app")} onBurnChat={() => navigate("/burn-chat")} />
             <TrustBar />
           </div>
         </section>
