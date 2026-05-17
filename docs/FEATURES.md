@@ -1,430 +1,404 @@
-# ✨ Features Guide
+# ✨ BAR Web — Features Guide
 
-A complete breakdown of everything BAR Web can do.
+> A complete, easy-to-read breakdown of everything BAR Web can do.
 
 ---
 
-## 🔐 Security Features
+## 📋 Table of Contents
+
+1. [🔥 Burn Chat](#-burn-chat) ← New!
+2. [🔐 Security](#-security)
+3. [📦 Sharing Modes](#-sharing-modes)
+4. [⏱️ Self-Destruct](#️-self-destruct)
+5. [🔔 Webhook Notifications](#-webhook-notifications)
+6. [📧 Email 2FA / OTP](#-email-2fa--otp)
+7. [🎨 File Preview](#-file-preview)
+8. [🔄 Smart Refresh Control](#-smart-refresh-control)
+9. [🚀 Wake Server](#-wake-server)
+10. [🎯 Use Cases](#-use-cases)
+11. [🔒 Best Practices](#-best-practices)
+12. [📊 Tech Stack](#-tech-stack)
+
+---
+
+## 🔥 Burn Chat
+
+> **Real-time ephemeral messaging. When the timer hits zero — the entire room, all messages, everyone in it — gone forever.**
+
+### How It Works
+
+```
+Creator visits /burn-chat
+        ↓
+Sets a timer (5 min – 24 hr)
+        ↓
+Gets a shareable link + secret Creator PIN
+        ↓
+Shares link with participants
+        ↓
+Everyone joins, chats in real time
+        ↓
+Timer expires → 💥 Session permanently destroyed
+```
+
+### Key Features
+
+| Feature | Details |
+|---|---|
+| ⚡ Real-Time | WebSocket-powered — messages appear instantly |
+| 💣 Auto-Destruct | Timer is set at creation. No extensions, no mercy |
+| 👑 Creator PIN | One-time PIN shown at creation. Grants moderator role |
+| 🚫 Zero Persistence | Nothing written to disk or database. Memory only |
+| 🔗 Shareable Link | Share the `/chat/:token` link with anyone |
+| 🔥 Burn Animation | Dramatic visual when session is destroyed |
+| ⚠️ Urgent Warning | Red warning bar when < 60 seconds remain |
+
+### Timer Options
+
+| Preset | Good For |
+|---|---|
+| 5 minutes | Quick one-time codes or secrets |
+| 15 minutes | Short private conversations |
+| 1 hour | Team check-ins or brief meetings |
+| 24 hours | Day-long project discussions |
+| Custom | Any duration from 30 seconds to 72 hours |
+
+### What "Zero Persistence" Actually Means
+
+- ✅ Messages are held **in server RAM only** — never written to a file or database row
+- ✅ Session expires → memory is freed → data is unrecoverable by anyone, including us
+- ✅ No logs, no audit trails, no history
+- ❌ Not end-to-end encrypted (messages are decrypted on the server for relay) — use for ephemeral convenience, not classified secrets
+
+### Joining a Session
+
+1. Open the shared link (`/chat/:token`)
+2. Enter a display name
+3. Optional: check "I'm the creator" and enter your PIN to claim the moderator role
+4. Press Join → start chatting
+
+---
+
+## 🔐 Security
 
 ### AES-256 Encryption
-**What:** Military-grade encryption  
-**Why:** Same tech banks and governments use  
-**How:** Your files are scrambled into unreadable noise without the password
 
-**Key Details:**
-- 2^256 possible keys (more than atoms in the universe)
-- PBKDF2 with 100,000 iterations (slows down hackers)
-- HMAC signatures prevent tampering
+The gold standard for symmetric encryption — the same algorithm used by banks, governments, and intelligence agencies.
 
-**Translation:** Breaking this encryption would take longer than the universe has existed. You're safe. 🛡️
+| Detail | Value |
+|---|---|
+| Algorithm | AES-256-CBC |
+| Key Derivation | PBKDF2-HMAC-SHA256 |
+| Iterations | 100,000 |
+| Tamper Detection | HMAC-SHA256 signatures |
+
+**In plain English:** 2²⁵⁶ possible keys. More combinations than atoms in the observable universe. Brute-forcing this would take longer than the age of the universe. You're safe. 🛡️
 
 ---
 
 ### Zero-Knowledge Architecture
-**What:** We literally can't read your files  
-**Why:** Encryption keys are NEVER stored  
-**How:** Keys are derived from your password in real-time
 
-**This Means:**
-- Database leak? Your files stay encrypted ✅
-- Server hack? Your files stay encrypted ✅
-- We get lazy? Your files STILL stay encrypted ✅
+We never see your data — not because we're nice, but because the architecture makes it impossible.
 
-Only the password holder can decrypt. No backdoors, no exceptions.
+- Keys are derived from your password **in real-time** and never stored
+- Database leak? Files stay encrypted ✅
+- Server breach? Files stay encrypted ✅
+- Court order? We have nothing to hand over ✅
+
+Only the person with the password can decrypt. No backdoors. No master keys.
 
 ---
 
 ### Brute-Force Protection
-**What:** Automatic lockouts for wrong passwords  
-**Why:** Stops hackers from guessing
 
-**How It Works:**
-1. Wrong password → 1 second delay
-2. 2nd wrong → 2 second delay
-3. 3rd wrong → 4 second delay
-4. 5th wrong → **60-minute lockout** 🚫
+Wrong password attempts are punished with exponentially increasing delays:
 
-**Can't bypass by:**
-- Refreshing the page
-- Re-uploading the file
-- Using a different browser
+| Attempt | Penalty |
+|---|---|
+| 1st wrong | 1-second delay |
+| 2nd wrong | 2-second delay |
+| 3rd wrong | 4-second delay |
+| 5th wrong | **60-minute lockout** 🚫 |
+
+Can't bypass by refreshing, re-uploading, or switching browsers.
+
+---
+
+### Secure Deletion
+
+When a file is deleted (expiry, view limit, or manual), it's a 3-pass wipe:
+
+1. Overwrite with random data (pass 1)
+2. Overwrite with random data (pass 2)
+3. Overwrite with zeros (pass 3)
+4. Remove database entries + file metadata
+
+**Gone is GONE.** No recovery tools will help. 💀
 
 ---
 
 ## 📦 Sharing Modes
 
-### 💾 Client-Side (.bar file)
+### 💾 Client-Side (`.bar` File)
 
-**How It Works:**
-1. File encrypted in your browser
-2. Download the `.bar` file
-3. Share it however you want
-4. Recipient uploads to decrypt
+Best for maximum privacy. The file never leaves your control.
 
-**Pros:**
-- ✅ Full control (you hold the file)
-- ✅ Works offline
-- ✅ No server dependency
-- ✅ Maximum privacy
+**Flow:** Browser encrypts → you download a `.bar` file → share it however you like → recipient uploads to decrypt
 
-**Cons:**
-- ❌ No auto-destruct
-- ❌ No view limits enforced
-- ❌ Manual sharing required
+| ✅ Pros | ❌ Cons |
+|---|---|
+| You hold the file | No auto-destruct |
+| Works offline | No view limits enforced |
+| No server dependency | Manual sharing |
+| Maximum privacy | Larger file sizes |
 
-**Best For:**
-- Long-term encrypted storage
-- Sharing with trusted people
-- Maximum paranoia mode
+**Best for:** Long-term storage, highly sensitive files, maximum paranoia.
 
 ---
 
-### 🌎 Server-Side (Link)
+### 🌐 Server-Side (Link)
 
-**How It Works:**
-1. File uploaded and stored encrypted
-2. Get a shareable link
-3. Share link + password
-4. Auto-destructs based on rules
+Best for convenience. File is stored encrypted on the server with automatic rules.
 
-**Pros:**
-- ✅ Auto-destruct timers
-- ✅ Enforced view limits
-- ✅ Webhook notifications
-- ✅ Easy link sharing
+**Flow:** Upload → get a shareable link → share link + password → auto-destructs per your rules
 
-**Cons:**
-- ❌ Requires trust in server
-- ❌ Needs internet
-- ❌ Link sharing (anyone with link can try)
+| ✅ Pros | ❌ Cons |
+|---|---|
+| Auto-destruct timers | Requires server trust |
+| Enforced view limits | Needs internet |
+| Webhook notifications | Link exposure risk |
+| QR code sharing | — |
 
-**Best For:**
-- One-time shares
-- Time-sensitive documents
-- Convenience over paranoia
+**Best for:** One-time shares, time-sensitive documents, team collaboration.
 
 ---
 
-## ⏱️ Self-Destruct Options
+## ⏱️ Self-Destruct
 
-### Time-Based Expiration
+### Time-Based Expiry
 
-**Options:**
-- 5 minutes
-- 1 hour
-- 24 hours
-- 7 days
-- Custom (any duration)
+Set a window. When time's up, the file is permanently deleted — even if nobody viewed it.
 
-**When It Triggers:**
-- File is **permanently deleted** after time expires
-- Even if not viewed
-- No recovery possible
+**Presets:** 5 min · 1 hr · 24 hrs · 7 days · Custom (any duration)
 
-**Use Cases:**
-- Temporary passwords (5-30 min)
-- Event tickets (24 hours)
-- Contracts (7 days review period)
+**Use cases:**
+- Temporary passwords → 5–30 minutes
+- Event passes → 24 hours
+- Contract review periods → 7 days
 
 ---
 
 ### View-Based Limits
 
-**Options:**
-- 1 view (burn after reading!)
-- 5 views
-- 10 views
-- 100 views
-- Unlimited
+Each successful decrypt counts as one view. Hit the limit → file is deleted.
 
-**How It Works:**
-- Each successful decrypt = 1 view used
-- Wrong password attempts don't count
-- After limit → 💥 Auto-deleted
+**Options:** 1 · 5 · 10 · 100 · Unlimited
 
-**Use Cases:**
-- One-time secrets (1 view)
-- Team documents (5-10 views)
-- Public shares with limits (100 views)
+> 💡 Wrong password attempts don't count as views.
+
+**Use cases:**
+- One-time secrets → 1 view
+- Team documents → 5–10 views
+- Public shares with a cap → 100 views
 
 ---
 
 ## 🔔 Webhook Notifications
 
-**What:** Get pinged when someone interacts with your file
+Get pinged in real-time when someone interacts with your file.
 
-**Supported Platforms:**
-- Discord
-- Slack
-- Any custom HTTPS endpoint
+**Supported platforms:** Discord · Slack · Any HTTPS endpoint
 
-**Events:**
-- ✅ File accessed successfully
-- ❌ Wrong password entered
-- 💥 File self-destructed
-- 🚨 Tampering detected
+**Events that trigger a notification:**
 
-**How to Set Up:**
+| Event | Emoji |
+|---|---|
+| File accessed successfully | ✅ |
+| Wrong password entered | ❌ |
+| File self-destructed | 💥 |
+| Tampering detected | 🚨 |
 
-**Discord:**
-1. Server Settings → Integrations → Webhooks
-2. Create webhook → Copy URL
-3. Paste in BAR Web "Advanced Options"
+**Setup — Discord:**
+1. Server Settings → Integrations → Webhooks → Create webhook
+2. Copy the webhook URL
+3. Paste it into BAR Web under "Advanced Options"
 
-**Slack:**
-1. Create incoming webhook
-2. Copy URL
-3. Paste in BAR Web
+**Setup — Slack:**
+1. Create an incoming webhook in your Slack workspace
+2. Copy the URL → paste into BAR Web
 
-**Example Notification:**
+**Example notification:**
 ```
-🟢 File Accessed
-File: contract.pdf
-Time: 23:15:00
-IP: 203.0.113.42
-Remaining Views: 2
+✅ File Accessed
+File: contract.pdf  |  Time: 23:15:00
+IP: 203.0.113.42    |  Views remaining: 2
 ```
 
-**Rate Limit:** Max 10 notifications per file
+> ⚠️ Rate limit: max 10 notifications per file to prevent spam.
 
 ---
 
-## 📧 2FA Email OTP
+## 📧 Email 2FA / OTP
 
-**What:** Extra security beyond password
+Add a second layer of protection beyond the password.
 
-**How It Works:**
-1. User enters password
-2. Email sent with 6-digit code
-3. User enters code
-4. File decrypts
+**Flow:**
+1. Recipient enters the correct password
+2. A 6-digit OTP is emailed to the pre-approved address
+3. Recipient enters the code
+4. File is decrypted
 
-**When to Use:**
-- Extra sensitive files
-- High-value documents
-- Paranoia level: Maximum
+**When to use it:**
+- Extra-sensitive documents (medical, legal, financial)
+- Sharing with someone you can't fully verify by password alone
+- Paranoia level: Maximum 🔐
 
-**Configuration:**
-- Email SMTP required
-- Set `REQUIRE_2FA=true` to force it globally
+**Configuration:** Set approved email addresses when sealing the file. Recipients must match exactly.
 
 ---
 
-## 🎨 Rich File Preview
+## 🎨 File Preview
 
-**Preview 50+ file types in-browser:**
+View files directly in the browser — no download required.
 
-**Images:**
-- PNG, JPG, JPEG, WebP, GIF, SVG, BMP
-
-**Videos:**
-- MP4, WebM, OGV
-
-**Documents:**
-- PDF (with zoom!)
-- TXT, MD (markdown)
-
-**Code:**
-- Python, JavaScript, JSON, HTML, CSS
-- Syntax highlighting included
-
-**Audio:**
-- MP3, WAV, OGG
-
-**Fallback:**
-- Download button for unsupported types
-
----
-
-## 🛡️ Screenshot Protection
-
-**What We Do:**
-- Dynamic watermarks (shows recipient info)
-- Blur protection (makes screenshots harder to read)
-- View limits (can't keep accessing)
-
-**What We CAN'T Do:**
-- Stop physical cameras
-- Block OS-level screenshot tools (Snipping Tool)
-- Prevent screen recording 100%
-
-**Reality:** If pixels are on screen, they can be captured. Perfect screenshot protection is impossible. Use legal agreements (NDAs) for serious stuff.
-
----
-
-## 🗑️ Secure Deletion
-
-**What:** When we delete, we REALLY delete
-
-**How:**
-- 3-pass overwrite with random data
-- File metadata wiped
-- Database entries removed
-
-**Result:** No recovery tools will save you. Gone is GONE. 💀
-
----
-
-## 🔍 File Metadata
-
-**What's Visible:**
-- File name (not encrypted)
-- File size
-- Upload timestamp
-
-**What's Hidden:**
-- File contents (encrypted)
-- Passwords (never stored)
-- Encryption keys (derived on-the-fly)
-
-**Pro Tip:** Use generic names like `document.pdf` instead of `secret_nuclear_codes.pdf`
-
----
-
-## 🚀 Wake Server Button
-
-**What:** Manually wake up sleeping backend
-
-**Why:** Free tier backends sleep after inactivity
-
-**Features:**
-- Direct backend health check
-- 30-second rate limiting (prevents spam)
-- Live countdown timer
-- Cooldown persists across refreshes
-
-**When to Use:**
-- Before uploading (ensures backend is ready)
-- After long idle periods
+| Type | Formats |
+|---|---|
+| 🖼️ Images | PNG, JPG, WebP, GIF, SVG, BMP |
+| 🎥 Video | MP4, WebM, OGV |
+| 📄 Documents | PDF (with zoom), TXT, Markdown |
+| 💻 Code | Python, JS, JSON, HTML, CSS — syntax highlighted |
+| 🎵 Audio | MP3, WAV, OGG |
+| 📁 Everything else | Download button fallback |
 
 ---
 
 ## 🔄 Smart Refresh Control
 
-**What:** Choose how page refreshes affect your view count
+Choose how page refreshes interact with your view count. Pick **one** of two modes:
 
-**Two Options (Pick One!):**
+### Mode 1 — View Refresh Threshold
 
-### View Refresh Threshold
-**What:** Prevents rapid refreshes from eating up views  
-**How:** Same user can refresh within X minutes = still counts as 1 view
+Prevents accidental refreshes from eating up views. Same user refreshing within the window = still counts as 1 view.
 
-**Options:**
-- 0 minutes (every refresh counts - default)
-- 1 minute (chill mode)
-- 5 minutes (recommended)
-- 10 minutes
-- 30 minutes
-- 1 hour (very forgiving)
+| Option | Behaviour |
+|---|---|
+| 0 min (default) | Every refresh = new view |
+| 1–5 min | Recommended for most cases |
+| 10–30 min | For reviewers who might scroll around |
+| 1 hour | Very forgiving |
 
-**Use Cases:**
-- Recipient might need to scroll or review
-- Protecting against accidental refreshes
-- Mobile users with spotty connections
-
-**Example:** Set 5 minutes → User refreshes 3 times in 4 minutes → Still counts as 1 view 🎯
+> **Example:** Set 5 min → user refreshes 3×  in 4 minutes → counts as 1 view 🎯
 
 ---
 
-### Auto-Refresh Interval
-**What:** Forces the page to reload automatically  
-**How:** Page reloads every X seconds (bye-bye file!)
+### Mode 2 — Auto-Refresh Interval
 
-**Options:**
-- 10 seconds (ruthless)
-- 30 seconds (recommended)
-- 1 minute
-- 2 minutes
-- 5 minutes (generous)
+Force the page to reload automatically, consuming a view each time.
 
-**Use Cases:**
-- Extra paranoid mode
-- Ensure file disappears when expired
-- Prevent screenshots/screen recording (kinda)
-- Time-limited access codes
+| Option | Use Case |
+|---|---|
+| 10 seconds | Extra paranoid access codes |
+| 30 seconds | Recommended for time-limited secrets |
+| 1–5 minutes | Longer review with forced expiry |
 
-**Example:** Set 30 seconds → User has 30 seconds to view → Page reloads → File might be gone 💨
+> **Example:** Set 30 sec → user has 30 seconds per view → page reloads → eventually consumed 💨
+
+> 💡 You can only enable one mode at a time.
 
 ---
 
-**Pro Tip:** You can't enable both at once (that'd be confusing). Pick based on your paranoia level! 🔐
+## 🚀 Wake Server
 
----
+The backend is hosted on Render's free tier, which spins down after 15 minutes of inactivity.
 
-## 📊 Tech Stack
+**The Wake Server button:**
+- Sends a health check ping to the backend
+- Shows a live countdown while waiting
+- Rate-limited to once per 30 seconds
+- Cooldown persists across page refreshes
 
-**Backend:**
-- FastAPI (Python web framework)
-- SQLite/PostgreSQL (database)
-- Cryptography (AES-256, PBKDF2, HMAC)
-- Uvicorn (ASGI server)
-
-**Frontend:**
-- React 18 (UI framework)
-- Vite (build tool)
-- Tailwind CSS (styling)
-- Lucide Icons (pretty icons)
-
-**Security:**
-- AES-256-CBC encryption
-- PBKDF2-HMAC-SHA256 key derivation
-- HMAC-SHA256 signatures
-- CSPRNG random generation
+**When to use it:** Before uploading a file or creating a Burn Chat session after a long idle period. Wait ~50 seconds for the server to fully wake up.
 
 ---
 
 ## 🎯 Use Cases
 
-### 1. Sharing Passwords
-- Create text file with password
-- 1 view limit + 24 hour expiration
-- Share link + password separately
-- Recipient views → 💥 Gone
+### 🔑 Sharing a Password
+- Write password to a `.txt` file
+- Upload with 1 view limit + 24 hr expiry
+- Share link and password via different channels
+- Recipient opens → reads → 💥 gone
 
-### 2. Confidential Documents
-- Upload contract/NDA
-- 7-day expiration + webhook
-- Get notified when viewed
-- Auto-delete after review period
+### 📄 Confidential Documents
+- Upload contract or NDA
+- 7-day expiry + webhook to Discord
+- Get notified when it's viewed
+- Auto-deleted after the review window
 
-### 3. Temporary Access Codes
-- OTP codes, API keys, tokens
-- 5-minute expiration
-- View once only
-- No traces left
+### 💬 Sensitive Conversation
+- Open `/burn-chat` → set 15-min timer
+- Share link privately
+- Chat with zero record
+- Session burns when done 🔥
 
-### 4. Team File Sharing
-- Design assets, presentations
-- 10 view limit
-- Track who accessed via webhooks
-- Auto-cleanup after project
+### ⏰ Temporary Access Codes
+- OTP codes, API keys, 2FA backup codes
+- 5-minute expiry + 1 view limit
+- Absolute zero trace
+
+### 👥 Team File Sharing
+- Presentations, design assets, internal docs
+- 10 view limit + webhook tracking
+- Auto-cleanup after project ends
 
 ---
 
 ## 🔒 Best Practices
 
-**Passwords:**
-- ✅ Use 12+ characters
+### Passwords
+- ✅ 12+ characters minimum
 - ✅ Mix letters, numbers, symbols
 - ✅ Use passphrases: `correct-horse-battery-staple`
-- ❌ Don't reuse from other sites
+- ❌ Don't reuse passwords from other sites
 - ❌ Don't use `Password123`
 
-**Sharing:**
-- ✅ Send link and password via different channels
-- ✅ Use expiration times
-- ✅ Set view limits
-- ❌ Don't paste both in same message
+### Sharing
+- ✅ Send the link and password via **different channels**
+- ✅ Always set an expiry time
+- ✅ Set view limits for sensitive files
+- ❌ Don't paste both link and password in the same message
 
-**File Names:**
-- ✅ Use generic names (`document.pdf`)
-- ❌ Avoid obvious names (`nuclear_codes.pdf`)
+### File Names
+- ✅ Use generic names: `document.pdf`, `notes.txt`
+- ❌ Avoid self-incriminating names: `nuclear_launch_codes.pdf`
 
-**Trust:**
-- ✅ Use client-side for max privacy
-- ✅ Use server-side for convenience
-- ✅ Run your own server for zero trust
+### Choosing a Mode
+- ✅ **Client-side** for maximum privacy (you control the file)
+- ✅ **Server-side** for convenience and auto-destruct
+- ✅ **Burn Chat** for conversations that should leave no trace
+- ✅ **Self-hosted** for zero trust in any third party
 
 ---
 
-*"Features are cool, but security is cooler."* 🔥
+## 📊 Tech Stack
+
+### Backend
+- **FastAPI** — Python web framework
+- **WebSockets** — Real-time Burn Chat connections
+- **SQLite / PostgreSQL** — Encrypted file metadata
+- **Cryptography** — AES-256, PBKDF2, HMAC
+- **Uvicorn** — ASGI server
+
+### Frontend
+- **React 18** — UI framework
+- **Vite** — Build tool
+- **Framer Motion** — Animations
+- **Lucide Icons** — Icon set
+
+### Deployment
+- **Vercel** — Frontend (CDN, global edge)
+- **Render** — Backend (Python/FastAPI)
+
+---
+
+*"Features are cool. Security is cooler. Things that disappear are coolest."* 🔥
