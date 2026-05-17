@@ -31,6 +31,7 @@ import asyncio
 from datetime import datetime, timezone, timedelta
 
 from core import database
+from services import chat_service as _chat_service
 
 logger = logging.getLogger(__name__)
 
@@ -360,6 +361,14 @@ async def run_cleanup_loop() -> None:
 
             # BAR file cleanup (async — requires DB queries).
             await cleanup_expired_bar_files()
+
+            # Burn Chat safety-net (sync — purges in-memory sessions whose
+            # background asyncio task may have crashed before destroying them).
+            _purged = _chat_service.cleanup_expired_sessions()
+            if _purged:
+                logger.info(
+                    "Safety-net: purged %d stale burn chat session(s)", _purged
+                )
 
             logger.info("Cleanup cycle complete")
 
