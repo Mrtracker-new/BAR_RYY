@@ -71,6 +71,7 @@ logs/
 .coverage
 htmlcov/
 .pytest_cache/
+backend/tests/
 
 # OS
 Thumbs.db
