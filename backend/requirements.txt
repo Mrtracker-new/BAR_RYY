@@ -1,5 +1,6 @@
 fastapi==0.115.6
 uvicorn==0.34.0
+websockets==16.0
 python-multipart==0.0.20
 cryptography==44.0.0
 pydantic==2.10.6
