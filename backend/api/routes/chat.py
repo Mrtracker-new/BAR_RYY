@@ -19,7 +19,7 @@ Server → Client:
     {"type": "countdown",  "seconds_remaining": int}
     {"type": "system",     "text": "...", "participant_count": int}
     {"type": "destroyed"}
-    {"type": "error",      "text": "..."}
+    {"type": "error",      "text": "...", "code": "..."}
     {"type": "pong"}
 
 Connection handshake
@@ -32,10 +32,18 @@ must be a join frame:
 
 If the join frame is malformed or the session is not found / full, the
 server sends an error and closes the connection.
+
+PIN brute-force protection
+---------------------------
+Failed PIN attempts are tracked per (client_ip, session_token) pair.  After
+``CHAT_PIN_MAX_FAILURES`` (default 3) failures in a ``CHAT_PIN_WINDOW_SECS``
+(default 600 s) window the IP is locked out and receives close code 4029.
+Configure via environment variables; see chat_service._PinRateLimiter.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 
@@ -141,38 +149,47 @@ async def chat_websocket(token: str, websocket: WebSocket):
 
     Lifecycle
     ---------
-    1.  Accept the connection.
-    2.  Wait for the client's ``{"type": "join", ...}`` handshake frame.
-    3.  Register the participant (verify PIN for creator role).
-    4.  Relay ``{"type": "send", "text": "..."}`` frames as broadcast messages.
-    5.  Handle ``{"type": "ping"}`` keepalives.
-    6.  On disconnect, remove the participant and notify others.
-    7.  The background countdown task delivers ``destroyed`` events directly;
-        this handler does not need to manage session expiry.
+    1.  Token format validation — cheapest guard, runs before accept.
+    2.  Extract real client IP from ASGI scope.
+    2.5 WS connection rate limit check — rejected before accept so no slot is consumed.
+    3.  Accept the connection.
+    4.  Wait for ``{"type": "join", ...}`` handshake frame (10-second timeout).
+    5.  PIN rate-limit pre-check, then join_session dispatch.
+    6.  Message relay loop, keepalive pong, graceful disconnect.
 
     Security
     --------
-    *  Basic token format validation before any async work.
-    *  The join frame must be received within 10 seconds or the connection
-       is closed (prevents slow-loris style connection exhaustion).
-    *  All message text is HTML-escaped inside ``chat_service.broadcast_message``.
+    *  Invalid tokens dropped before accept.
+    *  Per-IP WS connection rate limit: CHAT_WS_CONNECT_LIMIT / CHAT_WS_CONNECT_WINDOW_SECS (default 10/60 s).
+    *  Real client IP resolved by ProxyHeadersMiddleware before this handler runs.
+    *  PIN brute-force: CHAT_PIN_MAX_FAILURES failures → close 4029.
+    *  10-second join-frame timeout prevents slow-loris connection exhaustion.
+    *  Message text HTML-escaped; payloads capped before allocation.
     """
-    # Basic format guard before accepting.
     if len(token) != 36 or not all(c in "0123456789abcdef-" for c in token.lower()):
         await websocket.close(code=4004, reason="Invalid session token")
         return
 
+    client_ip: str = websocket.client.host if websocket.client else "unknown"
+
+    if not security.check_ws_rate_limit(client_ip):
+        await websocket.close(code=4029, reason="Connection rate limit exceeded")
+        return
+
     await websocket.accept()
 
-    # ── Handshake ──────────────────────────────────────────────────────────
+    # ── 4 – 6. Handshake ─────────────────────────────────────────────
     try:
-        # Give the client 10 seconds to send the join frame.
-        import asyncio as _asyncio
+        # ── 4. Wait for join frame (10-second timeout) ───────────────────
         try:
-            raw = await _asyncio.wait_for(websocket.receive_json(), timeout=10.0)
-        except _asyncio.TimeoutError:
+            raw = await asyncio.wait_for(websocket.receive_json(), timeout=10.0)
+        except asyncio.TimeoutError:
             await websocket.send_json(
-                {"type": "error", "text": "Join timeout — send {type:join} within 10 s"}
+                {
+                    "type": "error",
+                    "text": "Join timeout — send {type:join} within 10 s",
+                    "code": "join_timeout",
+                }
             )
             await websocket.close(code=4008, reason="Join timeout")
             return
@@ -182,35 +199,113 @@ async def chat_websocket(token: str, websocket: WebSocket):
                 {
                     "type": "error",
                     "text": 'Expected {"type": "join", "display_name": "..."}',
+                    "code": "bad_handshake",
                 }
             )
             await websocket.close(code=4003, reason="Invalid handshake")
             return
 
-        display_name = str(raw.get("display_name", "")).strip() or "Anonymous"
-        pin = raw.get("pin")  # May be None for regular participants.
+        # ── Parse display_name ────────────────────────────────────────
+        # Cap early so a multi-MB display_name does not allocate a huge string
+        # before _safe_text() in join_session gets a chance to truncate it.
+        raw_name = str(raw.get("display_name", ""))[: chat_service.MAX_NAME_LENGTH + 20]
+        display_name = raw_name.strip() or "Anonymous"
 
-        participant = await chat_service.join_session(
+        # ── Parse and normalise PIN ───────────────────────────────────
+        # A PIN of None / empty string means “join as regular participant”.
+        # Normalise here (strip + uppercase) so join_session can do a direct
+        # compare_digest without re-normalising (avoids any theoretical
+        # unicode-canonicalisation bypass with unusual whitespace).
+        raw_pin: str | None = raw.get("pin") or None
+        pin: str | None = None
+        if raw_pin is not None:
+            # Cap to 20 chars before any Python string operation to prevent
+            # an attacker from sending a kilobyte-long pin field.
+            pin = str(raw_pin)[:20].strip().upper() or None
+
+        # ── 5. PIN rate-limit pre-check ───────────────────────────────
+        # Check the rate limiter BEFORE calling join_session so that the
+        # presence or absence of a rate-limit error cannot be used as a
+        # timing oracle to confirm a correct PIN guess.
+        if pin is not None and chat_service.is_pin_rate_limited(client_ip, token):
+            logger.warning(
+                "WS PIN rate-limit hit — token=%s… ip=%s (pre-join block)",
+                token[:8],
+                client_ip,
+            )
+            await websocket.send_json(
+                {
+                    "type": "error",
+                    "text": (
+                        "Too many failed PIN attempts from your IP address. "
+                        "This session is locked — try again later."
+                    ),
+                    "code": "pin_rate_limited",
+                }
+            )
+            await websocket.close(code=4029, reason="PIN rate limit exceeded")
+            return
+
+        # ── 6. Attempt to join ────────────────────────────────────────
+        participant, status = await chat_service.join_session(
             token=token,
             ws=websocket,
             display_name=display_name,
             pin=pin,
         )
 
-        if participant is None:
+        # ── Handle join outcome ───────────────────────────────────────
+        if status == chat_service.JoinStatus.PIN_INVALID:
+            # Record the failure AFTER join_session returns so that only
+            # genuine attempts against a real session are counted (frames
+            # that fail earlier — bad format, unknown token, etc. — do not
+            # consume PIN quota).
+            failures, remaining = chat_service.record_pin_failure(client_ip, token)
+            logger.warning(
+                "Invalid creator PIN — token=%s… ip=%s failures=%d remaining=%d",
+                token[:8],
+                client_ip,
+                failures,
+                remaining,
+            )
+            if remaining > 0:
+                error_text = (
+                    f"Incorrect creator PIN. "
+                    f"{remaining} attempt{'s' if remaining != 1 else ''} remaining "
+                    "before your IP is locked out of this session."
+                )
+            else:
+                error_text = (
+                    "Incorrect creator PIN. "
+                    "Your IP is now locked out of this session — try again later."
+                )
+            await websocket.send_json(
+                {"type": "error", "text": error_text, "code": "pin_invalid"}
+            )
+            await websocket.close(code=4003, reason="Invalid PIN")
+            return
+
+        if status != chat_service.JoinStatus.OK:
+            # SESSION_NOT_FOUND or SESSION_FULL — keep the message vague to
+            # avoid leaking which condition triggered the rejection.
             await websocket.send_json(
                 {
                     "type": "error",
                     "text": "Session not found, expired, or full.",
+                    "code": "session_unavailable",
                 }
             )
             await websocket.close(code=4004, reason="Session unavailable")
             return
 
+        ws_id: str = participant.ws_id
+
     except WebSocketDisconnect:
         return
     except Exception:
-        logger.exception("Unexpected error during WS handshake for token=%s…", token[:8])
+        logger.exception(
+            "Unexpected error during WS handshake for token=%s…", token[:8]
+        )
         try:
             await websocket.close(code=4000, reason="Server error")
         except Exception:
@@ -236,7 +331,7 @@ async def chat_websocket(token: str, websocket: WebSocket):
                 if text:
                     await chat_service.broadcast_message(
                         token=token,
-                        ws=websocket,
+                        ws_id=ws_id,
                         text=text,
                     )
 
@@ -253,4 +348,4 @@ async def chat_websocket(token: str, websocket: WebSocket):
             "Unexpected error in WS message loop for token=%s…", token[:8]
         )
     finally:
-        await chat_service.leave_session(token=token, ws=websocket)
+        await chat_service.leave_session(token=token, ws_id=ws_id)
