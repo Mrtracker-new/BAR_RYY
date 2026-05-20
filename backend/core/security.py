@@ -158,6 +158,44 @@ def check_rate_limit_keyed(key: str, limit: int = 60, window_seconds: int = 60) 
     rate_limit_storage[key].append(current_time)
 
 
+_WS_CONNECT_LIMIT: int = int(os.getenv("CHAT_WS_CONNECT_LIMIT", "10"))
+_WS_CONNECT_WINDOW: int = int(os.getenv("CHAT_WS_CONNECT_WINDOW_SECS", "60"))
+
+
+def check_ws_rate_limit(
+    client_ip: str,
+    limit: int = _WS_CONNECT_LIMIT,
+    window_seconds: int = _WS_CONNECT_WINDOW,
+) -> bool:
+    """
+    Non-raising WebSocket connection rate limiter.
+
+    Returns True (connection permitted) or False (limit exceeded).
+    Uses the ``ws_connect:`` key prefix so WS counts are tracked
+    independently from HTTP endpoint budgets in ``rate_limit_storage``.
+
+    Falls through (returns True) when *client_ip* is unknown or empty —
+    better to allow the connection than to block legitimate users behind
+    proxies that do not forward the real IP.
+
+    Configure via environment variables:
+        CHAT_WS_CONNECT_LIMIT        — max connections per window (default 10)
+        CHAT_WS_CONNECT_WINDOW_SECS  — sliding window in seconds (default 60)
+    """
+    if not client_ip or client_ip == "unknown":
+        return True
+
+    key = f"ws_connect:{client_ip}"
+    now = datetime.now()
+    cutoff = now - timedelta(seconds=window_seconds)
+    rate_limit_storage[key] = [ts for ts in rate_limit_storage[key] if ts > cutoff]
+
+    if len(rate_limit_storage[key]) >= limit:
+        logger.warning("WS connect rate limit exceeded ip=%s", client_ip)
+        return False
+
+    rate_limit_storage[key].append(now)
+    return True
 
 
 def check_password_brute_force(client_ip: str, resource_id: str = None) -> tuple[bool, int, str]:
