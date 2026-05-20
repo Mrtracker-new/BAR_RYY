@@ -205,28 +205,14 @@ async def chat_websocket(token: str, websocket: WebSocket):
             await websocket.close(code=4003, reason="Invalid handshake")
             return
 
-        # ── Parse display_name ────────────────────────────────────────
-        # Cap early so a multi-MB display_name does not allocate a huge string
-        # before _safe_text() in join_session gets a chance to truncate it.
-        raw_name = str(raw.get("display_name", ""))[: chat_service.MAX_NAME_LENGTH + 20]
+        raw_name = str(raw.get("display_name", ""))[: chat_service.MAX_NAME_LENGTH + 10]
         display_name = raw_name.strip() or "Anonymous"
 
-        # ── Parse and normalise PIN ───────────────────────────────────
-        # A PIN of None / empty string means “join as regular participant”.
-        # Normalise here (strip + uppercase) so join_session can do a direct
-        # compare_digest without re-normalising (avoids any theoretical
-        # unicode-canonicalisation bypass with unusual whitespace).
         raw_pin: str | None = raw.get("pin") or None
         pin: str | None = None
         if raw_pin is not None:
-            # Cap to 20 chars before any Python string operation to prevent
-            # an attacker from sending a kilobyte-long pin field.
             pin = str(raw_pin)[:20].strip().upper() or None
 
-        # ── 5. PIN rate-limit pre-check ───────────────────────────────
-        # Check the rate limiter BEFORE calling join_session so that the
-        # presence or absence of a rate-limit error cannot be used as a
-        # timing oracle to confirm a correct PIN guess.
         if pin is not None and chat_service.is_pin_rate_limited(client_ip, token):
             logger.warning(
                 "WS PIN rate-limit hit — token=%s… ip=%s (pre-join block)",
@@ -327,7 +313,7 @@ async def chat_websocket(token: str, websocket: WebSocket):
             msg_type = data.get("type", "")
 
             if msg_type == "send":
-                text = str(data.get("text", "")).strip()
+                text = str(data.get("text", ""))[: chat_service.MAX_MESSAGE_LENGTH + 10].strip()
                 if text:
                     await chat_service.broadcast_message(
                         token=token,
