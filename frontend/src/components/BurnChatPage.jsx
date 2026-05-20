@@ -154,6 +154,7 @@ export default function BurnChatPage({ token }) {
   const wsRef      = useRef(null);
   const bottomRef  = useRef(null);
   const countRef   = useRef(null); // local countdown interval
+  const joinedRef  = useRef(false); // true once the server confirms join
 
   const shareUrl = `${window.location.origin}/chat/${token}`;
 
@@ -174,8 +175,12 @@ export default function BurnChatPage({ token }) {
   const handleJoin = useCallback((name, pin) => {
     setJoinError(null);
     setMyName(name);
+    // Reset the join-phase tracker so each new connection attempt starts fresh.
+    joinedRef.current = false;
 
-    const wsBase = (import.meta.env.VITE_BACKEND_URL || window.location.origin).replace(/^http/, 'ws');
+    const wsBase = (import.meta.env.VITE_BACKEND_URL || window.location.origin)
+      .replace(/^https/, 'wss')
+      .replace(/^http(?!s)/, window.location.protocol === 'https:' ? 'wss' : 'ws');
     const ws = new WebSocket(`${wsBase}/chat/${token}/ws`);
     wsRef.current = ws;
 
@@ -189,6 +194,7 @@ export default function BurnChatPage({ token }) {
 
       switch (data.type) {
         case 'joined':
+          joinedRef.current = true;
           setIsCreator(data.is_creator);
           setSecsLeft(data.seconds_remaining);
           setParticipants(data.participant_count);
@@ -209,7 +215,14 @@ export default function BurnChatPage({ token }) {
           setPhase('burning');
           break;
         case 'error':
-          setWsError(data.text);
+          // Before the 'joined' confirmation, errors belong to the join
+          // screen (e.g. invalid PIN, rate limit).  After joining, they
+          // belong to the chat error banner.
+          if (!joinedRef.current) {
+            setJoinError(data.text);
+          } else {
+            setWsError(data.text);
+          }
           break;
         case 'pong':
           break;
@@ -218,8 +231,20 @@ export default function BurnChatPage({ token }) {
 
     ws.onerror = () => setJoinError('Could not connect — session may have expired.');
     ws.onclose = (ev) => {
-      if (ev.code === 4004) setJoinError('Session not found or expired.');
-      else if (ev.code === 4003) setJoinError('Invalid handshake. Please refresh.');
+      // Only update joinError when we haven't completed the join handshake
+      // yet — post-join closes are handled by the destroyed / wsError flow.
+      if (joinedRef.current) return;
+      if (ev.code === 4004) {
+        setJoinError('Session not found or expired.');
+      } else if (ev.code === 4029) {
+        setJoinError('Too many failed PIN attempts — your IP is locked out of this session.');
+      } else if (ev.code === 4003) {
+        // 4003 covers both bad-handshake and invalid-PIN; the server sends
+        // an error frame with the specific message before closing, so
+        // joinError is usually already set by the 'error' message handler.
+        // This fallback covers rare edge cases (e.g. frame lost).
+        if (!joinError) setJoinError('Connection rejected — check your PIN and try again.');
+      }
     };
   }, [token, addSysMsg]);
 
