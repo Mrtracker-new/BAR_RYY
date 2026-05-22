@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Flame, Send, Users, Copy, CheckCircle2, Shield, AlertTriangle, ArrowLeft } from 'lucide-react';
+import { copyToClipboard } from '../utils/clipboard';
 import BurningAnimation from './BurningAnimation';
 import SEO from './SEO';
 
@@ -178,7 +179,8 @@ export default function BurnChatPage({ token }) {
   const [joinError, setJoinError]     = useState(null);
   const [wsError, setWsError]         = useState(null);
   const [copied, setCopied]           = useState(false);
-  const [reconnecting, setReconnecting] = useState(0); // attempt number, 0 = not reconnecting
+  const [copyFailed, setCopyFailed]   = useState(false);
+  const [reconnecting, setReconnecting] = useState(0);
 
   const wsRef         = useRef(null);
   const bottomRef     = useRef(null);
@@ -335,7 +337,17 @@ export default function BurnChatPage({ token }) {
     setInput('');
   };
 
-  const copy = () => { navigator.clipboard.writeText(shareUrl); setCopied(true); setTimeout(()=>setCopied(false),2000); };
+  const copy = async () => {
+    const ok = await copyToClipboard(shareUrl);
+    if (ok) {
+      setCopied(true);
+      setCopyFailed(false);
+      setTimeout(() => setCopied(false), 2000);
+    } else {
+      setCopyFailed(true);
+      setTimeout(() => setCopyFailed(false), 4000);
+    }
+  };
 
   /* ── Phases ────────────────────────────────────────────── */
   if (phase === 'join') return <JoinScreen token={token} onJoin={handleJoin} error={joinError} />;
@@ -389,13 +401,21 @@ export default function BurnChatPage({ token }) {
             )}
 
             {/* Copy link */}
-            <button onClick={copy} style={{ width:28, height:28, borderRadius:'0.375rem', background:'rgba(255,255,255,0.04)', border:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', color:copied?T.green:T.textS }}>
-              {copied ? <CheckCircle2 size={13} /> : <Copy size={13} />}
+            <button onClick={copy} title="Copy share link" style={{ width:28, height:28, borderRadius:'0.375rem', background:'rgba(255,255,255,0.04)', border:`1px solid ${copyFailed ? 'rgba(239,68,68,0.4)' : T.border}`, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', color:copied ? T.green : copyFailed ? T.red : T.textS }}>
+              {copied ? <CheckCircle2 size={13} /> : copyFailed ? <AlertTriangle size={13} /> : <Copy size={13} />}
             </button>
           </div>
         </div>
 
-        {/* Warning bar when < 60s */}
+        {/* Copy-failed toast */}
+        {copyFailed && (
+          <div style={{ flexShrink:0, padding:'0.4rem 1rem', background:'rgba(239,68,68,0.07)', borderBottom:'1px solid rgba(239,68,68,0.15)', display:'flex', alignItems:'center', gap:'0.5rem' }}>
+            <AlertTriangle size={13} style={{ color:T.red, flexShrink:0 }} />
+            <p style={{ fontSize:'0.8125rem', color:'#fca5a5' }}>Copy failed — please select and copy the link manually.</p>
+          </div>
+        )}
+
+        {/* Warning bar when &lt; 60s */}
         {urgent && secsLeft > 0 && (
           <div style={{ flexShrink:0, padding:'0.5rem 1rem', background:'rgba(239,68,68,0.08)', borderBottom:'1px solid rgba(239,68,68,0.15)', display:'flex', alignItems:'center', gap:'0.5rem' }}>
             <AlertTriangle size={13} style={{ color:T.red }} />
