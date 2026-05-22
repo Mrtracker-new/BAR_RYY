@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -57,6 +58,22 @@ from services import chat_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _valid_session_token(token: str) -> bool:
+    """
+    Return True only when *token* is a well-formed UUID v4 string.
+
+    Rejects structurally invalid values that the previous character-set guard
+    accepted: nil UUIDs, dash-only strings, wrong UUID versions, etc.
+    """
+    try:
+        parsed = uuid.UUID(token, version=4)
+        # uuid.UUID silently normalises some inputs, so round-trip the
+        # canonical form to catch things like uppercase letters or extra chars.
+        return str(parsed) == token
+    except ValueError:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -120,8 +137,7 @@ async def get_chat_info(req: Request, token: str):
     """
     security.check_rate_limit(req, limit=30)
 
-    # Basic token format guard (UUIDs are 36 chars).
-    if len(token) != 36 or not all(c in "0123456789abcdef-" for c in token.lower()):
+    if not _valid_session_token(token):
         raise HTTPException(status_code=404, detail="Session not found")
 
     info = chat_service.session_info(token)
@@ -166,7 +182,7 @@ async def chat_websocket(token: str, websocket: WebSocket):
     *  10-second join-frame timeout prevents slow-loris connection exhaustion.
     *  Message text HTML-escaped; payloads capped before allocation.
     """
-    if len(token) != 36 or not all(c in "0123456789abcdef-" for c in token.lower()):
+    if not _valid_session_token(token):
         await websocket.close(code=4004, reason="Invalid session token")
         return
 
