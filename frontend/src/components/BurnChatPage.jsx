@@ -23,6 +23,34 @@ function timerColor(secs) {
   return T.red;
 }
 
+/**
+ * Build a WebSocket base URL from the configured backend origin.
+ *
+ * Security guarantee: if the *page* is served over https://, the returned URL
+ * always uses wss:// — even when VITE_BACKEND_URL is set to an http:// value.
+ * This prevents a misconfigured staging/CI environment from silently
+ * downgrading an https page to an unencrypted ws:// connection.
+ *
+ * @param {string} [backendUrl] - Override for testing; defaults to VITE_BACKEND_URL
+ *                                or window.location.origin.
+ * @param {string} [pageProtocol] - Override for testing; defaults to
+ *                                  window.location.protocol.
+ * @returns {string} Base URL with wss:// or ws:// scheme, no trailing slash.
+ */
+export function resolveWsUrl(
+  backendUrl  = import.meta.env.VITE_BACKEND_URL || window.location.origin,
+  pageProtocol = window.location.protocol,
+) {
+  const origin = backendUrl.replace(/\/+$/, '');   // strip trailing slashes
+  const pageIsSecure = pageProtocol === 'https:';
+
+  // Replace the HTTP scheme with the appropriate WS scheme.
+  // Always upgrade to wss:// when the page itself is secure.
+  return origin
+    .replace(/^https:\/\//, 'wss://')
+    .replace(/^http:\/\//, pageIsSecure ? 'wss://' : 'ws://');
+}
+
 function relTime(iso) {
   const diff = Math.floor((Date.now() - new Date(iso)) / 1000);
   if (diff < 5)  return 'just now';
@@ -178,9 +206,7 @@ export default function BurnChatPage({ token }) {
     // Reset the join-phase tracker so each new connection attempt starts fresh.
     joinedRef.current = false;
 
-    const wsBase = (import.meta.env.VITE_BACKEND_URL || window.location.origin)
-      .replace(/^https/, 'wss')
-      .replace(/^http(?!s)/, window.location.protocol === 'https:' ? 'wss' : 'ws');
+    const wsBase = resolveWsUrl();
     const ws = new WebSocket(`${wsBase}/chat/${token}/ws`);
     wsRef.current = ws;
 
