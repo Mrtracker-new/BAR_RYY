@@ -198,6 +198,40 @@ def check_ws_rate_limit(
     return True
 
 
+#: Keys are considered stale after this many seconds with no activity.
+#: Must be >= the longest window used by any rate limiter in this module.
+_RATE_LIMIT_STALE_AGE: int = int(os.getenv("RATE_LIMIT_STALE_AGE_SECS", "300"))
+
+
+def cleanup_rate_limit_storage(max_age_seconds: int = _RATE_LIMIT_STALE_AGE) -> dict[str, int]:
+    """
+    Evict stale keys from all in-process rate-limit and brute-force stores.
+
+    A key is stale when every timestamp it holds is older than
+    *max_age_seconds*.  Keys that still contain at least one recent timestamp
+    are left intact so active rate-limit windows are not disrupted.
+
+    This should be called periodically (e.g. every 5–10 minutes) to prevent
+    unbounded memory growth from IPs that connected once and never returned.
+
+    Returns a dict with ``{"rate_limit": n, "password_attempts": m}`` — the
+    number of keys removed from each store — so the caller can log the result.
+    """
+    cutoff = datetime.now() - timedelta(seconds=max_age_seconds)
+
+    def _evict(store: dict) -> int:
+        stale = [k for k, timestamps in list(store.items())
+                 if timestamps and timestamps[-1] < cutoff]
+        for k in stale:
+            del store[k]
+        return len(stale)
+
+    removed_rl = _evict(rate_limit_storage)
+    removed_pa = _evict(password_attempts)
+
+    return {"rate_limit": removed_rl, "password_attempts": removed_pa}
+
+
 def check_password_brute_force(client_ip: str, resource_id: str = None) -> tuple[bool, int, str]:
     """
     Check if IP is locked out due to too many failed password attempts.
