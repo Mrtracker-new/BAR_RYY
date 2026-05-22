@@ -7,6 +7,7 @@ import {
   Loader, ArrowRight, Shield, ArrowLeft, Zap, Lock, PackageOpen,
 } from 'lucide-react';
 import SEO from './SEO';
+import { copyToClipboard } from '../utils/clipboard';
 
 /* ── Design tokens ───────────────────────────────────────────── */
 const T = {
@@ -307,13 +308,20 @@ function CreateCard({ onCreated }) {
 
 /* ── Result card ─────────────────────────────────────────────── */
 function ResultCard({ result, ttlSeconds }) {
-  const [copied, setCopied] = useState('');
+  const [copied, setCopied]         = useState('');
+  const [copyFailed, setCopyFailed] = useState(false);
   const shareUrl = `${window.location.origin}/chat/${result.token}`;
 
-  const copy = (text, key) => {
-    navigator.clipboard.writeText(text);
-    setCopied(key);
-    setTimeout(() => setCopied(''), 2000);
+  const copy = async (text, key) => {
+    const ok = await copyToClipboard(text);
+    if (ok) {
+      setCopied(key);
+      setCopyFailed(false);
+      setTimeout(() => setCopied(''), 2000);
+    } else {
+      setCopyFailed(true);
+      setTimeout(() => setCopyFailed(false), 4000);
+    }
   };
 
   return (
@@ -369,16 +377,17 @@ function ResultCard({ result, ttlSeconds }) {
             </span>
             <button
               onClick={() => copy(result.creator_pin, 'pin')}
+              title="Copy PIN"
               style={{
                 marginLeft: 'auto', width: 32, height: 32, borderRadius: '0.5rem',
-                background: copied === 'pin' ? 'rgba(34,197,94,0.1)' : 'rgba(249,115,22,0.1)',
-                border: `1px solid ${copied === 'pin' ? 'rgba(34,197,94,0.2)' : 'rgba(249,115,22,0.2)'}`,
+                background: copied === 'pin' ? 'rgba(34,197,94,0.1)' : copyFailed ? 'rgba(239,68,68,0.08)' : 'rgba(249,115,22,0.1)',
+                border: `1px solid ${copied === 'pin' ? 'rgba(34,197,94,0.2)' : copyFailed ? 'rgba(239,68,68,0.2)' : 'rgba(249,115,22,0.2)'}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: 'pointer', color: copied === 'pin' ? T.green : T.orange,
+                cursor: 'pointer', color: copied === 'pin' ? T.green : copyFailed ? T.red : T.orange,
                 transition: 'all 0.2s',
               }}
             >
-              {copied === 'pin' ? <CheckCircle2 size={13} /> : <Copy size={13} />}
+              {copied === 'pin' ? <CheckCircle2 size={13} /> : copyFailed ? <AlertCircle size={13} /> : <Copy size={13} />}
             </button>
           </div>
           <p style={{ fontSize: '0.6875rem', color: T.textS, marginTop: '0.5rem' }}>
@@ -408,19 +417,28 @@ function ResultCard({ result, ttlSeconds }) {
             />
             <button
               onClick={() => copy(shareUrl, 'url')}
+              title="Copy share link"
               style={{
                 flexShrink: 0, width: 30, height: 30, borderRadius: '0.5rem',
-                background: copied === 'url' ? 'rgba(34,197,94,0.08)' : 'rgba(232,160,32,0.08)',
-                border: `1px solid ${copied === 'url' ? 'rgba(34,197,94,0.18)' : 'rgba(232,160,32,0.18)'}`,
+                background: copied === 'url' ? 'rgba(34,197,94,0.08)' : copyFailed ? 'rgba(239,68,68,0.08)' : 'rgba(232,160,32,0.08)',
+                border: `1px solid ${copied === 'url' ? 'rgba(34,197,94,0.18)' : copyFailed ? 'rgba(239,68,68,0.18)' : 'rgba(232,160,32,0.18)'}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: 'pointer', color: copied === 'url' ? T.green : T.gold,
+                cursor: 'pointer', color: copied === 'url' ? T.green : copyFailed ? T.red : T.gold,
                 transition: 'all 0.2s',
               }}
             >
-              {copied === 'url' ? <CheckCircle2 size={12} /> : <Copy size={12} />}
+              {copied === 'url' ? <CheckCircle2 size={12} /> : copyFailed ? <AlertCircle size={12} /> : <Copy size={12} />}
             </button>
           </div>
         </div>
+
+        {/* Copy-failed toast */}
+        {copyFailed && (
+          <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.625rem 0.875rem', borderRadius:'0.625rem', background:'rgba(239,68,68,0.07)', border:'1px solid rgba(239,68,68,0.15)' }}>
+            <AlertCircle size={13} style={{ color: T.red, flexShrink: 0 }} />
+            <p style={{ fontSize:'0.8125rem', color:'#fca5a5' }}>Copy failed — please select and copy the link manually.</p>
+          </div>
+        )}
 
         {/* Open button */}
         <a
