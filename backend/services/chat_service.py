@@ -333,6 +333,13 @@ async def _countdown_loop(token: str, session: _ChatSession) -> None:
       - Every 10 s when more than 60 s remain.
       - Every 1 s when ≤ 60 s remain (so the UI can animate a smooth timer).
 
+    Remaining time is always computed from ``session.expires_at - now`` so
+    that event-loop contention and GC pauses do not accumulate into drift.
+
+    The sleep floor of 0.05 s prevents a tight spin loop in the degenerate
+    case where ``remaining`` drifts to a positive value smaller than the
+    normal interval (e.g. after a GC pause in the last 1-second tick).
+
     Calls ``_destroy_session`` when the TTL expires.
     """
     try:
@@ -343,24 +350,22 @@ async def _countdown_loop(token: str, session: _ChatSession) -> None:
             if remaining <= 0:
                 break
 
-            # Sleep until the next tick.
             interval = 1.0 if remaining <= 60 else 10.0
-            await asyncio.sleep(min(interval, max(remaining, 0)))
+            sleep_for = max(0.05, min(interval, remaining))
+            await asyncio.sleep(sleep_for)
 
-            # Recompute after sleep.
-            now = datetime.now(timezone.utc)
-            remaining = max(0.0, (session.expires_at - now).total_seconds())
+            # Always recompute from the wall clock — never trust accumulated sleep time.
+            remaining = (session.expires_at - datetime.now(timezone.utc)).total_seconds()
 
-            if remaining > 0:
-                await _broadcast(
-                    session,
-                    {"type": "countdown", "seconds_remaining": int(remaining)},
-                )
-            else:
+            await _broadcast(
+                session,
+                {"type": "countdown", "seconds_remaining": max(0, int(remaining))},
+            )
+
+            if remaining <= 0:
                 break
 
     except asyncio.CancelledError:
-        # Session was destroyed externally (e.g. safety-net cleanup).
         return
 
     # TTL expired — destroy the session.
