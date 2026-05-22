@@ -175,14 +175,19 @@ export default function BurnChatPage({ token }) {
   const [participants, setParticipants] = useState(0);
   const [secsLeft, setSecsLeft]   = useState(null);
   const [input, setInput]         = useState('');
-  const [joinError, setJoinError] = useState(null);
-  const [wsError, setWsError]     = useState(null);
-  const [copied, setCopied]       = useState(false);
+  const [joinError, setJoinError]     = useState(null);
+  const [wsError, setWsError]         = useState(null);
+  const [copied, setCopied]           = useState(false);
+  const [reconnecting, setReconnecting] = useState(0); // attempt number, 0 = not reconnecting
 
-  const wsRef      = useRef(null);
-  const bottomRef  = useRef(null);
-  const countRef   = useRef(null); // local countdown interval
-  const joinedRef  = useRef(false); // true once the server confirms join
+  const wsRef         = useRef(null);
+  const bottomRef     = useRef(null);
+  const countRef      = useRef(null);      // local countdown interval
+  const joinedRef     = useRef(false);     // true once the server confirms join
+  const pingRef       = useRef(null);      // keepalive interval
+  const reconnectRef  = useRef({           // reconnect state
+    count: 0, name: null, pin: null, timeoutId: null,
+  });
 
   const shareUrl = `${window.location.origin}/chat/${token}`;
 
@@ -200,14 +205,36 @@ export default function BurnChatPage({ token }) {
     setMessages(prev => [...prev, { type:'system', text, sent_at: new Date().toISOString(), id: Math.random().toString(36) }]);
   }, []);
 
+  /* clear all timers on unmount */
+  useEffect(() => () => {
+    clearInterval(pingRef.current);
+    clearTimeout(reconnectRef.current.timeoutId);
+    wsRef.current?.close();
+  }, []);
+
   const handleJoin = useCallback((name, pin) => {
     setJoinError(null);
     setMyName(name);
-    // Reset the join-phase tracker so each new connection attempt starts fresh.
+
+    // Store credentials so the reconnect path can re-use them.
+    reconnectRef.current.name = name;
+    reconnectRef.current.pin  = pin;
+    reconnectRef.current.count = 0;
+    setReconnecting(0);
+
+    _connectWs(name, pin);
+  }, [token, addSysMsg]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* inner connection factory — called by handleJoin and the reconnect path */
+  function _connectWs(name, pin) {
+    clearInterval(pingRef.current);
     joinedRef.current = false;
 
+    const PING_INTERVAL_MS    = 20_000;
+    const RECONNECT_DELAYS_MS = [1_000, 2_000, 4_000];
+
     const wsBase = resolveWsUrl();
-    const ws = new WebSocket(`${wsBase}/chat/${token}/ws`);
+    const ws     = new WebSocket(`${wsBase}/chat/${token}/ws`);
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -221,10 +248,18 @@ export default function BurnChatPage({ token }) {
       switch (data.type) {
         case 'joined':
           joinedRef.current = true;
+          reconnectRef.current.count = 0; // reset backoff counter on clean join
+          setReconnecting(0);
           setIsCreator(data.is_creator);
           setSecsLeft(data.seconds_remaining);
           setParticipants(data.participant_count);
           setPhase('chat');
+          // Start keepalive ping so firewalls/LBs don't close the idle connection.
+          pingRef.current = setInterval(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'ping' }));
+            }
+          }, PING_INTERVAL_MS);
           break;
         case 'message':
           setMessages(prev => [...prev, data]);
@@ -237,13 +272,11 @@ export default function BurnChatPage({ token }) {
           setSecsLeft(data.seconds_remaining);
           break;
         case 'destroyed':
+          clearInterval(pingRef.current);
           clearInterval(countRef.current);
           setPhase('burning');
           break;
         case 'error':
-          // Before the 'joined' confirmation, errors belong to the join
-          // screen (e.g. invalid PIN, rate limit).  After joining, they
-          // belong to the chat error banner.
           if (!joinedRef.current) {
             setJoinError(data.text);
           } else {
@@ -255,24 +288,45 @@ export default function BurnChatPage({ token }) {
       }
     };
 
-    ws.onerror = () => setJoinError('Could not connect — session may have expired.');
+    ws.onerror = () => {
+      if (!joinedRef.current) setJoinError('Could not connect — session may have expired.');
+    };
+
     ws.onclose = (ev) => {
-      // Only update joinError when we haven't completed the join handshake
-      // yet — post-join closes are handled by the destroyed / wsError flow.
-      if (joinedRef.current) return;
-      if (ev.code === 4004) {
-        setJoinError('Session not found or expired.');
-      } else if (ev.code === 4029) {
-        setJoinError('Too many failed PIN attempts — your IP is locked out of this session.');
-      } else if (ev.code === 4003) {
-        // 4003 covers both bad-handshake and invalid-PIN; the server sends
-        // an error frame with the specific message before closing, so
-        // joinError is usually already set by the 'error' message handler.
-        // This fallback covers rare edge cases (e.g. frame lost).
-        if (!joinError) setJoinError('Connection rejected — check your PIN and try again.');
+      clearInterval(pingRef.current);
+
+      // 4xxx codes are deliberate server rejections — never reconnect.
+      const isServerRejection = ev.code >= 4000 && ev.code < 5000;
+
+      if (!joinedRef.current) {
+        // Still in the handshake phase — surface the error on the join screen.
+        if (ev.code === 4004) {
+          setJoinError('Session not found or expired.');
+        } else if (ev.code === 4029) {
+          setJoinError('Too many failed PIN attempts — your IP is locked out of this session.');
+        } else if (ev.code === 4003) {
+          if (!joinError) setJoinError('Connection rejected — check your PIN and try again.');
+        }
+        return;
+      }
+
+      // Post-join unexpected close — attempt reconnect with exponential backoff.
+      if (!isServerRejection) {
+        const attempt = reconnectRef.current.count;
+        if (attempt < RECONNECT_DELAYS_MS.length) {
+          reconnectRef.current.count += 1;
+          setReconnecting(attempt + 1);
+          reconnectRef.current.timeoutId = setTimeout(() => {
+            _connectWs(reconnectRef.current.name, reconnectRef.current.pin);
+          }, RECONNECT_DELAYS_MS[attempt]);
+          return;
+        }
+        // All retries exhausted.
+        setReconnecting(0);
+        setWsError('Connection lost — please refresh the page to rejoin.');
       }
     };
-  }, [token, addSysMsg]);
+  }
 
   const sendMessage = () => {
     const text = input.trim();
@@ -348,6 +402,14 @@ export default function BurnChatPage({ token }) {
             <p style={{ fontSize:'0.8125rem', color:'#fca5a5' }}>
               ⚠️ Session burns in {secsLeft}s — save anything important now.
             </p>
+          </div>
+        )}
+
+        {/* Reconnecting banner */}
+        {reconnecting > 0 && (
+          <div style={{ flexShrink:0, padding:'0.4rem 1rem', background:'rgba(249,115,22,0.07)', borderBottom:'1px solid rgba(249,115,22,0.15)', display:'flex', alignItems:'center', gap:'0.5rem' }}>
+            <div style={{ width:6, height:6, borderRadius:'50%', background:T.orange, animation:'pulse 1s ease-in-out infinite' }} />
+            <p style={{ fontSize:'0.8125rem', color:T.orange }}>Reconnecting… (attempt {reconnecting} of 3)</p>
           </div>
         )}
 
