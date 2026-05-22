@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import axios from '../config/axios';
+import { copyToClipboard } from '../utils/clipboard';
 import {
   Flame, Copy, Link2, Clock, AlertCircle,
   CheckCircle2, Loader, ArrowRight, Shield
@@ -36,6 +37,7 @@ export default function BurnChatCreate({ onCreated }) {
   const [error, setError]     = useState(null);
   const [result, setResult]   = useState(null);
   const [copied, setCopied]   = useState('');
+  const [copyFailed, setCopyFailed] = useState(false);
 
   const ttlSeconds = unit === 'seconds' ? value
     : unit === 'minutes' ? value * 60
@@ -63,10 +65,16 @@ export default function BurnChatCreate({ onCreated }) {
     } finally { setCreating(false); }
   };
 
-  const copy = (text, key) => {
-    navigator.clipboard.writeText(text);
-    setCopied(key);
-    setTimeout(() => setCopied(''), 2000);
+  const copy = async (text, key) => {
+    const ok = await copyToClipboard(text);
+    if (ok) {
+      setCopied(key);
+      setCopyFailed(false);
+      setTimeout(() => setCopied(''), 2000);
+    } else {
+      setCopyFailed(true);
+      setTimeout(() => setCopyFailed(false), 4000);
+    }
   };
 
   const shareUrl = result
@@ -112,15 +120,16 @@ export default function BurnChatCreate({ onCreated }) {
           </span>
           <button
             onClick={() => copy(result.creator_pin, 'pin')}
+            title="Copy PIN"
             style={{
               marginLeft: 'auto', width: 28, height: 28, borderRadius: '0.375rem',
-              background: copied === 'pin' ? 'rgba(34,197,94,0.1)' : 'rgba(249,115,22,0.1)',
-              border: `1px solid ${copied === 'pin' ? 'rgba(34,197,94,0.2)' : 'rgba(249,115,22,0.2)'}`,
+              background: copied === 'pin' ? 'rgba(34,197,94,0.1)' : copyFailed ? 'rgba(239,68,68,0.08)' : 'rgba(249,115,22,0.1)',
+              border: `1px solid ${copied === 'pin' ? 'rgba(34,197,94,0.2)' : copyFailed ? 'rgba(239,68,68,0.2)' : 'rgba(249,115,22,0.2)'}`,
               display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-              color: copied === 'pin' ? T.green : T.orange,
+              color: copied === 'pin' ? T.green : copyFailed ? T.red : T.orange,
             }}
           >
-            {copied === 'pin' ? <CheckCircle2 size={11} /> : <Copy size={11} />}
+            {copied === 'pin' ? <CheckCircle2 size={11} /> : copyFailed ? <AlertCircle size={11} /> : <Copy size={11} />}
           </button>
         </div>
         <p style={{ fontSize: '0.6875rem', color: T.textS, marginTop: '0.375rem' }}>
@@ -143,18 +152,27 @@ export default function BurnChatCreate({ onCreated }) {
           }} />
           <button
             onClick={() => copy(shareUrl, 'url')}
+            title="Copy share link"
             style={{
               flexShrink: 0, width: 28, height: 28, borderRadius: '0.375rem',
-              background: copied === 'url' ? 'rgba(34,197,94,0.08)' : 'rgba(232,160,32,0.08)',
-              border: `1px solid ${copied === 'url' ? 'rgba(34,197,94,0.16)' : 'rgba(232,160,32,0.16)'}`,
+              background: copied === 'url' ? 'rgba(34,197,94,0.08)' : copyFailed ? 'rgba(239,68,68,0.08)' : 'rgba(232,160,32,0.08)',
+              border: `1px solid ${copied === 'url' ? 'rgba(34,197,94,0.16)' : copyFailed ? 'rgba(239,68,68,0.16)' : 'rgba(232,160,32,0.16)'}`,
               display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-              color: copied === 'url' ? T.green : T.gold,
+              color: copied === 'url' ? T.green : copyFailed ? T.red : T.gold,
             }}
           >
-            {copied === 'url' ? <CheckCircle2 size={11} /> : <Copy size={11} />}
+            {copied === 'url' ? <CheckCircle2 size={11} /> : copyFailed ? <AlertCircle size={11} /> : <Copy size={11} />}
           </button>
         </div>
       </div>
+
+      {/* Copy-failed toast */}
+      {copyFailed && (
+        <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.5rem 0.75rem', borderRadius:'0.5rem', background:'rgba(239,68,68,0.07)', border:'1px solid rgba(239,68,68,0.15)' }}>
+          <AlertCircle size={13} style={{ color: T.red, flexShrink: 0 }} />
+          <p style={{ fontSize:'0.8125rem', color:'#fca5a5' }}>Copy failed — please select and copy manually.</p>
+        </div>
+      )}
 
       {/* Go to chat */}
       <a
