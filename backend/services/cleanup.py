@@ -6,6 +6,8 @@ Removes:
     timestamp written by file_service.save_uploaded_file() rather than
     os.path.getmtime() (E-07: mtime is manipulable via `touch -t`).
   - Expired server-side .bar files (via database queries)
+  - Stale rate-limit and brute-force storage keys (prevents memory leak from
+    one-shot IPs that never reconnect, e.g. WS connection flood attempts).
 
 Timestamp resolution order for upload files
 -------------------------------------------
@@ -30,7 +32,7 @@ import logging
 import asyncio
 from datetime import datetime, timezone, timedelta
 
-from core import database
+from core import database, security as _security
 from services import chat_service as _chat_service
 
 logger = logging.getLogger(__name__)
@@ -368,6 +370,17 @@ async def run_cleanup_loop() -> None:
             if _purged:
                 logger.info(
                     "Safety-net: purged %d stale burn chat session(s)", _purged
+                )
+
+            # Rate-limit storage cleanup — evicts keys from IPs that never
+            # reconnect (WS flood attempts, one-shot scanners, etc.).
+            _rl = _security.cleanup_rate_limit_storage()
+            if _rl["rate_limit"] or _rl["password_attempts"]:
+                logger.info(
+                    "Rate-limit cleanup: %d rate-limit key(s), "
+                    "%d password-attempt key(s) evicted",
+                    _rl["rate_limit"],
+                    _rl["password_attempts"],
                 )
 
             logger.info("Cleanup cycle complete")
