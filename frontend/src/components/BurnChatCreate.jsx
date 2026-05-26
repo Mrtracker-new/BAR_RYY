@@ -1,10 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import axios from '../config/axios';
 import { copyToClipboard } from '../utils/clipboard';
-import {
-  Flame, Copy, Link2, Clock, AlertCircle,
-  CheckCircle2, Loader, ArrowRight, Shield, Eye, EyeOff,
-} from 'lucide-react';
+import { Flame, Copy, AlertCircle, CheckCircle2, ArrowRight, Shield, Eye, EyeOff } from 'lucide-react';
+import CreateSessionForm, { fmtSecs } from './CreateSessionForm';
 
 /* ── Design tokens (match App.jsx) ────────────────────────── */
 const T = {
@@ -16,32 +13,15 @@ const T = {
   orange: '#F97316',
 };
 
-const PRESETS = [
-  { label: '5 min',  secs: 300 },
-  { label: '15 min', secs: 900 },
-  { label: '1 hr',   secs: 3600 },
-  { label: '24 hr',  secs: 86400 },
-];
-
-function fmtSecs(s) {
-  if (s < 60)   return `${s}s`;
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h`;
-  return `${Math.floor(s / 86400)}d`;
-}
 
 export default function BurnChatCreate({ onCreated }) {
-  const [unit, setUnit]       = useState('minutes');
-  const [value, setValue]     = useState(15);
-  const [creating, setCreating] = useState(false);
-  const [error, setError]     = useState(null);
-  const [result, setResult]   = useState(null);
-  const [copied, setCopied]   = useState('');
+  const [result, setResult]         = useState(null);
+  const [ttlSeconds, setTtlSeconds] = useState(900);
+  const [copied, setCopied]         = useState('');
   const [copyFailed, setCopyFailed] = useState(false);
   const [pinVisible, setPinVisible] = useState(true);
   const pinTimerRef = useRef(null);
 
-  // Auto-hide the PIN after 30 s. Cleared if user hides it manually first.
   useEffect(() => {
     if (!result) return;
     pinTimerRef.current = setTimeout(() => setPinVisible(false), 30_000);
@@ -53,30 +33,10 @@ export default function BurnChatCreate({ onCreated }) {
     setPinVisible(v => !v);
   };
 
-  const ttlSeconds = unit === 'seconds' ? value
-    : unit === 'minutes' ? value * 60
-    : unit === 'hours'   ? value * 3600
-    : value * 86400;
-
-  const validTtl = ttlSeconds >= 30 && ttlSeconds <= 259200;
-
-  const applyPreset = (secs) => {
-    if (secs < 60)        { setUnit('seconds'); setValue(secs); }
-    else if (secs < 3600) { setUnit('minutes'); setValue(secs / 60); }
-    else if (secs < 86400){ setUnit('hours');   setValue(secs / 3600); }
-    else                  { setUnit('hours');   setValue(secs / 3600); }
-  };
-
-  const handleCreate = async () => {
-    if (!validTtl) return;
-    setCreating(true); setError(null);
-    try {
-      const { data } = await axios.post('/chat/create', { ttl_seconds: ttlSeconds });
-      setResult(data);
-      if (onCreated) onCreated(data);
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to create session');
-    } finally { setCreating(false); }
+  const handleCreated = (data, secs) => {
+    setTtlSeconds(secs);
+    setResult(data);
+    if (onCreated) onCreated(data);
   };
 
   const copy = async (text, key) => {
@@ -243,7 +203,7 @@ export default function BurnChatCreate({ onCreated }) {
           background: 'rgba(249,115,22,0.1)', border: '1px solid rgba(249,115,22,0.2)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          <Flame size={13} style={{ color: T.orange }} />
+          <Flame size={13} style={{ color: '#F97316' }} />
         </div>
         <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#c0c0c0', letterSpacing: '-0.02em' }}>
           Burn Chat
@@ -251,110 +211,17 @@ export default function BurnChatCreate({ onCreated }) {
         <span style={{
           marginLeft: 'auto', fontSize: '0.625rem', fontWeight: 700,
           letterSpacing: '0.06em', textTransform: 'uppercase',
-          color: T.orange, background: 'rgba(249,115,22,0.08)',
+          color: '#F97316', background: 'rgba(249,115,22,0.08)',
           border: '1px solid rgba(249,115,22,0.16)', borderRadius: '999px',
           padding: '0.15rem 0.5rem',
-        }}>
-          Ephemeral
-        </span>
+        }}>Ephemeral</span>
       </div>
 
-      <p style={{ fontSize: '0.8125rem', color: T.textS, lineHeight: 1.6 }}>
+      <p style={{ fontSize: '0.8125rem', color: '#888888', lineHeight: 1.6 }}>
         Messages exist only in memory. When the timer expires everything is gone — no logs, no traces.
       </p>
 
-      {/* Preset chips */}
-      <div>
-        <p style={{ fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: T.textT, marginBottom: '0.5rem' }}>
-          Quick presets
-        </p>
-        <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap' }}>
-          {PRESETS.map(p => {
-            const active = ttlSeconds === p.secs;
-            return (
-              <button key={p.secs} onClick={() => applyPreset(p.secs)} style={{
-                padding: '0.3rem 0.75rem', borderRadius: '999px', fontSize: '0.8125rem',
-                fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s ease',
-                background: active ? 'rgba(249,115,22,0.12)' : 'rgba(255,255,255,0.04)',
-                border: `1px solid ${active ? 'rgba(249,115,22,0.3)' : T.border}`,
-                color: active ? T.orange : T.textS,
-              }}>
-                {p.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Custom TTL */}
-      <div>
-        <p style={{ fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: T.textT, marginBottom: '0.5rem' }}>
-          Custom timer
-        </p>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <input
-            type="number"
-            min={1} max={9999}
-            value={value}
-            onChange={e => setValue(Math.max(1, parseInt(e.target.value) || 1))}
-            className="input-field"
-            style={{ flex: 1, fontFamily: T.mono, fontSize: '0.9rem' }}
-          />
-          <select
-            value={unit}
-            onChange={e => setUnit(e.target.value)}
-            className="input-field"
-            style={{ width: 120 }}
-          >
-            <option value="seconds">Seconds</option>
-            <option value="minutes">Minutes</option>
-            <option value="hours">Hours</option>
-          </select>
-        </div>
-        {!validTtl && (
-          <p style={{ fontSize: '0.75rem', color: T.red, marginTop: '0.375rem' }}>
-            Must be between 30 seconds and 72 hours
-          </p>
-        )}
-      </div>
-
-      {/* Info row */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: '0.5rem',
-        padding: '0.625rem 0.875rem', borderRadius: '0.5rem',
-        background: 'rgba(249,115,22,0.04)', border: '1px solid rgba(249,115,22,0.1)',
-      }}>
-        <Clock size={13} style={{ color: T.orange, flexShrink: 0 }} />
-        <p style={{ fontSize: '0.8125rem', color: T.textS }}>
-          Session self-destructs in <strong style={{ color: T.orange }}>{fmtSecs(ttlSeconds)}</strong>. All messages vanish instantly.
-        </p>
-      </div>
-
-      {error && (
-        <div style={{ display: 'flex', gap: '0.5rem', padding: '0.75rem', borderRadius: '0.5rem', background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.15)' }}>
-          <AlertCircle size={14} style={{ color: T.red, flexShrink: 0 }} />
-          <p style={{ fontSize: '0.8125rem', color: '#fca5a5' }}>{error}</p>
-        </div>
-      )}
-
-      {/* Create button */}
-      <button
-        onClick={handleCreate}
-        disabled={creating || !validTtl}
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
-          padding: '0.875rem', borderRadius: '0.625rem', border: 'none',
-          background: validTtl && !creating
-            ? 'linear-gradient(160deg,#F97316 0%,#C05010 100%)'
-            : 'rgba(255,255,255,0.06)',
-          color: validTtl && !creating ? '#fff' : T.textT,
-          fontWeight: 700, fontSize: '0.9375rem', cursor: validTtl && !creating ? 'pointer' : 'not-allowed',
-          transition: 'all 0.2s ease',
-          boxShadow: validTtl && !creating ? '0 4px 16px rgba(249,115,22,0.2)' : 'none',
-        }}
-      >
-        {creating ? <><Loader size={14} style={{ animation: 'bar-spin 0.8s linear infinite' }} /> Creating…</> : <><Flame size={14} /> Create Burn Chat</>}
-      </button>
+      <CreateSessionForm onCreated={handleCreated} compact />
     </div>
   );
 }
