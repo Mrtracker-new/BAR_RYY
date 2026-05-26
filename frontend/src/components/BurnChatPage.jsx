@@ -167,6 +167,33 @@ function Bubble({ msg, myName }) {
   );
 }
 
+/* ── Connection status dot ─────────────────────────────────── */
+const CONN_DOT = {
+  idle:         { color: T.textT,  label: 'Idle',         pulse: false },
+  connecting:   { color: '#FBBF24', label: 'Connecting…',  pulse: true  },
+  connected:    { color: T.green,  label: 'Connected',     pulse: false },
+  reconnecting: { color: '#FBBF24', label: 'Reconnecting…', pulse: true  },
+  disconnected: { color: T.red,    label: 'Disconnected',  pulse: false },
+};
+
+function ConnStatusDot({ status }) {
+  const { color, label, pulse } = CONN_DOT[status] ?? CONN_DOT.idle;
+  return (
+    <div
+      aria-label={label}
+      title={label}
+      style={{
+        width: 7, height: 7, borderRadius: '50%',
+        background: color,
+        boxShadow: status === 'connected' ? `0 0 6px ${color}` : 'none',
+        flexShrink: 0,
+        transition: 'background 0.4s ease, box-shadow 0.4s ease',
+        animation: pulse ? 'pulse 1s ease-in-out infinite' : 'none',
+      }}
+    />
+  );
+}
+
 /* ── Main component ────────────────────────────────────────── */
 export default function BurnChatPage({ token }) {
   const [phase, setPhase]         = useState('join'); // join | chat | burning | destroyed
@@ -176,11 +203,12 @@ export default function BurnChatPage({ token }) {
   const [participants, setParticipants] = useState(0);
   const [secsLeft, setSecsLeft]   = useState(null);
   const [input, setInput]         = useState('');
-  const [joinError, setJoinError]     = useState(null);
-  const [wsError, setWsError]         = useState(null);
-  const [copied, setCopied]           = useState(false);
-  const [copyFailed, setCopyFailed]   = useState(false);
-  const [reconnecting, setReconnecting] = useState(0);
+  const [joinError, setJoinError]       = useState(null);
+  const [wsError, setWsError]           = useState(null);
+  const [copied, setCopied]             = useState(false);
+  const [copyFailed, setCopyFailed]     = useState(false);
+  // 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected'
+  const [connStatus, setConnStatus]     = useState('idle');
 
   const wsRef         = useRef(null);
   const bottomRef     = useRef(null);
@@ -217,20 +245,19 @@ export default function BurnChatPage({ token }) {
   const handleJoin = useCallback((name, pin) => {
     setJoinError(null);
     setMyName(name);
+    setConnStatus('connecting');
 
-    // Store credentials so the reconnect path can re-use them.
-    reconnectRef.current.name = name;
-    reconnectRef.current.pin  = pin;
+    reconnectRef.current.name  = name;
+    reconnectRef.current.pin   = pin;
     reconnectRef.current.count = 0;
-    setReconnecting(0);
 
     _connectWs(name, pin);
   }, [token, addSysMsg]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* inner connection factory — called by handleJoin and the reconnect path */
   function _connectWs(name, pin) {
     clearInterval(pingRef.current);
     joinedRef.current = false;
+    setConnStatus('connecting');
 
     const PING_INTERVAL_MS    = 20_000;
     const RECONNECT_DELAYS_MS = [1_000, 2_000, 4_000];
@@ -240,6 +267,7 @@ export default function BurnChatPage({ token }) {
     wsRef.current = ws;
 
     ws.onopen = () => {
+      // Still 'connecting' until the server confirms via 'joined'.
       ws.send(JSON.stringify({ type: 'join', display_name: name, ...(pin ? { pin } : {}) }));
     };
 
@@ -250,8 +278,8 @@ export default function BurnChatPage({ token }) {
       switch (data.type) {
         case 'joined':
           joinedRef.current = true;
-          reconnectRef.current.count = 0; // reset backoff counter on clean join
-          setReconnecting(0);
+          reconnectRef.current.count = 0;
+          setConnStatus('connected');
           setIsCreator(data.is_creator);
           setSecsLeft(data.seconds_remaining);
           setParticipants(data.participant_count);
@@ -297,11 +325,10 @@ export default function BurnChatPage({ token }) {
     ws.onclose = (ev) => {
       clearInterval(pingRef.current);
 
-      // 4xxx codes are deliberate server rejections — never reconnect.
       const isServerRejection = ev.code >= 4000 && ev.code < 5000;
 
       if (!joinedRef.current) {
-        // Still in the handshake phase — surface the error on the join screen.
+        setConnStatus('disconnected');
         if (ev.code === 4004) {
           setJoinError('Session not found or expired.');
         } else if (ev.code === 4029) {
@@ -312,20 +339,20 @@ export default function BurnChatPage({ token }) {
         return;
       }
 
-      // Post-join unexpected close — attempt reconnect with exponential backoff.
       if (!isServerRejection) {
         const attempt = reconnectRef.current.count;
         if (attempt < RECONNECT_DELAYS_MS.length) {
           reconnectRef.current.count += 1;
-          setReconnecting(attempt + 1);
+          setConnStatus('reconnecting');
           reconnectRef.current.timeoutId = setTimeout(() => {
             _connectWs(reconnectRef.current.name, reconnectRef.current.pin);
           }, RECONNECT_DELAYS_MS[attempt]);
           return;
         }
-        // All retries exhausted.
-        setReconnecting(0);
+        setConnStatus('disconnected');
         setWsError('Connection lost — please refresh the page to rejoin.');
+      } else {
+        setConnStatus('disconnected');
       }
     };
   }
@@ -378,6 +405,9 @@ export default function BurnChatPage({ token }) {
           </div>
 
           <div style={{ display:'flex', alignItems:'center', gap:'0.75rem' }}>
+            {/* Connection status dot */}
+            <ConnStatusDot status={connStatus} />
+
             {/* Participant count */}
             <div style={{ display:'flex', alignItems:'center', gap:'0.3rem' }}>
               <Users size={12} style={{ color:T.textS }} />
@@ -426,10 +456,10 @@ export default function BurnChatPage({ token }) {
         )}
 
         {/* Reconnecting banner */}
-        {reconnecting > 0 && (
+        {connStatus === 'reconnecting' && (
           <div style={{ flexShrink:0, padding:'0.4rem 1rem', background:'rgba(249,115,22,0.07)', borderBottom:'1px solid rgba(249,115,22,0.15)', display:'flex', alignItems:'center', gap:'0.5rem' }}>
             <div style={{ width:6, height:6, borderRadius:'50%', background:T.orange, animation:'pulse 1s ease-in-out infinite' }} />
-            <p style={{ fontSize:'0.8125rem', color:T.orange }}>Reconnecting… (attempt {reconnecting} of 3)</p>
+            <p style={{ fontSize:'0.8125rem', color:T.orange }}>Reconnecting… (attempt {reconnectRef.current.count} of 3)</p>
           </div>
         )}
 
