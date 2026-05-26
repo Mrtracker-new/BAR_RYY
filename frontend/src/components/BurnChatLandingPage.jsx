@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import axios from '../config/axios';
 import {
-  Flame, Copy, Clock, AlertCircle, CheckCircle2,
-  Loader, ArrowRight, Shield, ArrowLeft, Zap, Lock, PackageOpen,
+  Flame, Copy, AlertCircle, CheckCircle2,
+  ArrowRight, Shield, ArrowLeft, Zap, Lock, PackageOpen,
   Eye, EyeOff,
 } from 'lucide-react';
 import SEO from './SEO';
 import { copyToClipboard } from '../utils/clipboard';
+import CreateSessionForm from './CreateSessionForm';
 
 /* ── Design tokens ───────────────────────────────────────────── */
 const T = {
@@ -142,36 +142,6 @@ function FeatureCard({ icon: Icon, color, title, desc, index }) {
 
 /* ── Create form card ────────────────────────────────────────── */
 function CreateCard({ onCreated }) {
-  const [unit, setUnit]         = useState('minutes');
-  const [value, setValue]       = useState(15);
-  const [creating, setCreating] = useState(false);
-  const [error, setError]       = useState(null);
-
-  const ttlSeconds = unit === 'seconds' ? value
-    : unit === 'minutes' ? value * 60
-    : unit === 'hours'   ? value * 3600
-    : value * 86400;
-
-  const validTtl = ttlSeconds >= 30 && ttlSeconds <= 259200;
-
-  const applyPreset = (secs) => {
-    if (secs < 60)         { setUnit('seconds'); setValue(secs); }
-    else if (secs < 3600)  { setUnit('minutes'); setValue(secs / 60); }
-    else if (secs < 86400) { setUnit('hours');   setValue(secs / 3600); }
-    else                   { setUnit('hours');   setValue(secs / 3600); }
-  };
-
-  const handleCreate = async () => {
-    if (!validTtl) return;
-    setCreating(true); setError(null);
-    try {
-      const { data } = await axios.post('/chat/create', { ttl_seconds: ttlSeconds });
-      onCreated(data, ttlSeconds);
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to create session');
-    } finally { setCreating(false); }
-  };
-
   return (
     <motion.div {...fadeUp(0.3)} style={{
       background: T.s0,
@@ -180,12 +150,10 @@ function CreateCard({ onCreated }) {
       overflow: 'hidden',
       boxShadow: '0 8px 32px rgba(249,115,22,0.06)',
     }}>
-      {/* Top accent */}
       <div style={{ height: '1px', background: 'linear-gradient(90deg, rgba(249,115,22,0.6) 0%, rgba(249,115,22,0.15) 55%, transparent 100%)' }} />
 
       <div style={{ padding: '1.75rem 2rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
 
-        {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
           <div style={{
             width: 36, height: 36, borderRadius: '0.5rem',
@@ -202,110 +170,12 @@ function CreateCard({ onCreated }) {
           </div>
         </div>
 
-        {/* Preset chips */}
-        <div>
-          <p style={{ fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: T.textT, marginBottom: '0.625rem' }}>
-            Quick presets
-          </p>
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            {PRESETS.map(p => {
-              const active = ttlSeconds === p.secs;
-              return (
-                <button key={p.secs} onClick={() => applyPreset(p.secs)} style={{
-                  padding: '0.4rem 1rem', borderRadius: '999px',
-                  fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                  background: active ? 'rgba(249,115,22,0.14)' : 'rgba(255,255,255,0.04)',
-                  border: `1px solid ${active ? 'rgba(249,115,22,0.35)' : T.border}`,
-                  color: active ? T.orange : T.textS,
-                }}>
-                  {p.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Custom TTL */}
-        <div>
-          <p style={{ fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: T.textT, marginBottom: '0.625rem' }}>
-            Custom timer
-          </p>
-          <div style={{ display: 'flex', gap: '0.625rem' }}>
-            <input
-              type="number" min={1} max={9999}
-              value={value}
-              onChange={e => setValue(Math.max(1, parseInt(e.target.value) || 1))}
-              className="input-field"
-              style={{ flex: 1, fontFamily: T.mono, fontSize: '1rem' }}
-            />
-            <select
-              value={unit}
-              onChange={e => setUnit(e.target.value)}
-              className="input-field"
-              style={{ width: 130 }}
-            >
-              <option value="seconds">Seconds</option>
-              <option value="minutes">Minutes</option>
-              <option value="hours">Hours</option>
-            </select>
-          </div>
-          {!validTtl && (
-            <p style={{ fontSize: '0.75rem', color: T.red, marginTop: '0.375rem' }}>
-              Must be between 30 seconds and 72 hours
-            </p>
-          )}
-        </div>
-
-        {/* Info row */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '0.625rem',
-          padding: '0.75rem 1rem', borderRadius: '0.625rem',
-          background: 'rgba(249,115,22,0.05)', border: '1px solid rgba(249,115,22,0.12)',
-        }}>
-          <Clock size={14} style={{ color: T.orange, flexShrink: 0 }} />
-          <p style={{ fontSize: '0.8125rem', color: T.textS, lineHeight: 1.5 }}>
-            Session self-destructs in{' '}
-            <strong style={{ color: T.orange }}>{fmtSecs(ttlSeconds)}</strong>.{' '}
-            All messages vanish instantly — no recovery possible.
-          </p>
-        </div>
-
-        {/* Error */}
-        {error && (
-          <div style={{ display: 'flex', gap: '0.5rem', padding: '0.75rem 1rem', borderRadius: '0.625rem', background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.15)' }}>
-            <AlertCircle size={14} style={{ color: T.red, flexShrink: 0 }} />
-            <p style={{ fontSize: '0.8125rem', color: '#fca5a5' }}>{error}</p>
-          </div>
-        )}
-
-        {/* Create button */}
-        <button
-          onClick={handleCreate}
-          disabled={creating || !validTtl}
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
-            padding: '1rem', borderRadius: '0.75rem', border: 'none',
-            background: validTtl && !creating
-              ? 'linear-gradient(160deg, #F97316 0%, #C05010 100%)'
-              : 'rgba(255,255,255,0.06)',
-            color: validTtl && !creating ? '#fff' : T.textT,
-            fontWeight: 700, fontSize: '1rem',
-            cursor: validTtl && !creating ? 'pointer' : 'not-allowed',
-            transition: 'all 0.2s ease',
-            boxShadow: validTtl && !creating ? '0 6px 24px rgba(249,115,22,0.25)' : 'none',
-            letterSpacing: '-0.015em',
-          }}
-        >
-          {creating
-            ? <><Loader size={15} style={{ animation: 'bar-spin 0.8s linear infinite' }} /> Creating session…</>
-            : <><Flame size={15} /> Create Burn Chat</>
-          }
-        </button>
+        <CreateSessionForm onCreated={onCreated} />
       </div>
     </motion.div>
   );
 }
+
 
 /* ── Result card ─────────────────────────────────────────────── */
 function ResultCard({ result, ttlSeconds }) {
