@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import axios from '../config/axios';
 import {
   Flame, Copy, Clock, AlertCircle, CheckCircle2,
   Loader, ArrowRight, Shield, ArrowLeft, Zap, Lock, PackageOpen,
+  Eye, EyeOff,
 } from 'lucide-react';
 import SEO from './SEO';
 import { copyToClipboard } from '../utils/clipboard';
@@ -310,7 +311,20 @@ function CreateCard({ onCreated }) {
 function ResultCard({ result, ttlSeconds }) {
   const [copied, setCopied]         = useState('');
   const [copyFailed, setCopyFailed] = useState(false);
+  const [pinVisible, setPinVisible] = useState(true);
+  const pinTimerRef = useRef(null);
   const shareUrl = `${window.location.origin}/chat/${result.token}`;
+
+  // Auto-hide the PIN after 30 s. Cancelled if user hides manually.
+  useEffect(() => {
+    pinTimerRef.current = setTimeout(() => setPinVisible(false), 30_000);
+    return () => clearTimeout(pinTimerRef.current);
+  }, []);
+
+  const togglePin = () => {
+    clearTimeout(pinTimerRef.current);
+    setPinVisible(v => !v);
+  };
 
   const copy = async (text, key) => {
     const ok = await copyToClipboard(text);
@@ -365,33 +379,59 @@ function ResultCard({ result, ttlSeconds }) {
           borderRadius: '0.75rem', border: '1px solid rgba(249,115,22,0.25)',
           background: 'rgba(249,115,22,0.05)', padding: '1rem 1.125rem',
         }}>
+          {/* Header row */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginBottom: '0.625rem' }}>
             <Shield size={13} style={{ color: T.orange }} />
             <span style={{ fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: T.orange }}>
               Creator PIN — shown once
             </span>
+            <button
+              onClick={togglePin}
+              title={pinVisible ? 'Hide PIN' : 'Reveal PIN'}
+              style={{
+                marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer',
+                color: T.textS, display: 'flex', alignItems: 'center', padding: '0.1rem',
+              }}
+            >
+              {pinVisible ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
           </div>
+
+          {/* PIN value */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <span style={{ fontFamily: T.mono, fontSize: '1.75rem', fontWeight: 700, color: T.text, letterSpacing: '0.2em' }}>
-              {result.creator_pin}
+            <span
+              style={{
+                fontFamily: T.mono, fontSize: '1.75rem', fontWeight: 700,
+                letterSpacing: '0.2em', color: pinVisible ? T.text : T.textT,
+                userSelect: pinVisible ? 'text' : 'none',
+                transition: 'color 0.2s',
+              }}
+            >
+              {pinVisible ? result.creator_pin : '••••••'}
             </span>
             <button
-              onClick={() => copy(result.creator_pin, 'pin')}
-              title="Copy PIN"
+              onClick={() => pinVisible && copy(result.creator_pin, 'pin')}
+              title={pinVisible ? 'Copy PIN' : 'Reveal PIN to copy'}
+              disabled={!pinVisible}
               style={{
                 marginLeft: 'auto', width: 32, height: 32, borderRadius: '0.5rem',
                 background: copied === 'pin' ? 'rgba(34,197,94,0.1)' : copyFailed ? 'rgba(239,68,68,0.08)' : 'rgba(249,115,22,0.1)',
                 border: `1px solid ${copied === 'pin' ? 'rgba(34,197,94,0.2)' : copyFailed ? 'rgba(239,68,68,0.2)' : 'rgba(249,115,22,0.2)'}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: 'pointer', color: copied === 'pin' ? T.green : copyFailed ? T.red : T.orange,
+                cursor: pinVisible ? 'pointer' : 'not-allowed',
+                color: copied === 'pin' ? T.green : copyFailed ? T.red : pinVisible ? T.orange : T.textT,
+                opacity: pinVisible ? 1 : 0.4,
                 transition: 'all 0.2s',
               }}
             >
               {copied === 'pin' ? <CheckCircle2 size={13} /> : copyFailed ? <AlertCircle size={13} /> : <Copy size={13} />}
             </button>
           </div>
+
+          {/* Warning */}
           <p style={{ fontSize: '0.6875rem', color: T.textS, marginTop: '0.5rem' }}>
-            Enter this PIN when joining to claim the creator role. Keep it private.
+            Enter this PIN when joining to claim the creator role.{' '}
+            <strong style={{ color: T.orange }}>It cannot be recovered once you leave this page.</strong>
           </p>
         </div>
 
