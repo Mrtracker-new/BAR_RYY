@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Flame, Send, Users, Copy, CheckCircle2, Shield, AlertTriangle, ArrowLeft } from 'lucide-react';
+import { Flame, Send, Users, Copy, CheckCircle2, Shield, AlertTriangle, ArrowLeft, Clock } from 'lucide-react';
 import { copyToClipboard } from '../utils/clipboard';
+import axios from '../config/axios';
 import BurningAnimation from './BurningAnimation';
 import SEO from './SEO';
 
@@ -61,10 +62,13 @@ function relTime(iso) {
 }
 
 /* ── Join screen ───────────────────────────────────────────── */
-function JoinScreen({ token, onJoin, error }) {
-  const [name, setName]       = useState('');
-  const [pin, setPin]         = useState('');
+function JoinScreen({ token, onJoin, error, infoState, joinSecsLeft, joinParticipants }) {
+  const [name, setName]           = useState('');
+  const [pin, setPin]             = useState('');
   const [isCreator, setIsCreator] = useState(false);
+
+  const canJoin = name.trim() && infoState !== 'loading' && infoState !== 'expired';
+  const tColor  = joinSecsLeft !== null ? timerColor(joinSecsLeft) : T.textS;
 
   return (
     <div style={{ minHeight:'100vh', background:T.bg, display:'flex', alignItems:'center', justifyContent:'center', padding:'1.5rem' }}>
@@ -78,10 +82,44 @@ function JoinScreen({ token, onJoin, error }) {
           <code style={{ fontSize:'0.6875rem', color:T.textT, fontFamily:T.mono, display:'block', marginTop:'0.5rem' }}>{token}</code>
         </div>
 
+        {/* Session info strip */}
+        <div style={{
+          display:'flex', alignItems:'center', justifyContent:'center', gap:'1rem',
+          marginBottom:'1rem', minHeight:28,
+        }}>
+          {infoState === 'loading' && (
+            <div style={{ height:8, width:120, borderRadius:4, background:'rgba(255,255,255,0.06)', animation:'pulse 1.4s ease-in-out infinite' }} />
+          )}
+          {infoState === 'ok' && joinSecsLeft !== null && (
+            <>
+              <div style={{ display:'flex', alignItems:'center', gap:'0.35rem', padding:'0.25rem 0.7rem', borderRadius:'999px', background:'rgba(255,255,255,0.04)', border:`1px solid ${tColor}30` }}>
+                <Clock size={12} style={{ color:tColor }} />
+                <span style={{ fontSize:'0.8rem', fontWeight:700, color:tColor, fontFamily:T.mono }}>
+                  {fmtTime(joinSecsLeft)}
+                </span>
+              </div>
+              {joinParticipants > 0 && (
+                <div style={{ display:'flex', alignItems:'center', gap:'0.3rem' }}>
+                  <Users size={12} style={{ color:T.textS }} />
+                  <span style={{ fontSize:'0.8rem', color:T.textS }}>
+                    {joinParticipants} {joinParticipants === 1 ? 'person' : 'people'} inside
+                  </span>
+                </div>
+              )}
+            </>
+          )}
+          {infoState === 'expired' && (
+            <span style={{ fontSize:'0.8rem', color:T.red }}>This session has already burned.</span>
+          )}
+          {infoState === 'error' && (
+            <span style={{ fontSize:'0.8rem', color:T.textS }}>Could not load session info.</span>
+          )}
+        </div>
+
         <div style={{ background:T.s0, border:`1px solid ${T.border}`, borderRadius:'1rem', padding:'1.5rem', display:'flex', flexDirection:'column', gap:'1rem' }}>
           <div>
             <label style={{ fontSize:'0.75rem', fontWeight:600, color:T.textS, display:'block', marginBottom:'0.375rem' }}>Display name</label>
-            <input className="input-field" placeholder="Your name…" value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&name.trim()&&onJoin(name.trim(),isCreator?pin:null)} maxLength={30} />
+            <input className="input-field" placeholder="Your name…" value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&canJoin&&onJoin(name.trim(),isCreator?pin:null)} maxLength={30} />
           </div>
 
           <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.625rem 0.75rem', borderRadius:'0.5rem', background:'rgba(255,255,255,0.02)', border:`1px solid ${T.border}`, cursor:'pointer' }} onClick={()=>setIsCreator(v=>!v)}>
@@ -105,13 +143,17 @@ function JoinScreen({ token, onJoin, error }) {
             </div>
           )}
 
-          <button onClick={()=>name.trim()&&onJoin(name.trim(),isCreator?pin:null)} disabled={!name.trim()} style={{
-            padding:'0.875rem', borderRadius:'0.625rem', border:'none', fontWeight:700, fontSize:'0.9375rem',
-            cursor:name.trim()?'pointer':'not-allowed', transition:'all 0.2s',
-            background:name.trim()?'linear-gradient(160deg,#F97316 0%,#C05010 100%)':'rgba(255,255,255,0.06)',
-            color:name.trim()?'#fff':T.textT, display:'flex', alignItems:'center', justifyContent:'center', gap:'0.5rem',
-            boxShadow:name.trim()?'0 4px 16px rgba(249,115,22,0.2)':'none',
-          }}>
+          <button
+            onClick={() => canJoin && onJoin(name.trim(), isCreator ? pin : null)}
+            disabled={!canJoin}
+            style={{
+              padding:'0.875rem', borderRadius:'0.625rem', border:'none', fontWeight:700, fontSize:'0.9375rem',
+              cursor: canJoin ? 'pointer' : 'not-allowed', transition:'all 0.2s',
+              background: canJoin ? 'linear-gradient(160deg,#F97316 0%,#C05010 100%)' : 'rgba(255,255,255,0.06)',
+              color: canJoin ? '#fff' : T.textT, display:'flex', alignItems:'center', justifyContent:'center', gap:'0.5rem',
+              boxShadow: canJoin ? '0 4px 16px rgba(249,115,22,0.2)' : 'none',
+            }}
+          >
             <Flame size={14} /> Join Session
           </button>
         </div>
@@ -207,15 +249,19 @@ export default function BurnChatPage({ token }) {
   const [wsError, setWsError]           = useState(null);
   const [copied, setCopied]             = useState(false);
   const [copyFailed, setCopyFailed]     = useState(false);
-  // 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected'
   const [connStatus, setConnStatus]     = useState('idle');
+  // 'loading' | 'ok' | 'expired' | 'error'
+  const [infoState, setInfoState]           = useState('loading');
+  const [joinSecsLeft, setJoinSecsLeft]     = useState(null);
+  const [joinParticipants, setJoinParticipants] = useState(0);
 
   const wsRef         = useRef(null);
   const bottomRef     = useRef(null);
-  const countRef      = useRef(null);      // local countdown interval
-  const joinedRef     = useRef(false);     // true once the server confirms join
-  const pingRef       = useRef(null);      // keepalive interval
-  const reconnectRef  = useRef({           // reconnect state
+  const countRef      = useRef(null);
+  const joinCountRef  = useRef(null);      // pre-join countdown tick
+  const joinedRef     = useRef(false);
+  const pingRef       = useRef(null);
+  const reconnectRef  = useRef({
     count: 0, name: null, pin: null, timeoutId: null,
   });
 
@@ -224,7 +270,45 @@ export default function BurnChatPage({ token }) {
   /* auto-scroll */
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:'smooth' }); }, [messages]);
 
-  /* local countdown tick (UI-only, server is authoritative) */
+  /* fetch session info once on mount — fast-path expired sessions */
+  useEffect(() => {
+    let cancelled = false;
+    axios.get(`/chat/${token}/info`)
+      .then(({ data }) => {
+        if (cancelled) return;
+        setInfoState('ok');
+        setJoinSecsLeft(data.seconds_remaining);
+        setJoinParticipants(data.participant_count);
+      })
+      .catch(err => {
+        if (cancelled) return;
+        if (err.response?.status === 410) {
+          setInfoState('expired');
+          setPhase('destroyed');
+        } else {
+          setInfoState('error');
+        }
+      });
+    return () => { cancelled = true; };
+  }, [token]);
+
+  /* pre-join local countdown — stops when user joins (joinCountRef cleared) */
+  useEffect(() => {
+    if (joinSecsLeft === null || joinSecsLeft <= 0) return;
+    joinCountRef.current = setInterval(() => {
+      setJoinSecsLeft(s => {
+        if (s <= 1) {
+          clearInterval(joinCountRef.current);
+          setInfoState('expired');
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+    return () => clearInterval(joinCountRef.current);
+  }, [joinSecsLeft !== null]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* local countdown tick for in-chat timer (server is authoritative) */
   useEffect(() => {
     if (secsLeft === null || secsLeft <= 0) return;
     countRef.current = setInterval(() => setSecsLeft(s => Math.max(0, s - 1)), 1000);
@@ -238,6 +322,7 @@ export default function BurnChatPage({ token }) {
   /* clear all timers on unmount */
   useEffect(() => () => {
     clearInterval(pingRef.current);
+    clearInterval(joinCountRef.current);
     clearTimeout(reconnectRef.current.timeoutId);
     wsRef.current?.close();
   }, []);
@@ -246,6 +331,7 @@ export default function BurnChatPage({ token }) {
     setJoinError(null);
     setMyName(name);
     setConnStatus('connecting');
+    clearInterval(joinCountRef.current); // hand off countdown to WS
 
     reconnectRef.current.name  = name;
     reconnectRef.current.pin   = pin;
@@ -377,7 +463,16 @@ export default function BurnChatPage({ token }) {
   };
 
   /* ── Phases ────────────────────────────────────────────── */
-  if (phase === 'join') return <JoinScreen token={token} onJoin={handleJoin} error={joinError} />;
+  if (phase === 'join') return (
+    <JoinScreen
+      token={token}
+      onJoin={handleJoin}
+      error={joinError}
+      infoState={infoState}
+      joinSecsLeft={joinSecsLeft}
+      joinParticipants={joinParticipants}
+    />
+  );
 
   if (phase === 'burning') return (
     <BurningAnimation onComplete={() => setPhase('destroyed')} />
