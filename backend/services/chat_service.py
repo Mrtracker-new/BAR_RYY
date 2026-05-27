@@ -43,6 +43,9 @@ MIN_TTL_SECONDS: int = 30
 #: Maximum session lifetime (seconds) — 72 hours.
 MAX_TTL_SECONDS: int = 72 * 3600
 
+#: Maximum time (seconds) the creator can add per extend_ttl call.
+MAX_EXTEND_SECONDS: int = 30 * 60  # 30 minutes
+
 #: Maximum number of concurrent sessions server-wide.
 MAX_SESSIONS: int = max(1, int(os.getenv("MAX_CHAT_SESSIONS", "500")))
 
@@ -88,29 +91,11 @@ def _safe_text(raw: str, max_len: int) -> str:
 
 
 class JoinStatus(str, Enum):
-    """
-    Outcome of a :func:`join_session` call.
-
-    Using ``str`` as a mixin makes instances JSON-serialisable and
-    printable without an extra ``.value`` dereference.
-    """
-
-    OK = "ok"
-    """Participant was registered and the session WS confirmed."""
-
+    OK               = "ok"
     SESSION_NOT_FOUND = "session_not_found"
-    """Token does not correspond to any live session."""
-
-    SESSION_FULL = "session_full"
-    """Room has reached MAX_PARTICIPANTS."""
-
-    PIN_INVALID = "pin_invalid"
-    """
-    A creator PIN was supplied but did **not** match.
-
-    The participant is **not** admitted.  The WS handler must record this
-    failure against the rate limiter and may close the connection.
-    """
+    SESSION_FULL     = "session_full"
+    LOCKED           = "locked"
+    PIN_INVALID      = "pin_invalid"
 
 
 # ---------------------------------------------------------------------------
@@ -273,18 +258,12 @@ class _Participant:
 
 @dataclass
 class _ChatSession:
-    """
-    In-memory state for one Burn Chat session.
-
-    ``participants`` is keyed by a UUID (``ws_id``) generated at join time,
-    eliminating any dependence on CPython memory-address-based ``id()`` values.
-    """
-
     token: str
-    creator_pin: str  # stored only in RAM — never in DB / logs
+    creator_pin: str
     expires_at: datetime
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     participants: Dict[str, _Participant] = field(default_factory=dict)
+    locked: bool = False
     _destroy_task: Optional[asyncio.Task] = field(default=None, repr=False)
 
 
@@ -469,10 +448,6 @@ def get_session(token: str) -> Optional[_ChatSession]:
 
 
 def session_info(token: str) -> Optional[dict]:
-    """
-    Return a public, non-sensitive summary of the session — for the
-    REST info endpoint.  Returns ``None`` if the session is not found.
-    """
     session = get_session(token)
     if session is None:
         return None
@@ -483,6 +458,7 @@ def session_info(token: str) -> Optional[dict]:
         "expires_at": session.expires_at.isoformat(),
         "seconds_remaining": remaining,
         "participant_count": len(session.participants),
+        "locked": session.locked,
         "created_at": session.created_at.isoformat(),
     }
 
@@ -493,48 +469,6 @@ async def join_session(
     display_name: str,
     pin: Optional[str] = None,
 ) -> tuple[Optional[_Participant], JoinStatus]:
-    """
-    Register a WebSocket connection as a participant in *token*'s session.
-
-    Args:
-        token:        Session token.
-        ws:           The caller's WebSocket connection.
-        display_name: Chosen display name (≤ MAX_NAME_LENGTH chars).
-        pin:          Optional creator PIN.
-
-                      *  If ``None`` or empty — join as a regular participant.
-                      *  If non-empty and **correct** — join as creator
-                         (``is_creator = True``).
-                      *  If non-empty and **wrong** — return
-                         ``(None, JoinStatus.PIN_INVALID)``; the participant
-                         is **not** admitted.  The WS handler is responsible
-                         for recording the failure against the rate limiter
-                         and closing the connection.
-
-    Returns:
-        A 2-tuple ``(participant, status)``:
-
-        ``(participant, JoinStatus.OK)``
-            Participant was registered and the ``joined`` event was delivered.
-        ``(None, JoinStatus.SESSION_NOT_FOUND)``
-            Token does not map to any live session.
-        ``(None, JoinStatus.SESSION_FULL)``
-            The room has reached ``MAX_PARTICIPANTS``.
-        ``(None, JoinStatus.PIN_INVALID)``
-            A PIN was supplied but did not match.  No WebSocket message is
-            sent — the caller handles error delivery and rate-limit recording.
-
-    Security note
-    -------------
-    PIN comparison uses :func:`secrets.compare_digest` for constant-time
-    equality to eliminate timing side-channels.  A wrong PIN is a hard
-    rejection — callers must **not** silently demote the user to a regular
-    participant, as that would make the creator role meaningless.
-
-    Note:
-        Messages are NOT replayed on join — true ephemeral behaviour.
-        Participants only see messages that arrive after they connect.
-    """
     session = get_session(token)
     if session is None:
         return None, JoinStatus.SESSION_NOT_FOUND
@@ -542,40 +476,37 @@ async def join_session(
     if len(session.participants) >= MAX_PARTICIPANTS:
         return None, JoinStatus.SESSION_FULL
 
-    # ── PIN authentication ─────────────────────────────────────────────────
-    # If the client asserts creator identity (supplies a PIN), the PIN MUST
-    # match exactly.  A wrong PIN is a hard rejection — we do not silently
-    # fall back to regular-participant status, because that would make the
-    # rate limiter in the WS handler ineffective (the handler only records
-    # failures when this function says the PIN was wrong).
-    #
-    # constant-time comparison via secrets.compare_digest prevents timing
-    # attacks that could otherwise reveal how many leading characters of the
-    # guessed PIN were correct.
+    # Locked rooms only admit the creator.
     is_creator = False
-    if pin:  # pin is already normalised (stripped + uppercased) by the caller
+    if pin:
         if not secrets.compare_digest(pin, session.creator_pin):
             return None, JoinStatus.PIN_INVALID
         is_creator = True
 
-    # ── Register participant ────────────────────────────────────────────────
+    if session.locked and not is_creator:
+        return None, JoinStatus.LOCKED
+
     safe_name = _safe_text(display_name, MAX_NAME_LENGTH) or "Anonymous"
     ws_id = str(uuid.uuid4())
     participant = _Participant(ws=ws, ws_id=ws_id, name=safe_name, is_creator=is_creator)
     session.participants[ws_id] = participant
 
     role_label = "creator" if is_creator else "participant"
+    participant_list = [
+        {"ws_id": p.ws_id, "name": p.name, "is_creator": p.is_creator}
+        for p in session.participants.values()
+    ]
     await _broadcast(
         session,
         {
             "type": "system",
             "text": f"{safe_name} joined as {role_label}",
             "participant_count": len(session.participants),
+            "participant_list": participant_list,
         },
         exclude_ws_id=ws_id,
     )
 
-    # Send session info to the new joiner.
     now = datetime.now(timezone.utc)
     remaining = max(0, int((session.expires_at - now).total_seconds()))
     await ws.send_json(
@@ -585,8 +516,9 @@ async def join_session(
             "is_creator": is_creator,
             "seconds_remaining": remaining,
             "participant_count": len(session.participants),
+            "participant_list": participant_list,
+            "locked": session.locked,
             "expires_at": session.expires_at.isoformat(),
-            # No message history — burn chat participants start fresh.
         }
     )
 
@@ -653,26 +585,129 @@ async def broadcast_message(
 
 
 async def leave_session(token: str, ws_id: str) -> None:
-    """
-    Remove the participant identified by *ws_id* and notify remaining members.
-
-    Safe to call even if the session is already destroyed or *ws_id* was
-    never registered.
-    """
     session = _SESSIONS.get(token)
     if session is None:
         return
 
     participant = session.participants.pop(ws_id, None)
     if participant:
+        participant_list = [
+            {"ws_id": p.ws_id, "name": p.name, "is_creator": p.is_creator}
+            for p in session.participants.values()
+        ]
         await _broadcast(
             session,
             {
                 "type": "system",
                 "text": f"{participant.name} left",
                 "participant_count": len(session.participants),
+                "participant_list": participant_list,
             },
         )
+
+
+async def kick_participant(token: str, actor_ws_id: str, target_ws_id: str) -> bool:
+    """
+    Creator-only: close target's connection and remove them from the session.
+
+    Returns True if the kick succeeded, False if preconditions were not met
+    (session gone, actor is not creator, target not found, self-kick).
+    """
+    session = _SESSIONS.get(token)
+    if session is None:
+        return False
+
+    actor = session.participants.get(actor_ws_id)
+    if actor is None or not actor.is_creator:
+        return False
+
+    if target_ws_id == actor_ws_id:
+        return False  # no self-kick
+
+    target = session.participants.pop(target_ws_id, None)
+    if target is None:
+        return False
+
+    try:
+        await target.ws.send_json(
+            {"type": "error", "text": "You have been removed by the creator.", "code": "kicked"}
+        )
+        await target.ws.close(code=4001, reason="Kicked by creator")
+    except Exception:
+        pass
+
+    participant_list = [
+        {"ws_id": p.ws_id, "name": p.name, "is_creator": p.is_creator}
+        for p in session.participants.values()
+    ]
+    await _broadcast(
+        session,
+        {
+            "type": "system",
+            "text": f"{target.name} was removed by the creator",
+            "participant_count": len(session.participants),
+            "participant_list": participant_list,
+        },
+    )
+    return True
+
+
+async def lock_room(token: str, actor_ws_id: str, locked: bool) -> bool:
+    """
+    Creator-only: set the room's locked state.
+
+    When locked=True, new non-creator participants cannot join.
+    Returns True if the state was applied, False on precondition failure.
+    """
+    session = _SESSIONS.get(token)
+    if session is None:
+        return False
+
+    actor = session.participants.get(actor_ws_id)
+    if actor is None or not actor.is_creator:
+        return False
+
+    session.locked = locked
+    await _broadcast(
+        session,
+        {"type": "room_locked", "locked": locked},
+    )
+    return True
+
+
+async def extend_ttl(token: str, actor_ws_id: str, extra_seconds: int) -> bool:
+    """
+    Creator-only: extend the session TTL by up to MAX_EXTEND_SECONDS.
+
+    The new expiry is capped at created_at + MAX_TTL_SECONDS so the
+    absolute session limit cannot be circumvented by repeated extensions.
+    Returns True if extended, False on precondition failure.
+    """
+    session = _SESSIONS.get(token)
+    if session is None:
+        return False
+
+    actor = session.participants.get(actor_ws_id)
+    if actor is None or not actor.is_creator:
+        return False
+
+    extra = max(0, min(int(extra_seconds), MAX_EXTEND_SECONDS))
+    if extra == 0:
+        return False
+
+    hard_cap = session.created_at + timedelta(seconds=MAX_TTL_SECONDS)
+    new_expiry = min(session.expires_at + timedelta(seconds=extra), hard_cap)
+    if new_expiry <= session.expires_at:
+        return False  # already at the cap
+
+    session.expires_at = new_expiry
+    now = datetime.now(timezone.utc)
+    remaining = max(0, int((session.expires_at - now).total_seconds()))
+    await _broadcast(
+        session,
+        {"type": "ttl_extended", "seconds_remaining": remaining, "expires_at": session.expires_at.isoformat()},
+    )
+    return True
 
 
 # ---------------------------------------------------------------------------
