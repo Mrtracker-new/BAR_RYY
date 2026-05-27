@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Flame, Send, Users, Copy, CheckCircle2, Shield, AlertTriangle, ArrowLeft, Clock } from 'lucide-react';
+import { Flame, Send, Users, Copy, CheckCircle2, Shield, AlertTriangle, ArrowLeft, Clock, X, Lock, Unlock, PlusCircle } from 'lucide-react';
 import { copyToClipboard } from '../utils/clipboard';
 import axios from '../config/axios';
 import BurningAnimation from './BurningAnimation';
@@ -13,7 +13,8 @@ const T = {
 };
 
 function fmtTime(s) {
-  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  const n = Number.isFinite(s) ? Math.max(0, Math.floor(s)) : 0;
+  const h = Math.floor(n / 3600), m = Math.floor((n % 3600) / 60), sec = n % 60;
   if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
   return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
 }
@@ -209,6 +210,132 @@ function Bubble({ msg, myName }) {
   );
 }
 
+/* ── Participant panel ───────────────────────────────────────── */
+function ParticipantPanel({ participantList, myWsId, isCreator, roomLocked, onKick, onToggleLock, onExtendTtl, onClose }) {
+  return (
+    <div style={{
+      width: 240, flexShrink: 0,
+      borderLeft: `1px solid ${T.border}`,
+      background: T.s0,
+      display: 'flex', flexDirection: 'column',
+      overflow: 'hidden',
+    }}>
+      {/* Panel header */}
+      <div style={{
+        flexShrink: 0, padding: '0 0.875rem', height: 44,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        borderBottom: `1px solid ${T.border}`,
+      }}>
+        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: T.textS, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+          Participants
+        </span>
+        <button
+          onClick={onClose}
+          style={{ width: 22, height: 22, borderRadius: 4, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.textT }}
+        >
+          <X size={14} />
+        </button>
+      </div>
+
+      {/* Creator controls */}
+      {isCreator && (
+        <div style={{
+          flexShrink: 0, padding: '0.625rem 0.875rem',
+          borderBottom: `1px solid ${T.border}`,
+          display: 'flex', flexDirection: 'column', gap: '0.4rem',
+        }}>
+          <button
+            onClick={onToggleLock}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '0.4rem',
+              padding: '0.4rem 0.65rem', borderRadius: '0.4rem',
+              border: `1px solid ${roomLocked ? 'rgba(249,115,22,0.3)' : T.border}`,
+              background: roomLocked ? 'rgba(249,115,22,0.07)' : 'rgba(255,255,255,0.03)',
+              cursor: 'pointer', width: '100%', transition: 'all 0.15s',
+              fontSize: '0.75rem', fontWeight: 600,
+              color: roomLocked ? T.orange : T.textS,
+            }}
+          >
+            {roomLocked ? <Unlock size={12} /> : <Lock size={12} />}
+            {roomLocked ? 'Unlock room' : 'Lock room'}
+          </button>
+          <button
+            onClick={onExtendTtl}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '0.4rem',
+              padding: '0.4rem 0.65rem', borderRadius: '0.4rem',
+              border: `1px solid ${T.border}`,
+              background: 'rgba(255,255,255,0.03)',
+              cursor: 'pointer', width: '100%', transition: 'all 0.15s',
+              fontSize: '0.75rem', fontWeight: 600, color: T.textS,
+            }}
+          >
+            <PlusCircle size={12} /> +30 min
+          </button>
+        </div>
+      )}
+
+      {/* Participant list */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0.5rem 0' }}>
+        {participantList.map(p => (
+          <div
+            key={p.ws_id}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '0.5rem',
+              padding: '0.375rem 0.875rem',
+              background: p.ws_id === myWsId ? 'rgba(249,115,22,0.05)' : 'transparent',
+            }}
+          >
+            {/* Avatar initial */}
+            <div style={{
+              width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
+              background: p.is_creator ? 'rgba(249,115,22,0.15)' : 'rgba(255,255,255,0.06)',
+              border: `1px solid ${p.is_creator ? 'rgba(249,115,22,0.25)' : T.border}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '0.65rem', fontWeight: 700,
+              color: p.is_creator ? T.orange : T.textS,
+            }}>
+              {p.name.charAt(0).toUpperCase()}
+            </div>
+
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{
+                fontSize: '0.8rem', fontWeight: 600,
+                color: p.ws_id === myWsId ? T.orange : p.is_creator ? T.gold : T.text,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {p.name}
+                {p.is_creator && ' 👑'}
+                {p.ws_id === myWsId && <span style={{ color: T.textT, fontWeight: 400, fontSize: '0.7rem' }}> (you)</span>}
+              </p>
+            </div>
+
+            {/* Kick button — creator sees it on everyone except themselves */}
+            {isCreator && p.ws_id !== myWsId && (
+              <button
+                onClick={() => onKick(p.ws_id)}
+                title={`Remove ${p.name}`}
+                style={{
+                  width: 20, height: 20, borderRadius: 4,
+                  border: '1px solid rgba(239,68,68,0.2)',
+                  background: 'transparent', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: 'rgba(239,68,68,0.5)', flexShrink: 0,
+                  transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; e.currentTarget.style.color = T.red; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(239,68,68,0.5)'; }}
+              >
+                <X size={10} />
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ── Connection status dot ─────────────────────────────────── */
 const CONN_DOT = {
   idle:         { color: T.textT,  label: 'Idle',         pulse: false },
@@ -250,15 +377,18 @@ export default function BurnChatPage({ token }) {
   const [copied, setCopied]             = useState(false);
   const [copyFailed, setCopyFailed]     = useState(false);
   const [connStatus, setConnStatus]     = useState('idle');
-  // 'loading' | 'ok' | 'expired' | 'error'
   const [infoState, setInfoState]           = useState('loading');
   const [joinSecsLeft, setJoinSecsLeft]     = useState(null);
   const [joinParticipants, setJoinParticipants] = useState(0);
+  const [participantList, setParticipantList]   = useState([]);  // [{ws_id, name, is_creator}]
+  const [roomLocked, setRoomLocked]             = useState(false);
+  const [panelOpen, setPanelOpen]               = useState(false);
 
   const wsRef         = useRef(null);
+  const myWsIdRef     = useRef(null);         // own ws_id from 'joined'
   const bottomRef     = useRef(null);
   const countRef      = useRef(null);
-  const joinCountRef  = useRef(null);      // pre-join countdown tick
+  const joinCountRef  = useRef(null);
   const joinedRef     = useRef(false);
   const pingRef       = useRef(null);
   const reconnectRef  = useRef({
@@ -277,8 +407,9 @@ export default function BurnChatPage({ token }) {
       .then(({ data }) => {
         if (cancelled) return;
         setInfoState('ok');
-        setJoinSecsLeft(data.seconds_remaining);
-        setJoinParticipants(data.participant_count);
+        const secs = data.seconds_remaining;
+        setJoinSecsLeft(Number.isFinite(secs) ? Math.max(0, Math.floor(secs)) : null);
+        setJoinParticipants(data.participant_count ?? 0);
       })
       .catch(err => {
         if (cancelled) return;
@@ -364,13 +495,15 @@ export default function BurnChatPage({ token }) {
       switch (data.type) {
         case 'joined':
           joinedRef.current = true;
+          myWsIdRef.current = data.ws_id ?? null; // server may include ws_id in future
           reconnectRef.current.count = 0;
           setConnStatus('connected');
           setIsCreator(data.is_creator);
           setSecsLeft(data.seconds_remaining);
           setParticipants(data.participant_count);
+          if (data.participant_list) setParticipantList(data.participant_list);
+          if (data.locked !== undefined) setRoomLocked(data.locked);
           setPhase('chat');
-          // Start keepalive ping so firewalls/LBs don't close the idle connection.
           pingRef.current = setInterval(() => {
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(JSON.stringify({ type: 'ping' }));
@@ -382,9 +515,16 @@ export default function BurnChatPage({ token }) {
           break;
         case 'system':
           setParticipants(data.participant_count ?? 0);
+          if (data.participant_list) setParticipantList(data.participant_list);
           addSysMsg(data.text);
           break;
         case 'countdown':
+          setSecsLeft(data.seconds_remaining);
+          break;
+        case 'room_locked':
+          setRoomLocked(data.locked);
+          break;
+        case 'ttl_extended':
           setSecsLeft(data.seconds_remaining);
           break;
         case 'destroyed':
@@ -450,6 +590,24 @@ export default function BurnChatPage({ token }) {
     setInput('');
   };
 
+  const sendWs = useCallback((payload) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify(payload));
+    }
+  }, []);
+
+  const kick = useCallback((targetWsId) => {
+    sendWs({ type: 'kick', target_ws_id: targetWsId });
+  }, [sendWs]);
+
+  const toggleLock = useCallback(() => {
+    sendWs({ type: 'lock_room', locked: !roomLocked });
+  }, [sendWs, roomLocked]);
+
+  const extendTtl = useCallback(() => {
+    sendWs({ type: 'extend_ttl', extra_seconds: 1800 }); // 30 min
+  }, [sendWs]);
+
   const copy = async () => {
     const ok = await copyToClipboard(shareUrl);
     if (ok) {
@@ -497,17 +655,32 @@ export default function BurnChatPage({ token }) {
             {isCreator && (
               <span style={{ fontSize:'0.6rem', fontWeight:700, letterSpacing:'0.06em', textTransform:'uppercase', color:T.orange, background:'rgba(249,115,22,0.1)', border:'1px solid rgba(249,115,22,0.2)', borderRadius:'999px', padding:'0.15rem 0.45rem' }}>Creator</span>
             )}
+            {roomLocked && (
+              <span style={{ fontSize:'0.6rem', fontWeight:700, letterSpacing:'0.06em', textTransform:'uppercase', color:T.textS, background:'rgba(255,255,255,0.04)', border:`1px solid ${T.border}`, borderRadius:'999px', padding:'0.15rem 0.45rem', display:'flex', alignItems:'center', gap:'0.2rem' }}>
+                <Lock size={8} /> Locked
+              </span>
+            )}
           </div>
 
           <div style={{ display:'flex', alignItems:'center', gap:'0.75rem' }}>
             {/* Connection status dot */}
             <ConnStatusDot status={connStatus} />
 
-            {/* Participant count */}
-            <div style={{ display:'flex', alignItems:'center', gap:'0.3rem' }}>
-              <Users size={12} style={{ color:T.textS }} />
-              <span style={{ fontSize:'0.8125rem', color:T.textS, fontFamily:T.mono }}>{participants}</span>
-            </div>
+            {/* Participant count — click to open panel */}
+            <button
+              onClick={() => setPanelOpen(v => !v)}
+              title="Participants"
+              style={{
+                display:'flex', alignItems:'center', gap:'0.3rem',
+                background: panelOpen ? 'rgba(249,115,22,0.08)' : 'transparent',
+                border: panelOpen ? '1px solid rgba(249,115,22,0.2)' : '1px solid transparent',
+                borderRadius:'0.375rem', padding:'0.2rem 0.4rem',
+                cursor:'pointer', transition:'all 0.15s',
+              }}
+            >
+              <Users size={12} style={{ color: panelOpen ? T.orange : T.textS }} />
+              <span style={{ fontSize:'0.8125rem', color: panelOpen ? T.orange : T.textS, fontFamily:T.mono }}>{participants}</span>
+            </button>
 
             {/* Countdown */}
             {secsLeft !== null && (
@@ -565,16 +738,34 @@ export default function BurnChatPage({ token }) {
           </div>
         )}
 
-        {/* Messages area */}
-        <div style={{ flex:1, overflowY:'auto', padding:'1rem', display:'flex', flexDirection:'column', gap:'0.375rem' }}>
-          {messages.length === 0 && (
-            <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'0.75rem', opacity:0.4 }}>
-              <Flame size={32} style={{ color:T.orange }} />
-              <p style={{ fontSize:'0.875rem', color:T.textS }}>No messages yet. Be the first.</p>
-            </div>
+        {/* Body: messages + optional participants panel */}
+        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+
+          {/* Messages area */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+            {messages.length === 0 && (
+              <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'0.75rem', opacity:0.4 }}>
+                <Flame size={32} style={{ color:T.orange }} />
+                <p style={{ fontSize:'0.875rem', color:T.textS }}>No messages yet. Be the first.</p>
+              </div>
+            )}
+            {messages.map(m => <Bubble key={m.id} msg={m} myName={myName} />)}
+            <div ref={bottomRef} />
+          </div>
+
+          {/* Participant panel — slide in when panelOpen */}
+          {panelOpen && (
+            <ParticipantPanel
+              participantList={participantList}
+              myWsId={myWsIdRef.current}
+              isCreator={isCreator}
+              roomLocked={roomLocked}
+              onKick={kick}
+              onToggleLock={toggleLock}
+              onExtendTtl={extendTtl}
+              onClose={() => setPanelOpen(false)}
+            />
           )}
-          {messages.map(m => <Bubble key={m.id} msg={m} myName={myName} />)}
-          <div ref={bottomRef} />
         </div>
 
         {/* Input bar */}
