@@ -10,16 +10,21 @@ WS   /chat/{token}/ws      WebSocket: join room, send/receive messages.
 WebSocket protocol
 ------------------
 Client → Server (after joining):
-    {"type": "send", "text": "Hello!"}
+    {"type": "send",       "text": "Hello!"}
     {"type": "ping"}
+    {"type": "kick",       "target_ws_id": "..."} ← creator only
+    {"type": "lock_room",  "locked": bool}         ← creator only
+    {"type": "extend_ttl", "extra_seconds": int}    ← creator only
 
 Server → Client:
-    {"type": "joined",     "is_creator": bool, "seconds_remaining": int, ...}
-    {"type": "message",    "id": "...", "sender_name": "...", "text": "...", "sent_at": "...", "is_creator": bool}
-    {"type": "countdown",  "seconds_remaining": int}
-    {"type": "system",     "text": "...", "participant_count": int}
+    {"type": "joined",      "is_creator": bool, "seconds_remaining": int, "participant_list": [...], "locked": bool, ...}
+    {"type": "message",     "id": "...", "sender_name": "...", "text": "...", "sent_at": "...", "is_creator": bool}
+    {"type": "countdown",   "seconds_remaining": int}
+    {"type": "system",      "text": "...", "participant_count": int, "participant_list": [...]}
+    {"type": "room_locked", "locked": bool}
+    {"type": "ttl_extended","seconds_remaining": int, "expires_at": "..."}
     {"type": "destroyed"}
-    {"type": "error",      "text": "...", "code": "..."}
+    {"type": "error",       "text": "...", "code": "..."}
     {"type": "pong"}
 
 Connection handshake
@@ -287,6 +292,17 @@ async def chat_websocket(token: str, websocket: WebSocket):
             await websocket.close(code=4003, reason="Invalid PIN")
             return
 
+        if status == chat_service.JoinStatus.LOCKED:
+            await websocket.send_json(
+                {
+                    "type": "error",
+                    "text": "This room is locked — no new participants can join.",
+                    "code": "room_locked",
+                }
+            )
+            await websocket.close(code=4003, reason="Room locked")
+            return
+
         if status != chat_service.JoinStatus.OK:
             # SESSION_NOT_FOUND or SESSION_FULL — keep the message vague to
             # avoid leaking which condition triggered the rejection.
@@ -332,9 +348,7 @@ async def chat_websocket(token: str, websocket: WebSocket):
                 text = str(data.get("text", ""))[: chat_service.MAX_MESSAGE_LENGTH + 10].strip()
                 if text:
                     await chat_service.broadcast_message(
-                        token=token,
-                        ws_id=ws_id,
-                        text=text,
+                        token=token, ws_id=ws_id, text=text,
                     )
 
             elif msg_type == "ping":
@@ -342,6 +356,25 @@ async def chat_websocket(token: str, websocket: WebSocket):
                     await websocket.send_json({"type": "pong"})
                 except Exception:
                     break
+
+            elif msg_type == "kick":
+                target = str(data.get("target_ws_id", "")).strip()
+                if target:
+                    await chat_service.kick_participant(
+                        token=token, actor_ws_id=ws_id, target_ws_id=target,
+                    )
+
+            elif msg_type == "lock_room":
+                locked = bool(data.get("locked", True))
+                await chat_service.lock_room(
+                    token=token, actor_ws_id=ws_id, locked=locked,
+                )
+
+            elif msg_type == "extend_ttl":
+                extra = int(data.get("extra_seconds", chat_service.MAX_EXTEND_SECONDS))
+                await chat_service.extend_ttl(
+                    token=token, actor_ws_id=ws_id, extra_seconds=extra,
+                )
 
     except WebSocketDisconnect:
         pass
