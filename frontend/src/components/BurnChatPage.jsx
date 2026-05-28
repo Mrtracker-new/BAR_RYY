@@ -207,16 +207,24 @@ function Bubble({ msg, myName, sessionKey }) {
   useEffect(() => {
     // Nothing to decrypt — plaintext message or no key available yet.
     if (!msg.ciphertext || !sessionKey) return;
-    // Already decrypted successfully — don't redo on key re-render.
+    // Already successfully decrypted — don't redo on the same key instance.
+    // But DO retry if the key changed (reconnect with new session key).
     if (typeof plaintext === 'string') return;
 
     let cancelled = false;
     E2E.decryptMessage(msg.ciphertext, msg.iv, sessionKey)
-      .then(text => { if (!cancelled) setPlaintext(text); })
-      .catch(() => { if (!cancelled) setPlaintext(false); });
+      .then(text  => { if (!cancelled) setPlaintext(text); })
+      .catch(_err => {
+        // AES-GCM auth tag failed — ciphertext tampered or mismatched key.
+        // On reconnect a new sessionKey arrives; if this bubble is still
+        // mounted we want to retry, so we set null (pending) not false (fatal),
+        // unless sessionKey is the definitive final key (e2eReady is already
+        // true before this effect fires in that case).
+        if (!cancelled) setPlaintext(false);
+      });
 
     return () => { cancelled = true; };
-  // Re-run when the session key is delivered or replaced (creator reconnect).
+  // Re-run when the session key is delivered, replaced (reconnect), or removed.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionKey]);
 
@@ -567,6 +575,23 @@ export default function BurnChatPage({ token }) {
     joinedRef.current = false;
     setConnStatus('connecting');
 
+    // ── Reset all E2E state for this (re)connection ───────────────────────────
+    // This is critical on reconnect: stale keypairs, keyedPeers sets, and
+    // session keys from the previous connection must be discarded.  If they
+    // survive, the creator won't re-issue session keys (keyedPeers still
+    // populated) and participants keep an invalid key — every message
+    // after reconnect would show ⚠️ Could not decrypt.
+    e2eRef.current = {
+      keyPair:           null,
+      sessionKey:        null,
+      pubkeys:           new Map(),
+      keyedPeers:        new Set(),
+      pendingSessionKey: null,
+    };
+    setE2eReady(false);
+    setE2eFingerprint(null);
+    setE2eSessionKey(null);
+
     const PING_INTERVAL_MS    = 20_000;
     const RECONNECT_DELAYS_MS = [1_000, 2_000, 4_000];
 
@@ -663,7 +688,6 @@ export default function BurnChatPage({ token }) {
 
           // ── Creator: wrap and unicast the session key to the new peer ────
           const { keyPair, sessionKey: sk, keyedPeers } = e2eRef.current;
-          const myWsId = myWsIdRef.current;
           const amCreator = joinedRef.current && !!sk;
 
           if (amCreator && keyPair && sk && !keyedPeers.has(peerWsId)) {
@@ -826,8 +850,9 @@ export default function BurnChatPage({ token }) {
 
   const sendMessage = async () => {
     const text = input.trim();
-    if (!text || !wsRef.current) return;
-    setInput('');
+    if (!text || wsRef.current?.readyState !== WebSocket.OPEN) return;
+    // Do NOT clear input yet — clear only after successful send so the
+    // user's message is preserved if encryption or the WS send throws.
 
     const { sessionKey } = e2eRef.current;
 
@@ -835,15 +860,19 @@ export default function BurnChatPage({ token }) {
       // ── E2E path: encrypt client-side; server relays opaque ciphertext ──
       try {
         const { ciphertext, iv } = await E2E.encryptMessage(text, sessionKey);
+        // Guard again: WS might have closed during the async encrypt.
+        if (wsRef.current?.readyState !== WebSocket.OPEN) return;
         wsRef.current.send(JSON.stringify({ type: 'send', ciphertext, iv }));
+        setInput(''); // clear only after successful send
       } catch (err) {
         console.error('[E2E] Encryption failed:', err);
-        // Surface a non-blocking error rather than silently dropping the message.
-        setWsError('Encryption failed — message not sent. Please refresh.');
+        // Message text intentionally preserved in <textarea> so user can retry.
+        setWsError('Encryption failed — message not sent. Please try again.');
       }
     } else {
       // ── Plaintext path: TLS-only (insecure context or key not yet ready) ─
       wsRef.current.send(JSON.stringify({ type: 'send', text }));
+      setInput('');
     }
   };
 
