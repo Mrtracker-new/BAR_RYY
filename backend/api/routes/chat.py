@@ -10,15 +10,24 @@ WS   /chat/{token}/ws      WebSocket: join room, send/receive messages.
 WebSocket protocol
 ------------------
 Client → Server (after joining):
-    {"type": "send",       "text": "Hello!"}
+    {"type": "send",        "text": "Hello!"}                        ← plaintext path
+    {"type": "send",        "ciphertext": "<b64>", "iv": "<b64>"}   ← E2E path
     {"type": "ping"}
-    {"type": "kick",       "target_ws_id": "..."} ← creator only
-    {"type": "lock_room",  "locked": bool}         ← creator only
-    {"type": "extend_ttl", "extra_seconds": int}    ← creator only
+    {"type": "pubkey",      "public_key": "<b64-JWK>"}              ← E2E key exchange
+    {"type": "session_key", "for_ws_id": "...", "wrapped_key": "<b64>"} ← creator only
+    {"type": "kick",        "target_ws_id": "..."}                   ← creator only
+    {"type": "lock_room",   "locked": bool}                          ← creator only
+    {"type": "extend_ttl",  "extra_seconds": int}                    ← creator only
 
 Server → Client:
-    {"type": "joined",      "is_creator": bool, "seconds_remaining": int, "participant_list": [...], "locked": bool, ...}
-    {"type": "message",     "id": "...", "sender_name": "...", "text": "...", "sent_at": "...", "is_creator": bool}
+    {"type": "joined",      "ws_id": "...", "is_creator": bool, "seconds_remaining": int,
+                             "participant_list": [...], "locked": bool, ...}
+    {"type": "message",     "id": "...", "sender_name": "...", "sent_at": "...",
+                             "is_creator": bool,
+                             "text": "..."              (plaintext path)
+                             OR "ciphertext": "<b64>", "iv": "<b64>"  (E2E path)}
+    {"type": "pubkey",      "ws_id": "...", "public_key": "<b64-JWK>"}  ← relayed to all
+    {"type": "session_key", "from_ws_id": "...", "wrapped_key": "<b64>"}  ← unicast
     {"type": "countdown",   "seconds_remaining": int}
     {"type": "system",      "text": "...", "participant_count": int, "participant_list": [...]}
     {"type": "room_locked", "locked": bool}
@@ -345,10 +354,45 @@ async def chat_websocket(token: str, websocket: WebSocket):
             msg_type = data.get("type", "")
 
             if msg_type == "send":
-                text = str(data.get("text", ""))[: chat_service.MAX_MESSAGE_LENGTH + 10].strip()
-                if text:
+                # ── Dual-path dispatch: E2E ciphertext or plaintext ──────────────
+                raw_ct = data.get("ciphertext")
+                raw_iv = data.get("iv")
+
+                if raw_ct is not None:
+                    # E2E path — forward opaque ciphertext; service validates format.
                     await chat_service.broadcast_message(
-                        token=token, ws_id=ws_id, text=text,
+                        token=token,
+                        ws_id=ws_id,
+                        ciphertext=str(raw_ct)[: chat_service._E2E_CIPHERTEXT_MAX + 10],
+                        iv=str(raw_iv or "")[: chat_service._E2E_IV_MAX + 10],
+                    )
+                else:
+                    # Plaintext path — server HTML-escapes before relay.
+                    raw_text = str(data.get("text", ""))[: chat_service.MAX_MESSAGE_LENGTH + 10].strip()
+                    if raw_text:
+                        await chat_service.broadcast_message(
+                            token=token, ws_id=ws_id, text=raw_text,
+                        )
+
+            elif msg_type == "pubkey":
+                # E2E key exchange — relay ECDH public key to all other participants.
+                raw_key = data.get("public_key", "")
+                await chat_service.relay_e2e_pubkey(
+                    token=token,
+                    sender_ws_id=ws_id,
+                    public_key=str(raw_key),
+                )
+
+            elif msg_type == "session_key":
+                # E2E key distribution — creator unicasts wrapped AES key to one peer.
+                raw_for  = str(data.get("for_ws_id", "")).strip()
+                raw_wkey = data.get("wrapped_key", "")
+                if raw_for:
+                    await chat_service.relay_e2e_session_key(
+                        token=token,
+                        actor_ws_id=ws_id,
+                        for_ws_id=raw_for,
+                        wrapped_key=str(raw_wkey),
                     )
 
             elif msg_type == "ping":
