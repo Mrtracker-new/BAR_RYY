@@ -43,15 +43,21 @@ const FEATURES = [
   },
   {
     icon: Lock,
-    color: '#C8893A',
-    title: 'Zero Persistence',
-    desc: 'Messages exist only in server memory. Nothing is written to disk. No logs. No database rows.',
+    color: T.green,
+    title: 'End-to-End Encrypted',
+    desc: 'Messages are encrypted in your browser using AES-GCM-256 before leaving your device. The server only relays ciphertext — it cannot read your messages.',
   },
   {
     icon: Zap,
-    color: T.green,
+    color: '#C8893A',
     title: 'Real-Time',
     desc: 'Powered by WebSockets. Messages appear instantly across all participants with no polling.',
+  },
+  {
+    icon: Shield,
+    color: '#6B7FD4',
+    title: 'Key Fingerprint',
+    desc: 'A 6-char session code lets you verify the encryption key out-of-band. If codes differ across participants, leave immediately.',
   },
 ];
 
@@ -387,8 +393,8 @@ export default function BurnChatLandingPage() {
   return (
     <div style={{ minHeight: '100vh', background: T.bg, color: T.text, overflowX: 'hidden', position: 'relative' }}>
       <SEO
-        title="Burn Chat — Ephemeral Zero-Trace Messaging | BAR Web"
-        description="Create an encrypted, ephemeral chat session that permanently self-destructs when the timer expires. No logs, no history, no traces."
+        title="Burn Chat — E2E Encrypted Ephemeral Messaging | BAR Web"
+        description="End-to-end encrypted, ephemeral chat that permanently self-destructs when the timer expires. Messages are encrypted in your browser — the server never sees plaintext. No logs, no history, no traces."
       />
 
       {/* Ambient background */}
@@ -413,16 +419,16 @@ export default function BurnChatLandingPage() {
               <span style={{
                 display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
                 padding: '0.3125rem 0.875rem', borderRadius: '999px',
-                background: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.2)',
+                background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)',
                 fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.08em',
-                textTransform: 'uppercase', color: T.orange,
+                textTransform: 'uppercase', color: T.green,
               }}>
                 <span style={{
                   width: 5, height: 5, borderRadius: '50%',
-                  background: T.orange, boxShadow: '0 0 6px rgba(249,115,22,0.8)',
+                  background: T.green, boxShadow: '0 0 6px rgba(34,197,94,0.8)',
                   animation: 'pulse 2s infinite',
                 }} />
-                Ephemeral · Zero Trace
+                Ephemeral · E2E Encrypted
               </span>
             </div>
 
@@ -448,8 +454,9 @@ export default function BurnChatLandingPage() {
               fontSize: 'clamp(0.9rem, 2vw, 1rem)',
               color: T.textS, lineHeight: 1.7, maxWidth: '34ch', margin: '0 auto',
             }}>
-              Zero-trace encrypted messaging. The entire session —
-              every message, every participant — is permanently destroyed when the timer ends.
+              End-to-end encrypted ephemeral messaging. Your browser encrypts every message
+              before it leaves your device — the server only relays ciphertext.
+              Everything is permanently destroyed when the timer ends.
             </p>
           </motion.div>
 
@@ -474,6 +481,20 @@ export default function BurnChatLandingPage() {
           >
             Share the link with participants. Only the creator who holds the PIN has moderator access.
             Once the timer expires the room cannot be recovered by anyone — including us.
+          </motion.p>
+
+          {/* E2E trust note */}
+          <motion.p
+            {...fadeUp(0.8)}
+            style={{
+              textAlign: 'center', marginTop: '0.75rem',
+              fontSize: '0.7rem', color: T.textD, lineHeight: 1.6,
+            }}
+          >
+            🔐 Messages are encrypted in your browser using{' '}
+            <strong style={{ color: T.textT }}>AES-GCM-256</strong>{' '}with keys exchanged via{' '}
+            <strong style={{ color: T.textT }}>ECDH P-256</strong>.{' '}
+            The server never sees plaintext. Requires HTTPS.
           </motion.p>
         </div>
       </main>
