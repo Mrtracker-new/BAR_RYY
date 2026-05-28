@@ -80,7 +80,7 @@ function JoinScreen({ token, onJoin, error, infoState, joinSecsLeft, joinPartici
             <Flame size={24} style={{ color:T.orange }} />
           </div>
           <h1 style={{ fontSize:'1.375rem', fontWeight:700, letterSpacing:'-0.03em', color:T.text, marginBottom:'0.375rem' }}>Join Burn Chat</h1>
-          <p style={{ fontSize:'0.8125rem', color:T.textS }}>Messages vanish when the timer expires.</p>
+          <p style={{ fontSize:'0.8125rem', color:T.textS }}>End-to-end encrypted. Messages vanish when the timer expires.</p>
           <code style={{ fontSize:'0.6875rem', color:T.textT, fontFamily:T.mono, display:'block', marginTop:'0.5rem' }}>{token}</code>
         </div>
 
