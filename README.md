@@ -52,7 +52,10 @@ Great for:
 
 | Feature | Details |
 |---|---|
-| 💬 Ephemeral Messaging | Real-time chat over WebSockets — nothing stored |
+| 🔐 End-to-End Encrypted | Messages encrypted in-browser with **AES-GCM-256** before leaving your device. Server only sees ciphertext |
+| 🤝 ECDH Key Exchange | Each session uses **ECDH P-256** key agreement — no shared secret ever touches the server |
+| 🔏 Session Fingerprint | 6-char code derived from the shared key. Verify it matches across all participants to detect MITM |
+| 💬 Ephemeral Messaging | Real-time chat over WebSockets — nothing stored server-side |
 | ⏱️ Self-Destruct Timer | Set 5 min → 24 hr. When it hits zero, it's all gone |
 | 👑 Creator PIN | Claim the moderator role with a one-time PIN |
 | 🚫 Zero Persistence | Messages exist only in server memory — no disk, no DB |
@@ -97,15 +100,20 @@ Then open → **http://localhost:5173** 🎉
 
 ## 🔐 Security in plain English
 
+### File Containers
 **AES-256** encryption. **PBKDF2** key derivation with 100,000 iterations. **HMAC-SHA256** tamper detection.
-
-What does that mean for you?
 
 > Even if someone hacks the server, steals the database, or threatens us with strongly-worded emails — they still can't read your files. The key lives only in your head (and in the URL you share).
 
-We never store encryption keys. Without the password, your file is expensive random noise.
+### Burn Chat
+Burn Chat goes further with **true end-to-end encryption**:
 
-Burn Chat goes further — there's no encryption key to steal because **nothing is ever written to disk at all.**
+- **Key agreement:** `ECDH P-256` — each participant generates a keypair in their browser. Private keys never leave the device (`extractable: false`).
+- **Session key:** Creator generates a random `AES-GCM-256` key, wraps it per-peer using the ECDH shared secret, and delivers it via the server (as opaque ciphertext the server cannot read).
+- **Message encryption:** Every message is encrypted client-side with a fresh 12-byte random IV before it's sent. The server relays ciphertext only.
+- **Session fingerprint:** A 6-character hex code derived from `SHA-256(raw session key)[0:3]`. All participants can compare it verbally to confirm no key substitution occurred.
+- **Zero server residue:** The server never holds plaintext, session keys, or private keys — only relays opaque base64 blobs.
+- **Degradation:** If the page is served over plain HTTP (`crypto.subtle` unavailable), a warning banner is shown and messages fall back to TLS-only protection.
 
 ---
 
