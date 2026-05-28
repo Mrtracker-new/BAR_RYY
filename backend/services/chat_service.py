@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import html
+import re
 import logging
 import os
 import secrets
@@ -57,6 +58,27 @@ MAX_MESSAGE_LENGTH: int = 2_000
 
 #: Maximum display-name length.
 MAX_NAME_LENGTH: int = 30
+
+# ---------------------------------------------------------------------------
+# E2E relay limits  (server never inspects payload content)
+# ---------------------------------------------------------------------------
+
+#: Maximum base64 length of an ECDH public key (JWK ≈ 200 chars; 512 is generous).
+_E2E_PUBKEY_MAX: int = 512
+
+#: Maximum base64 length of a wrapped AES session key (32 raw bytes → 44 b64 chars;
+#: 512 leaves ample room for future algorithm changes).
+_E2E_WRAPPED_KEY_MAX: int = 512
+
+#: Maximum base64 length of an AES-GCM ciphertext for a 2 000-char plaintext
+#: (≈ 2 667 b64 chars + padding).  4 096 is a safe ceiling.
+_E2E_CIPHERTEXT_MAX: int = 4_096
+
+#: AES-GCM IV is always 12 raw bytes → 16 base64 chars.  Allow 32 for padding.
+_E2E_IV_MAX: int = 32
+
+#: Pre-compiled pattern — standard base64 alphabet only (no whitespace).
+_B64_RE: re.Pattern = re.compile(r'^[A-Za-z0-9+/]*={0,2}$')
 
 #: Rate-limit: messages per window per participant.
 _RATE_LIMIT_MSGS: int = 10
@@ -512,6 +534,7 @@ async def join_session(
     await ws.send_json(
         {
             "type": "joined",
+            "ws_id": ws_id,           # client's own stable identity for E2E addressing
             "token": token,
             "is_creator": is_creator,
             "seconds_remaining": remaining,
@@ -528,17 +551,46 @@ async def join_session(
 async def broadcast_message(
     token: str,
     ws_id: str,
-    text: str,
+    *,
+    text: Optional[str] = None,
+    ciphertext: Optional[str] = None,
+    iv: Optional[str] = None,
 ) -> bool:
     """
     Broadcast a chat message from the participant identified by *ws_id*.
 
-    Messages are NOT stored anywhere after broadcast — ephemeral by design.
+    Supports two mutually exclusive paths:
+
+    Plaintext path  (``text`` supplied)
+        Server HTML-escapes and length-caps the content before relaying.
+        Used when E2E is not active.
+
+    E2E path  (``ciphertext`` + ``iv`` supplied)
+        Server validates only that both fields are non-empty base64 strings
+        within size limits, then relays the opaque payload as-is.
+        **No html.escape() is applied** — ciphertext is binary-safe base64.
+        The server never reads the plaintext.
+
+    Rate limiting applies on both paths (message *frequency*, not content).
 
     Returns:
-        ``True`` if broadcast succeeded, ``False`` if the session is expired,
-        the participant is no longer registered, or the rate limit is exceeded.
+        ``True``  — message relayed successfully.
+        ``False`` — session gone, participant not found, or rate limit hit.
+
+    Raises:
+        ValueError — both or neither of (text / ciphertext+iv) are supplied.
     """
+    # ── Argument validation ────────────────────────────────────────────────
+    e2e_mode = ciphertext is not None
+    if e2e_mode:
+        if iv is None:
+            raise ValueError("iv is required when ciphertext is supplied")
+        if text is not None:
+            raise ValueError("text and ciphertext are mutually exclusive")
+    elif text is None:
+        raise ValueError("Either text or ciphertext+iv must be supplied")
+
+    # ── Session / participant lookup ───────────────────────────────────────
     session = get_session(token)
     if session is None:
         return False
@@ -547,6 +599,7 @@ async def broadcast_message(
     if participant is None:
         return False
 
+    # ── Per-participant rate limit (applies to both paths) ─────────────────
     now = datetime.now(timezone.utc)
     elapsed = (now - participant._window_start).total_seconds()
     if elapsed > _RATE_WINDOW_SECS:
@@ -556,10 +609,7 @@ async def broadcast_message(
     if participant._msg_count >= _RATE_LIMIT_MSGS:
         try:
             await participant.ws.send_json(
-                {
-                    "type": "error",
-                    "text": "Slow down — you are sending messages too quickly.",
-                }
+                {"type": "error", "text": "Slow down — you are sending messages too quickly."}
             )
         except Exception:
             pass
@@ -567,18 +617,39 @@ async def broadcast_message(
 
     participant._msg_count += 1
 
-    safe_text = _safe_text(text, MAX_MESSAGE_LENGTH)
-    if not safe_text:
-        return False
+    # ── Build payload ──────────────────────────────────────────────────────
+    if e2e_mode:
+        # Size-cap and base64 format check — content is never inspected.
+        ct = str(ciphertext)[:_E2E_CIPHERTEXT_MAX]
+        nonce = str(iv)[:_E2E_IV_MAX]
+        if not ct or not _B64_RE.match(ct):
+            return False
+        if not nonce or not _B64_RE.match(nonce):
+            return False
 
-    payload = {
-        "type": "message",
-        "id": str(uuid.uuid4()),
-        "sender_name": participant.name,
-        "text": safe_text,
-        "sent_at": now.isoformat(),
-        "is_creator": participant.is_creator,
-    }
+        payload = {
+            "type": "message",
+            "id": str(uuid.uuid4()),
+            "sender_name": participant.name,
+            "sent_at": now.isoformat(),
+            "is_creator": participant.is_creator,
+            # E2E fields — opaque to the server.
+            "ciphertext": ct,
+            "iv": nonce,
+        }
+    else:
+        safe_text = _safe_text(str(text), MAX_MESSAGE_LENGTH)
+        if not safe_text:
+            return False
+
+        payload = {
+            "type": "message",
+            "id": str(uuid.uuid4()),
+            "sender_name": participant.name,
+            "text": safe_text,
+            "sent_at": now.isoformat(),
+            "is_creator": participant.is_creator,
+        }
 
     await _broadcast(session, payload)
     return True
@@ -604,6 +675,92 @@ async def leave_session(token: str, ws_id: str) -> None:
                 "participant_list": participant_list,
             },
         )
+
+
+async def relay_e2e_pubkey(
+    token: str,
+    sender_ws_id: str,
+    public_key: str,
+) -> bool:
+    """
+    Broadcast an ECDH public key from *sender_ws_id* to all other participants.
+
+    The server performs **no cryptographic operations** — it validates only
+    that *public_key* is a non-empty base64 string within the size limit and
+    that the sender is an active participant.  Key content is never inspected.
+
+    This is intentionally dumb relay: the server could equally be delivering
+    a bogus key (MITM scenario), which is why clients display a session
+    fingerprint for out-of-band verification.
+
+    Returns True if relayed, False if session/participant not found or key
+    fails format validation.
+    """
+    session = _SESSIONS.get(token)
+    if session is None:
+        return False
+
+    if sender_ws_id not in session.participants:
+        return False
+
+    # Validate: non-empty, base64 only, within size cap.
+    key_str = str(public_key)[:_E2E_PUBKEY_MAX]
+    if not key_str or not _B64_RE.match(key_str):
+        return False
+
+    await _broadcast(
+        session,
+        {"type": "pubkey", "ws_id": sender_ws_id, "public_key": key_str},
+        exclude_ws_id=sender_ws_id,
+    )
+    return True
+
+
+async def relay_e2e_session_key(
+    token: str,
+    actor_ws_id: str,
+    for_ws_id: str,
+    wrapped_key: str,
+) -> bool:
+    """
+    Unicast a wrapped AES session key from the creator to a single recipient.
+
+    Only the session creator (*actor_ws_id* with ``is_creator=True``) may
+    call this.  The wrapped key is an opaque base64 blob produced by the
+    creator's browser (AES-KW over the ECDH-derived per-pair secret) and
+    is never inspected or stored by the server.
+
+    Returns True if delivered, False on any precondition failure.
+    """
+    session = _SESSIONS.get(token)
+    if session is None:
+        return False
+
+    actor = session.participants.get(actor_ws_id)
+    if actor is None or not actor.is_creator:
+        return False
+
+    target = session.participants.get(for_ws_id)
+    if target is None:
+        return False  # recipient already left
+
+    # Validate: non-empty, base64 only, within size cap.
+    key_str = str(wrapped_key)[:_E2E_WRAPPED_KEY_MAX]
+    if not key_str or not _B64_RE.match(key_str):
+        return False
+
+    try:
+        await target.ws.send_json(
+            {
+                "type": "session_key",
+                "from_ws_id": actor_ws_id,
+                "wrapped_key": key_str,
+            }
+        )
+    except Exception:
+        return False
+
+    return True
 
 
 async def kick_participant(token: str, actor_ws_id: str, target_ws_id: str) -> bool:
