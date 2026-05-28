@@ -360,11 +360,14 @@ async def chat_websocket(token: str, websocket: WebSocket):
 
                 if raw_ct is not None:
                     # E2E path — forward opaque ciphertext; service validates format.
+                    # Silently drop if iv is absent — a well-behaved client never omits it.
+                    if not raw_iv:
+                        continue
                     await chat_service.broadcast_message(
                         token=token,
                         ws_id=ws_id,
                         ciphertext=str(raw_ct)[: chat_service._E2E_CIPHERTEXT_MAX + 10],
-                        iv=str(raw_iv or "")[: chat_service._E2E_IV_MAX + 10],
+                        iv=str(raw_iv)[: chat_service._E2E_IV_MAX + 10],
                     )
                 else:
                     # Plaintext path — server HTML-escapes before relay.
