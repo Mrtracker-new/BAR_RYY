@@ -211,14 +211,15 @@ export default function BurnChatCreate({ onCreated }) {
         <span style={{
           marginLeft: 'auto', fontSize: '0.625rem', fontWeight: 700,
           letterSpacing: '0.06em', textTransform: 'uppercase',
-          color: '#F97316', background: 'rgba(249,115,22,0.08)',
-          border: '1px solid rgba(249,115,22,0.16)', borderRadius: '999px',
+          color: '#22C55E', background: 'rgba(34,197,94,0.08)',
+          border: '1px solid rgba(34,197,94,0.16)', borderRadius: '999px',
           padding: '0.15rem 0.5rem',
-        }}>Ephemeral</span>
+        }}>E2E Encrypted</span>
       </div>
 
       <p style={{ fontSize: '0.8125rem', color: '#888888', lineHeight: 1.6 }}>
-        Messages exist only in memory. When the timer expires everything is gone — no logs, no traces.
+        Messages are encrypted in your browser before they leave your device.
+        The server only relays ciphertext — no logs, no disk writes, no traces.
       </p>
 
       <CreateSessionForm onCreated={handleCreated} compact />
