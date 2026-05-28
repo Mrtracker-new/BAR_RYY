@@ -4,6 +4,7 @@ import { copyToClipboard } from '../utils/clipboard';
 import axios from '../config/axios';
 import BurningAnimation from './BurningAnimation';
 import SEO from './SEO';
+import * as E2E from '../crypto/burnChatE2E';
 
 const T = {
   gold: '#E8A020', green: '#22C55E', red: '#EF4444', orange: '#F97316',
@@ -384,6 +385,12 @@ export default function BurnChatPage({ token }) {
   const [roomLocked, setRoomLocked]             = useState(false);
   const [panelOpen, setPanelOpen]               = useState(false);
 
+  // ── E2E encryption state ─────────────────────────────────────────────────
+  const [e2eReady, setE2eReady]               = useState(false);   // session key held + fingerprint set
+  const [e2eFingerprint, setE2eFingerprint]   = useState(null);    // '2FA3C1' — 6 uppercase hex chars
+  const [cryptoAvailable, setCryptoAvailable] = useState(true);    // false → insecure context banner
+  const [e2eSessionKey, setE2eSessionKey]     = useState(null);    // mirrors e2eRef.sessionKey for re-renders
+
   const wsRef         = useRef(null);
   const myWsIdRef     = useRef(null);         // own ws_id from 'joined'
   const bottomRef     = useRef(null);
@@ -393,6 +400,23 @@ export default function BurnChatPage({ token }) {
   const pingRef       = useRef(null);
   const reconnectRef  = useRef({
     count: 0, name: null, pin: null, timeoutId: null,
+  });
+
+  /**
+   * Mutable E2E ref — holds CryptoKey objects and Maps that must NOT trigger
+   * re-renders when updated. setE2eSessionKey / setE2eReady / setE2eFingerprint
+   * are the React-visible mirrors that drive the UI.
+   *
+   * pendingSessionKey: {fromWsId, wrappedKey} stored when a 'session_key'
+   * message arrives before the creator's pubkey has been received — retried
+   * once the creator pubkey is stored (race-condition guard).
+   */
+  const e2eRef = useRef({
+    keyPair:           null,        // { publicKey, privateKey } — ECDH P-256
+    sessionKey:        null,        // AES-GCM-256 CryptoKey (creator-generated)
+    pubkeys:           new Map(),   // ws_id → base64-JWK pubkey for all known peers
+    keyedPeers:        new Set(),   // ws_ids the creator has already sent session_key to
+    pendingSessionKey: null,        // { fromWsId, wrappedKey } — held during pubkey race
   });
 
   const shareUrl = `${window.location.origin}/chat/${token}`;
@@ -468,6 +492,10 @@ export default function BurnChatPage({ token }) {
     reconnectRef.current.pin   = pin;
     reconnectRef.current.count = 0;
 
+    // Detect insecure context before attempting E2E.
+    // crypto.subtle is undefined on plain http:// — surface the banner now.
+    setCryptoAvailable(E2E.isAvailable());
+
     _connectWs(name, pin);
   }, [token, addSysMsg]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -493,9 +521,10 @@ export default function BurnChatPage({ token }) {
       try { data = JSON.parse(ev.data); } catch { return; }
 
       switch (data.type) {
-        case 'joined':
-          joinedRef.current = true;
-          myWsIdRef.current = data.ws_id ?? null; // server may include ws_id in future
+
+        case 'joined': {
+          joinedRef.current     = true;
+          myWsIdRef.current     = data.ws_id ?? null;
           reconnectRef.current.count = 0;
           setConnStatus('connected');
           setIsCreator(data.is_creator);
@@ -505,41 +534,190 @@ export default function BurnChatPage({ token }) {
           if (data.locked !== undefined) setRoomLocked(data.locked);
           setPhase('chat');
           pingRef.current = setInterval(() => {
-            if (ws.readyState === WebSocket.OPEN) {
+            if (ws.readyState === WebSocket.OPEN)
               ws.send(JSON.stringify({ type: 'ping' }));
-            }
           }, PING_INTERVAL_MS);
+
+          // ── E2E key exchange bootstrap ───────────────────────────────────
+          if (!E2E.isAvailable()) break; // insecure context — skip silently, banner shown
+
+          (async () => {
+            try {
+              // 1. Generate our ECDH keypair (private key extractable:false).
+              const keyPair = await E2E.generateKeyPair();
+              e2eRef.current.keyPair = keyPair;
+
+              // 2. Export and broadcast our public key to all peers.
+              const pubKeyB64 = await E2E.exportPublicKey(keyPair.publicKey);
+              ws.send(JSON.stringify({ type: 'pubkey', public_key: pubKeyB64 }));
+
+              if (data.is_creator) {
+                // 3a. Creator generates the session key.
+                const sk = await E2E.generateSessionKey();
+                e2eRef.current.sessionKey = sk;
+
+                // 4a. Compute and set fingerprint immediately (creator already has the key).
+                const fp = await E2E.sessionFingerprint(sk);
+                setE2eFingerprint(fp);
+                setE2eSessionKey(sk);
+                setE2eReady(true);
+
+                // 5a. Wrap and send session key to every peer already in the room
+                //     whose pubkey was included in the participant_list.
+                //     (Peers who join later are handled in the 'pubkey' handler.)
+                const existingPeers = (data.participant_list ?? [])
+                  .filter(p => p.ws_id !== data.ws_id);
+
+                // We cannot wrap for peers whose pubkeys we don't yet have —
+                // those will arrive as 'pubkey' messages and be handled below.
+                // Store our own pubkey so we can look it up as 'creator pubkey'.
+                e2eRef.current.pubkeys.set(data.ws_id, pubKeyB64);
+
+                // existingPeers: we have to wait for their pubkeys to arrive
+                // via 'pubkey' messages (join order is not guaranteed to deliver
+                // all pubkeys before our first 'pubkey' fires).  No action here.
+                void existingPeers; // acknowledged — handled reactively in 'pubkey'
+              }
+              // Participant path: session key arrives via 'session_key' message.
+            } catch (err) {
+              console.error('[E2E] Key bootstrap failed:', err);
+            }
+          })();
           break;
+        }
+
+        case 'pubkey': {
+          // Relay from server: a peer has broadcast their ECDH public key.
+          const { ws_id: peerWsId, public_key: peerPubKeyB64 } = data;
+          if (!peerWsId || !peerPubKeyB64) break;
+
+          // Store in the pubkey map for this peer.
+          e2eRef.current.pubkeys.set(peerWsId, peerPubKeyB64);
+
+          // Also store our own pubkey (keyed by our ws_id) so
+          // participants can find the creator's pubkey for wrap-key derivation.
+          // (We stored it already in the 'joined' handler above.)
+
+          // ── Creator: wrap and unicast the session key to the new peer ────
+          const { keyPair, sessionKey: sk, keyedPeers } = e2eRef.current;
+          const myWsId = myWsIdRef.current;
+          const amCreator = joinedRef.current && !!sk;
+
+          if (amCreator && keyPair && sk && !keyedPeers.has(peerWsId)) {
+            (async () => {
+              try {
+                const theirPub  = await E2E.importPublicKey(peerPubKeyB64);
+                const wrapKey   = await E2E.deriveWrapKey(keyPair.privateKey, theirPub);
+                const wrapped   = await E2E.wrapSessionKey(sk, wrapKey);
+                keyedPeers.add(peerWsId);
+                ws.send(JSON.stringify({
+                  type:        'session_key',
+                  for_ws_id:   peerWsId,
+                  wrapped_key: wrapped,
+                }));
+              } catch (err) {
+                console.error('[E2E] Failed to wrap session key for peer:', peerWsId, err);
+              }
+            })();
+          }
+
+          // ── Participant: resolve a pending session_key that arrived before
+          //                this pubkey (race-condition guard) ───────────────
+          const pending = e2eRef.current.pendingSessionKey;
+          if (pending && pending.fromWsId === peerWsId) {
+            e2eRef.current.pendingSessionKey = null;
+            const { fromWsId, wrappedKey } = pending;
+            (async () => {
+              try {
+                const { keyPair: kp } = e2eRef.current;
+                if (!kp) return;
+                const creatorPub  = await E2E.importPublicKey(peerPubKeyB64);
+                const wrapKey     = await E2E.deriveWrapKey(kp.privateKey, creatorPub);
+                const resolvedKey = await E2E.unwrapSessionKey(wrappedKey, wrapKey);
+                const fp          = await E2E.sessionFingerprint(resolvedKey);
+                e2eRef.current.sessionKey = resolvedKey;
+                setE2eSessionKey(resolvedKey);
+                setE2eFingerprint(fp);
+                setE2eReady(true);
+              } catch (err) {
+                console.error('[E2E] Failed to resolve pending session_key after pubkey arrived:', err);
+              }
+            })();
+          }
+          break;
+        }
+
+        case 'session_key': {
+          // Creator unicast: contains our wrapped AES-GCM session key.
+          const { from_ws_id: fromWsId, wrapped_key: wrappedKey } = data;
+          if (!fromWsId || !wrappedKey) break;
+
+          const { keyPair, pubkeys } = e2eRef.current;
+          if (!keyPair) break; // keypair not yet generated — should not happen
+
+          const creatorPubKeyB64 = pubkeys.get(fromWsId);
+
+          if (!creatorPubKeyB64) {
+            // Race: creator's pubkey hasn't arrived yet — park this message.
+            // The 'pubkey' handler will detect and resolve it.
+            e2eRef.current.pendingSessionKey = { fromWsId, wrappedKey };
+            break;
+          }
+
+          (async () => {
+            try {
+              const creatorPub  = await E2E.importPublicKey(creatorPubKeyB64);
+              const wrapKey     = await E2E.deriveWrapKey(keyPair.privateKey, creatorPub);
+              const resolvedKey = await E2E.unwrapSessionKey(wrappedKey, wrapKey);
+              const fp          = await E2E.sessionFingerprint(resolvedKey);
+              e2eRef.current.sessionKey = resolvedKey;
+              setE2eSessionKey(resolvedKey);
+              setE2eFingerprint(fp);
+              setE2eReady(true);
+            } catch (err) {
+              console.error('[E2E] Failed to unwrap session key:', err);
+            }
+          })();
+          break;
+        }
+
         case 'message':
           setMessages(prev => [...prev, data]);
           break;
+
         case 'system':
           setParticipants(data.participant_count ?? 0);
           if (data.participant_list) setParticipantList(data.participant_list);
           addSysMsg(data.text);
           break;
+
         case 'countdown':
           setSecsLeft(data.seconds_remaining);
           break;
+
         case 'room_locked':
           setRoomLocked(data.locked);
           break;
+
         case 'ttl_extended':
           setSecsLeft(data.seconds_remaining);
           break;
+
         case 'destroyed':
           clearInterval(pingRef.current);
           clearInterval(countRef.current);
           setPhase('burning');
           break;
+
         case 'error':
-          if (!joinedRef.current) {
-            setJoinError(data.text);
-          } else {
-            setWsError(data.text);
-          }
+          if (!joinedRef.current) setJoinError(data.text);
+          else setWsError(data.text);
           break;
+
         case 'pong':
+          break;
+
+        default:
           break;
       }
     };
@@ -583,11 +761,27 @@ export default function BurnChatPage({ token }) {
     };
   }
 
-  const sendMessage = () => {
+  const sendMessage = async () => {
     const text = input.trim();
     if (!text || !wsRef.current) return;
-    wsRef.current.send(JSON.stringify({ type: 'send', text }));
     setInput('');
+
+    const { sessionKey } = e2eRef.current;
+
+    if (sessionKey) {
+      // ── E2E path: encrypt client-side; server relays opaque ciphertext ──
+      try {
+        const { ciphertext, iv } = await E2E.encryptMessage(text, sessionKey);
+        wsRef.current.send(JSON.stringify({ type: 'send', ciphertext, iv }));
+      } catch (err) {
+        console.error('[E2E] Encryption failed:', err);
+        // Surface a non-blocking error rather than silently dropping the message.
+        setWsError('Encryption failed — message not sent. Please refresh.');
+      }
+    } else {
+      // ── Plaintext path: TLS-only (insecure context or key not yet ready) ─
+      wsRef.current.send(JSON.stringify({ type: 'send', text }));
+    }
   };
 
   const sendWs = useCallback((payload) => {
