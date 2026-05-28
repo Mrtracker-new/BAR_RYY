@@ -277,6 +277,14 @@ class _Participant:
     name: str
     is_creator: bool = False
 
+    # ECDH public key received via 'pubkey' message (base64 JWK).
+    # Stored server-side so late-joining participants receive it in the
+    # participant_list inside the 'joined' payload, avoiding the race where
+    # session_key arrives before the creator's pubkey is known.
+    # The server treats this as an opaque string — it is never decrypted or
+    # used cryptographically by the server.
+    public_key: Optional[str] = field(default=None, repr=False)
+
     _msg_count: int = field(default=0, repr=False)
     _window_start: datetime = field(
         default_factory=lambda: datetime.now(timezone.utc), repr=False
@@ -520,7 +528,15 @@ async def join_session(
 
     role_label = "creator" if is_creator else "participant"
     participant_list = [
-        {"ws_id": p.ws_id, "name": p.name, "is_creator": p.is_creator}
+        {
+            "ws_id": p.ws_id,
+            "name": p.name,
+            "is_creator": p.is_creator,
+            # Include each participant's ECDH public key if available.
+            # Participants who have not yet sent a 'pubkey' message will have
+            # None here — the client ignores null public_key entries gracefully.
+            "public_key": p.public_key,
+        }
         for p in session.participants.values()
     ]
     await _broadcast(
@@ -708,10 +724,15 @@ async def relay_e2e_pubkey(
     if sender_ws_id not in session.participants:
         return False
 
-    # Validate: non-empty, base64 only, within size cap.
+    # Validate: non-empty, strict base64, within size cap.
     key_str = str(public_key)[:_E2E_PUBKEY_MAX]
     if not key_str or not _B64_RE.match(key_str):
         return False
+
+    # Persist the validated pubkey on the participant so late-joining peers
+    # receive it in the 'joined' participant_list and can unwrap session keys
+    # without waiting for a re-broadcast that may never arrive.
+    session.participants[sender_ws_id].public_key = key_str
 
     await _broadcast(
         session,
