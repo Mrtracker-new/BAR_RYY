@@ -629,44 +629,74 @@ export default function BurnChatPage({ token }) {
           // ── E2E key exchange bootstrap ───────────────────────────────────
           if (!E2E.isAvailable()) break; // insecure context — skip silently, banner shown
 
+          // ── CRITICAL: seed pubkeys map from participant_list BEFORE any async ops.
+          //
+          // The server now stores each participant's ECDH public key and delivers
+          // it in participant_list inside the 'joined' payload.  By populating the
+          // map here (synchronously, before the async keypair generation starts),
+          // we guarantee that when session_key arrives later the creator's pubkey
+          // is already present — no race, no pendingSessionKey fallback needed for
+          // the normal single-creator flow.
+          //
+          // This also handles the case where a participant joins an already-active
+          // room: all existing peers' pubkeys land in the map before we begin.
+          (data.participant_list ?? []).forEach(p => {
+            if (p.ws_id && p.public_key) {
+              e2eRef.current.pubkeys.set(p.ws_id, p.public_key);
+            }
+          });
+
           (async () => {
             try {
               // 1. Generate our ECDH keypair (private key extractable:false).
               const keyPair = await E2E.generateKeyPair();
               e2eRef.current.keyPair = keyPair;
 
-              // 2. Export and broadcast our public key to all peers.
+              // 2. Export and broadcast our own public key to all peers.
+              //    The server will also store it so future joiners see it.
               const pubKeyB64 = await E2E.exportPublicKey(keyPair.publicKey);
+              // Store our own pubkey keyed by our ws_id.  The creator needs this
+              // so participants can verify the wrap-key derivation later.
+              e2eRef.current.pubkeys.set(data.ws_id, pubKeyB64);
               ws.send(JSON.stringify({ type: 'pubkey', public_key: pubKeyB64 }));
 
               if (data.is_creator) {
-                // 3a. Creator generates the session key.
+                // 3a. Creator: generate the shared AES-GCM-256 session key.
                 const sk = await E2E.generateSessionKey();
                 e2eRef.current.sessionKey = sk;
 
-                // 4a. Compute and set fingerprint immediately (creator already has the key).
+                // 4a. Compute and display fingerprint.
                 const fp = await E2E.sessionFingerprint(sk);
                 setE2eFingerprint(fp);
                 setE2eSessionKey(sk);
                 setE2eReady(true);
 
-                // 5a. Wrap and send session key to every peer already in the room
-                //     whose pubkey was included in the participant_list.
-                //     (Peers who join later are handled in the 'pubkey' handler.)
+                // 5a. Wrap and unicast session key to every peer already in the
+                //     room whose pubkey is already known (from the seeded map).
+                //     Peers who join later are handled reactively in 'pubkey' handler.
+                const { keyedPeers } = e2eRef.current;
                 const existingPeers = (data.participant_list ?? [])
-                  .filter(p => p.ws_id !== data.ws_id);
+                  .filter(p => p.ws_id !== data.ws_id && p.public_key);
 
-                // We cannot wrap for peers whose pubkeys we don't yet have —
-                // those will arrive as 'pubkey' messages and be handled below.
-                // Store our own pubkey so we can look it up as 'creator pubkey'.
-                e2eRef.current.pubkeys.set(data.ws_id, pubKeyB64);
-
-                // existingPeers: we have to wait for their pubkeys to arrive
-                // via 'pubkey' messages (join order is not guaranteed to deliver
-                // all pubkeys before our first 'pubkey' fires).  No action here.
-                void existingPeers; // acknowledged — handled reactively in 'pubkey'
+                for (const peer of existingPeers) {
+                  if (keyedPeers.has(peer.ws_id)) continue;
+                  try {
+                    const theirPub = await E2E.importPublicKey(peer.public_key);
+                    const wrapKey  = await E2E.deriveWrapKey(keyPair.privateKey, theirPub);
+                    const wrapped  = await E2E.wrapSessionKey(sk, wrapKey);
+                    keyedPeers.add(peer.ws_id);
+                    ws.send(JSON.stringify({
+                      type:        'session_key',
+                      for_ws_id:   peer.ws_id,
+                      wrapped_key: wrapped,
+                    }));
+                  } catch (err) {
+                    console.error('[E2E] Failed to wrap for existing peer:', peer.ws_id, err);
+                  }
+                }
               }
               // Participant path: session key arrives via 'session_key' message.
+              // By the time it arrives, the creator's pubkey is already seeded above.
             } catch (err) {
               console.error('[E2E] Key bootstrap failed:', err);
             }
