@@ -183,13 +183,76 @@ function DestroyedScreen() {
 }
 
 /* ── Message bubble ────────────────────────────────────────── */
-function Bubble({ msg, myName }) {
+/**
+ * Renders one chat message.
+ *
+ * E2E decrypt lifecycle:
+ *   1. msg.text present          → plaintext path, render immediately.
+ *   2. msg.ciphertext present
+ *        sessionKey null         → show 🔒 Awaiting key (pending state).
+ *        sessionKey available    → decrypt in useEffect, render plaintext.
+ *        decryption throws       → show ⚠️ Could not decrypt (tampered / wrong key).
+ *
+ * When sessionKey changes (creator reconnect, late key delivery) the effect
+ * re-runs for every mounted bubble that holds an undecrypted ciphertext.
+ */
+function Bubble({ msg, myName, sessionKey }) {
+  // null  = not yet attempted / pending key
+  // false = decryption failed
+  // string = decrypted plaintext
+  const [plaintext, setPlaintext] = useState(
+    msg.text !== undefined ? msg.text : null,
+  );
+
+  useEffect(() => {
+    // Nothing to decrypt — plaintext message or no key available yet.
+    if (!msg.ciphertext || !sessionKey) return;
+    // Already decrypted successfully — don't redo on key re-render.
+    if (typeof plaintext === 'string') return;
+
+    let cancelled = false;
+    E2E.decryptMessage(msg.ciphertext, msg.iv, sessionKey)
+      .then(text => { if (!cancelled) setPlaintext(text); })
+      .catch(() => { if (!cancelled) setPlaintext(false); });
+
+    return () => { cancelled = true; };
+  // Re-run when the session key is delivered or replaced (creator reconnect).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionKey]);
+
   const isMe = msg.sender_name === myName;
+
   if (msg.type === 'system') return (
     <div style={{ textAlign:'center', padding:'0.25rem 0' }}>
       <span style={{ fontSize:'0.6875rem', color:T.textT, background:'rgba(255,255,255,0.03)', padding:'0.2rem 0.75rem', borderRadius:'999px', border:`1px solid ${T.border}` }}>{msg.text}</span>
     </div>
   );
+
+  // ── Determine display content ───────────────────────────────────────────
+  let bodyContent;
+  if (msg.ciphertext) {
+    if (plaintext === null) {
+      // Key not yet available — show a soft pending indicator.
+      bodyContent = (
+        <span style={{ fontStyle:'italic', color:T.textT, fontSize:'0.8125rem', display:'flex', alignItems:'center', gap:'0.35rem' }}>
+          🔒 <span>Awaiting key…</span>
+        </span>
+      );
+    } else if (plaintext === false) {
+      // Decryption failed — could be tampered or wrong key.
+      bodyContent = (
+        <span style={{ fontStyle:'italic', color:T.red, fontSize:'0.8125rem', display:'flex', alignItems:'center', gap:'0.35rem' }}>
+          ⚠️ <span>Could not decrypt</span>
+        </span>
+      );
+    } else {
+      bodyContent = plaintext;
+    }
+  } else {
+    // Plaintext path (TLS-only or legacy message).
+    bodyContent = msg.text;
+  }
+
   return (
     <div style={{ display:'flex', flexDirection:'column', alignItems:isMe?'flex-end':'flex-start', marginBottom:'0.125rem' }}>
       {!isMe && (
@@ -204,7 +267,7 @@ function Bubble({ msg, myName }) {
         fontSize:'0.875rem', color:T.text, lineHeight:1.5,
         wordBreak:'break-word',
       }}>
-        {msg.text}
+        {bodyContent}
       </div>
       <span style={{ fontSize:'0.625rem', color:T.textT, marginTop:'0.2rem', padding:'0 0.25rem' }}>{relTime(msg.sent_at)}</span>
     </div>
@@ -854,6 +917,53 @@ export default function BurnChatPage({ token }) {
                 <Lock size={8} /> Locked
               </span>
             )}
+
+            {/* E2E status badge */}
+            {!cryptoAvailable ? (
+              // Insecure context — crypto.subtle unavailable
+              <span
+                title="E2E encryption unavailable — page is not served over HTTPS. Messages are protected by TLS only."
+                style={{
+                  fontSize:'0.6rem', fontWeight:700, letterSpacing:'0.04em',
+                  color:'#fca5a5', background:'rgba(239,68,68,0.1)',
+                  border:'1px solid rgba(239,68,68,0.25)', borderRadius:'999px',
+                  padding:'0.15rem 0.5rem', cursor:'help',
+                  display:'flex', alignItems:'center', gap:'0.25rem',
+                }}
+              >
+                ⚠️ No E2E
+              </span>
+            ) : e2eReady && e2eFingerprint ? (
+              // Session key established — show fingerprint for MITM verification
+              <span
+                title={`E2E encrypted — server cannot read messages.\n\nSession code: ${e2eFingerprint}\nAll participants should see the same code. If someone's code differs, the server may be substituting keys — leave immediately.`}
+                style={{
+                  fontSize:'0.6rem', fontWeight:700, letterSpacing:'0.06em',
+                  color:T.green, background:'rgba(34,197,94,0.08)',
+                  border:'1px solid rgba(34,197,94,0.2)', borderRadius:'999px',
+                  padding:'0.15rem 0.5rem', cursor:'help', fontFamily:T.mono,
+                  display:'flex', alignItems:'center', gap:'0.3rem',
+                  transition:'opacity 0.3s ease',
+                }}
+              >
+                🔐 {e2eFingerprint}
+              </span>
+            ) : (
+              // Key exchange in progress
+              <span
+                title="E2E key exchange in progress…"
+                style={{
+                  fontSize:'0.6rem', fontWeight:700, letterSpacing:'0.04em',
+                  color:T.gold, background:'rgba(232,160,32,0.08)',
+                  border:'1px solid rgba(232,160,32,0.2)', borderRadius:'999px',
+                  padding:'0.15rem 0.5rem', cursor:'help',
+                  display:'flex', alignItems:'center', gap:'0.25rem',
+                  animation:'pulse 1.4s ease-in-out infinite',
+                }}
+              >
+                🔓 Securing…
+              </span>
+            )}
           </div>
 
           <div style={{ display:'flex', alignItems:'center', gap:'0.75rem' }}>
@@ -907,6 +1017,21 @@ export default function BurnChatPage({ token }) {
           </div>
         )}
 
+        {/* E2E degradation banner — only when crypto.subtle is unavailable (http:// context) */}
+        {!cryptoAvailable && (
+          <div style={{
+            flexShrink:0, padding:'0.45rem 1rem',
+            background:'rgba(239,68,68,0.07)', borderBottom:'1px solid rgba(239,68,68,0.18)',
+            display:'flex', alignItems:'center', gap:'0.5rem',
+          }}>
+            <AlertTriangle size={13} style={{ color:T.red, flexShrink:0 }} />
+            <p style={{ fontSize:'0.8rem', color:'#fca5a5', lineHeight:1.4 }}>
+              <strong>E2E encryption unavailable</strong> — page must be served over HTTPS.
+              {' '}Messages are protected by TLS only.
+            </p>
+          </div>
+        )}
+
         {/* Warning bar when &lt; 60s */}
         {urgent && secsLeft > 0 && (
           <div style={{ flexShrink:0, padding:'0.5rem 1rem', background:'rgba(239,68,68,0.08)', borderBottom:'1px solid rgba(239,68,68,0.15)', display:'flex', alignItems:'center', gap:'0.5rem' }}>
@@ -943,7 +1068,14 @@ export default function BurnChatPage({ token }) {
                 <p style={{ fontSize:'0.875rem', color:T.textS }}>No messages yet. Be the first.</p>
               </div>
             )}
-            {messages.map(m => <Bubble key={m.id} msg={m} myName={myName} />)}
+            {messages.map(m => (
+              <Bubble
+                key={m.id}
+                msg={m}
+                myName={myName}
+                sessionKey={e2eSessionKey}
+              />
+            ))}
             <div ref={bottomRef} />
           </div>
 
