@@ -77,8 +77,13 @@ _E2E_CIPHERTEXT_MAX: int = 4_096
 #: AES-GCM IV is always 12 raw bytes → 16 base64 chars.  Allow 32 for padding.
 _E2E_IV_MAX: int = 32
 
-#: Pre-compiled pattern — standard base64 alphabet only (no whitespace).
-_B64_RE: re.Pattern = re.compile(r'^[A-Za-z0-9+/]*={0,2}$')
+#: Pre-compiled pattern — strict standard base64 (RFC 4648 §4).
+#: Accepts 0–2 padding chars at the end only; body must be [A-Za-z0-9+/].
+#: The length-modulo-4 constraint is NOT enforced by regex alone but the
+#: slicing done before this check already bounds the input, and any
+#: base64url characters (‘-’ / ‘_’) are rejected here — our client emits
+#: standard base64 via btoa().
+_B64_RE: re.Pattern = re.compile(r'^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{4})?$')
 
 #: Rate-limit: messages per window per participant.
 _RATE_LIMIT_MSGS: int = 10
