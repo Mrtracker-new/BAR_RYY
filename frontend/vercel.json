@@ -51,12 +51,10 @@
   ],
   "rewrites": [
     {
-      "comment": "Social-crawler OG preview for Burn Chat share links. Proxies to the backend which returns a minimal HTML page with accurate og:* / twitter:* meta tags and an instant meta-refresh redirect for real browsers. This route MUST be listed before the catch-all SPA rule below.",
       "source": "/og/chat/:token",
       "destination": "https://bar-api.onrender.com/og/chat/:token"
     },
     {
-      "comment": "SPA catch-all — serves index.html for every other route so React Router handles client-side navigation.",
       "source": "/(.*)",
       "destination": "/index.html"
     }
