@@ -949,7 +949,7 @@ export default function BurnChatPage({ token }) {
   );
 
   if (phase === 'burning') return (
-    <BurningAnimation onComplete={() => setPhase('destroyed')} />
+    <BurningAnimation mode="chat" onComplete={() => setPhase('destroyed')} />
   );
 
   if (phase === 'destroyed') return <DestroyedScreen />;
