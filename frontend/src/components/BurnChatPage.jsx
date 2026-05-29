@@ -73,8 +73,24 @@ function JoinScreen({ token, onJoin, error, infoState, joinSecsLeft, joinPartici
   const tColor  = joinSecsLeft !== null ? timerColor(joinSecsLeft) : T.textS;
 
   return (
-    <div style={{ minHeight:'100vh', background:T.bg, display:'flex', alignItems:'center', justifyContent:'center', padding:'1.5rem' }}>
-      <div style={{ width:'100%', maxWidth:380 }}>
+    <>
+      {/*
+        SEO injected here so crawlers (WhatsApp, Telegram, Twitter, Google)
+        that hit /chat/:token see Burn Chat-specific meta tags even before
+        the user has filled in their name or JavaScript has hydrated the page.
+        noIndex keeps ephemeral session URLs out of search engine indexes.
+      */}
+      <SEO
+        title="Join Burn Chat — Encrypted Ephemeral Session | BAR Web"
+        description="You've been invited to a Burn Chat — end-to-end encrypted, ephemeral messaging that permanently self-destructs when the timer expires. No logs, no history, no traces."
+        keywords="burn chat, join burn chat, encrypted chat, ephemeral chat, self-destruct chat, e2e encrypted messaging, BAR burn chat, secure chat room, disappearing messages"
+        url={`https://bar-rnr.vercel.app/chat/${token}`}
+        type="article"
+        ogImageAlt="Burn Chat — End-to-End Encrypted Ephemeral Chat | BAR Web"
+        noIndex={true}
+      />
+      <div style={{ minHeight:'100vh', background:T.bg, display:'flex', alignItems:'center', justifyContent:'center', padding:'1.5rem' }}>
+        <div style={{ width:'100%', maxWidth:380 }}>
         <div style={{ textAlign:'center', marginBottom:'2rem' }}>
           <div style={{ width:56, height:56, borderRadius:'50%', background:'rgba(249,115,22,0.1)', border:'1px solid rgba(249,115,22,0.2)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 1rem' }}>
             <Flame size={24} style={{ color:T.orange }} />
@@ -161,6 +177,7 @@ function JoinScreen({ token, onJoin, error, infoState, joinSecsLeft, joinPartici
         </div>
       </div>
     </div>
+    </>
   );
 }
 
@@ -960,7 +977,20 @@ export default function BurnChatPage({ token }) {
 
   return (
     <>
-      <SEO title={`Burn Chat — BAR Web`} description="Ephemeral encrypted chat that self-destructs." />
+      {/*
+        Active-session SEO — token-specific canonical URL so each session
+        has its own distinct OG card when shared mid-chat.
+        noIndex prevents search engines indexing individual session URLs.
+      */}
+      <SEO
+        title="Burn Chat — Encrypted Ephemeral Session | BAR Web"
+        description="You've been invited to a Burn Chat session — end-to-end encrypted, ephemeral messaging that permanently self-destructs when the timer expires. No logs, no history, no traces."
+        keywords="burn chat, encrypted chat, ephemeral chat, self-destruct chat, e2e encrypted messaging, BAR burn chat, secure chat room, disappearing messages"
+        url={`https://bar-rnr.vercel.app/chat/${token}`}
+        type="article"
+        ogImageAlt="Burn Chat — End-to-End Encrypted Ephemeral Chat | BAR Web"
+        noIndex={true}
+      />
       <div style={{ height:'100dvh', display:'flex', flexDirection:'column', background:T.bg, color:T.text, overflow:'hidden' }}>
 
         {/* Top bar */}
