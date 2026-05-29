@@ -63,7 +63,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from core import security
 from models.schemas import ChatCreateRequest
@@ -91,9 +91,156 @@ def _valid_session_token(token: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# REST — Create session
+# REST — Social / OG preview page for /chat/:token links
+# ---------------------------------------------------------------------------
+# WhatsApp, Telegram, Twitter, Discord, Slack all use bots that fetch the
+# raw HTML of a URL to generate a link preview card.  Because this app is
+# a React SPA, every route serves the same index.html, which only carries
+# the generic BAR OG tags (file-sharing focused).
+#
+# Solution: a dedicated server-side endpoint that returns a tiny HTML page
+# with chat-specific OG / Twitter meta tags.
+#
+# Browser flow  — the page includes <meta http-equiv="refresh"> so real
+# browsers are redirected to the SPA instantly (0 s delay).  Crawlers
+# stop at the meta tags and never follow the refresh.
+#
+# Vercel rewrite (vercel.json) sends /og/chat/:token to this backend.
+# The SPA's /chat/:token route remains unchanged for all real users.
 # ---------------------------------------------------------------------------
 
+_OG_SITE          = "https://bar-rnr.vercel.app"
+_OG_CHAT_IMAGE    = f"{_OG_SITE}/og-chat.png"
+_OG_IMAGE_ALT     = "Burn Chat — End-to-End Encrypted Ephemeral Chat | BAR Web"
+_OG_SITE_NAME     = "BAR by Rolan"
+
+
+def _html_escape(text: str) -> str:
+    """Escape characters that are unsafe inside HTML attribute values."""
+    return (
+        text
+        .replace("&",  "&amp;")
+        .replace('"',  "&quot;")
+        .replace("<",  "&lt;")
+        .replace(">",  "&gt;")
+    )
+
+
+@router.get("/og/chat/{token}", include_in_schema=False)
+async def chat_og_page(token: str):
+    """
+    Server-side OG / social-preview page for Burn Chat share links.
+
+    Returns a minimal HTML document with accurate og:* and twitter:*
+    meta tags so social crawlers (WhatsApp, Telegram, Twitter/X,
+    Discord, Slack, iMessage, LinkedIn …) display a rich Burn Chat
+    card instead of the generic BAR file-sharing defaults.
+
+    Real browsers receive a 0-second meta-refresh redirect to the
+    actual SPA route (/chat/{token}) and never notice this page.
+
+    The endpoint is surfaced via a Vercel rewrite rule:
+        /og/chat/:token  →  <backend>/og/chat/:token
+    """
+    if not _valid_session_token(token):
+        # Malformed token — serve a generic expired card rather than
+        # leaking whether the token format is wrong.
+        title       = "Burn Chat — Session Unavailable | BAR Web"
+        description = (
+            "This Burn Chat session link is invalid or has already expired "
+            "and been permanently destroyed."
+        )
+    else:
+        info = chat_service.session_info(token)
+        if info is None:
+            # Valid token format but session is gone (expired / destroyed).
+            title       = "Burn Chat — Session Burned | BAR Web"
+            description = (
+                "This Burn Chat session has already expired and been permanently "
+                "destroyed. All messages were erased. No trace remains."
+            )
+        else:
+            secs  = int(info.get("seconds_remaining", 0))
+            mins  = max(1, round(secs / 60))
+            count = info.get("participant_count", 0)
+
+            plural_m = "s" if mins  != 1 else ""
+            plural_p = "s" if count != 1 else ""
+
+            title = f"Join Burn Chat — {mins} min{plural_m} remaining | BAR Web"
+
+            participant_note = (
+                f"{count} person{plural_p} already inside. "
+                if count > 0 else ""
+            )
+            description = (
+                f"You've been invited to a Burn Chat — end-to-end encrypted "
+                f"ephemeral messaging that self-destructs in "
+                f"{mins} minute{plural_m}. "
+                f"{participant_note}"
+                "No logs, no history. Messages encrypted in your browser with "
+                "ECDH P-256 + AES-GCM."
+            )
+
+    # HTML-escape all dynamic values before interpolation.
+    safe_title       = _html_escape(title)
+    safe_description = _html_escape(description)
+    canonical_url    = f"{_OG_SITE}/chat/{token}"
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{safe_title}</title>
+
+  <!-- Indexing: ephemeral session URLs must not be indexed -->
+  <meta name="robots" content="noindex,nofollow">
+
+  <!-- Canonical -->
+  <link rel="canonical" href="{canonical_url}">
+
+  <!-- Open Graph (Facebook, WhatsApp, Telegram, iMessage, Discord …) -->
+  <meta property="og:type"        content="website">
+  <meta property="og:url"         content="{canonical_url}">
+  <meta property="og:site_name"   content="{_OG_SITE_NAME}">
+  <meta property="og:title"       content="{safe_title}">
+  <meta property="og:description" content="{safe_description}">
+  <meta property="og:image"       content="{_OG_CHAT_IMAGE}">
+  <meta property="og:image:alt"   content="{_OG_IMAGE_ALT}">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+
+  <!-- Twitter / X -->
+  <meta name="twitter:card"        content="summary_large_image">
+  <meta name="twitter:url"         content="{canonical_url}">
+  <meta name="twitter:title"       content="{safe_title}">
+  <meta name="twitter:description" content="{safe_description}">
+  <meta name="twitter:image"       content="{_OG_CHAT_IMAGE}">
+  <meta name="twitter:image:alt"   content="{_OG_IMAGE_ALT}">
+
+  <!-- Instant redirect for real browsers — crawlers stop at the meta tags above -->
+  <meta http-equiv="refresh" content="0;url={canonical_url}">
+</head>
+<body>
+  <!-- Fallback for browsers that don't honour meta-refresh -->
+  <p>Redirecting to Burn Chat… <a href="{canonical_url}">Click here if not redirected.</a></p>
+</body>
+</html>"""
+
+    return HTMLResponse(
+        content=html,
+        headers={
+            # Let social crawlers cache the card briefly; private because
+            # the session state (remaining time, participant count) changes.
+            "Cache-Control": "private, max-age=30",
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# REST — Create session
+# ---------------------------------------------------------------------------
 
 @router.post("/chat/create")
 async def create_chat_session(req: Request, body: ChatCreateRequest):

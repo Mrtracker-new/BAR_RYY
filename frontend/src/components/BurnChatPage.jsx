@@ -507,7 +507,15 @@ export default function BurnChatPage({ token }) {
     pendingSessionKey: null,        // { fromWsId, wrappedKey } — held during pubkey race
   });
 
-  const shareUrl = `${window.location.origin}/chat/${token}`;
+  // Share URL — routes through the server-rendered OG preview page so
+  // WhatsApp / Telegram / Twitter crawlers see Burn Chat-specific meta tags
+  // (og:title, og:image, og:description) instead of the generic SPA defaults.
+  //
+  // Real browsers follow the 0-second meta-refresh on the OG page and land on
+  // /chat/:token with no visible delay. Social bots stop at the meta tags.
+  //
+  // Direct SPA URL (if OG preview is not needed): /chat/${token}
+  const shareUrl = `${window.location.origin}/og/chat/${token}`;
 
   /* auto-scroll */
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:'smooth' }); }, [messages]);
