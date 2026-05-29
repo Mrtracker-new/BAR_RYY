@@ -22,9 +22,9 @@ import { Helmet } from "react-helmet-async";
  *              Use for ephemeral / token-gated pages that must not be crawled.
  */
 const SEO = ({
-  title       = "BAR by Rolan - Burn After Reading | Secure Self-Destructing File Sharing & Encryption",
-  description = "BAR by Rolan (Burn After Reading) - Send files that self-destruct after viewing. Military-grade AES-256 encryption, password protection, and automatic deletion. Secure, private, and zero-knowledge file sharing for sensitive documents.",
-  keywords    = "BAR by Rolan, BAR Rolan, burn after reading, BAR rnr, Rolan BAR, self-destruct files, secure file sharing, encrypted file sharing, AES-256 encryption, zero-knowledge encryption, password protected files, temporary file sharing, self-destructing messages, mission impossible files, secure file transfer, confidential file sharing, auto-delete files, burn after reading app",
+  title       = "BAR by Rolan — Burn After Reading | Self-Destructing Files & Encrypted Chat",
+  description = "BAR by Rolan (Burn After Reading) — Send files that self-destruct after viewing, or start an ephemeral Burn Chat that permanently erases itself when the timer expires. Military-grade AES-256 encryption, E2E encrypted messaging with ECDH key exchange, password protection, and zero-knowledge security.",
+  keywords    = "BAR by Rolan, BAR Rolan, burn after reading, BAR rnr, Rolan BAR, self-destruct files, secure file sharing, encrypted file sharing, AES-256 encryption, zero-knowledge encryption, password protected files, temporary file sharing, self-destructing messages, mission impossible files, secure file transfer, confidential file sharing, auto-delete files, burn after reading app, burn chat, ephemeral chat, encrypted chat room, e2e encrypted messaging, self-destruct chat, disappearing messages, ECDH key exchange, secure chat room, temporary chat",
   author      = "Rolan (RNR)",
   authorUrl   = "https://rolan-rnr.netlify.app/",
   ogImage     = "https://bar-rnr.vercel.app/og-image.png",
