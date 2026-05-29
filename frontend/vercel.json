@@ -52,7 +52,7 @@
   "rewrites": [
     {
       "source": "/og/chat/:token",
-      "destination": "https://bar-api.onrender.com/og/chat/:token"
+      "destination": "/api/og/chat/:token"
     },
     {
       "source": "/(.*)",
