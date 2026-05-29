@@ -81,7 +81,7 @@ const SharePage = ({ token }) => {
       // a manual second-click wipes the in-memory OTP session on Render.
       setOtpVerified(true);
       setOtpPanelOpen(false);
-      setSuccessMessage('✅ OTP verified — loading your file...');
+      setSuccessMessage('✅ Identity verified — accessing your file…');
 
       // Small tick to let React flush state before the axios call
       await new Promise(r => setTimeout(r, 100));
@@ -252,17 +252,25 @@ const SharePage = ({ token }) => {
 
   return (
     <>
+      {/*
+        Token-specific SEO: each /share/:token URL gets its own canonical
+        and a compelling OG description for WhatsApp / Telegram / Twitter
+        link previews. noIndex keeps one-time-access URLs out of search
+        indexes — they're not meant to be publicly discoverable.
+      */}
       <SEO
-        title="Secure File Access - BAR Web"
-        description="Access your encrypted file securely. Military-grade AES-256 encryption with self-destruct capabilities."
+        title="Secure File Access — BAR Web"
+        description="You have a secure, encrypted file waiting. One-time access protected by AES-256 encryption. The file permanently self-destructs after viewing — open it before it's gone."
+        ogImageAlt="Secure encrypted file — BAR by Rolan"
         url={`https://bar-rnr.vercel.app/share/${token}`}
+        noIndex={true}
       />
       {/* Burning Animation */}
       {showBurning && (
         <BurningAnimation
           onComplete={() => {
             setShowBurning(false);
-            setSuccessMessage('⚠️ File destroyed! This link is no longer valid.');
+            setSuccessMessage('🔥 File permanently destroyed — this link is no longer valid.');
           }}
         />
       )}
