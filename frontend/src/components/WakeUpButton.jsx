@@ -1,208 +1,250 @@
-import React, { useState, useEffect } from "react";
-import { Loader, CheckCircle, XCircle, Power, Clock } from "lucide-react";
+import React, { useState, useEffect } from 'react';
+import { Loader, CheckCircle, XCircle, Power, Clock } from 'lucide-react';
 
+/* ─────────────────────────────────────────────────────────────
+   DESIGN TOKENS — consistent with index.css :root
+───────────────────────────────────────────────────────────── */
+const T = {
+  green:       '#22C55E',
+  greenDim:    'rgba(34,197,94,0.08)',
+  greenBorder: 'rgba(34,197,94,0.22)',
+  red:         '#EF4444',
+  redDim:      'rgba(239,68,68,0.08)',
+  redBorder:   'rgba(239,68,68,0.22)',
+  gold:        '#E8A020',
+  goldDim:     'rgba(232,160,32,0.08)',
+  goldBorder:  'rgba(232,160,32,0.22)',
+  /* Text */
+  textPrimary:   '#f0f0f0',
+  textSecondary: '#a0a0a0',
+  textTertiary:  '#636363',
+  textDim:       '#505050',
+  /* Surfaces */
+  border:      'rgba(255,255,255,0.07)',
+  borderHover: 'rgba(255,255,255,0.13)',
+  surface1:    'rgba(255,255,255,0.04)',
+  surfaceH:    'rgba(255,255,255,0.07)',
+};
+
+const STATES = {
+  idle: {
+    bg:      T.surface1,
+    border:  T.border,
+    color:   T.textSecondary,
+    cursor:  'pointer',
+    icon:    Power,
+    label:   'Wake Server',
+    pulse:   false,
+  },
+  loading: {
+    bg:      T.goldDim,
+    border:  T.goldBorder,
+    color:   T.gold,
+    cursor:  'wait',
+    icon:    Loader,
+    label:   'Waking…',
+    pulse:   true,
+    spin:    true,
+  },
+  success: {
+    bg:      T.greenDim,
+    border:  T.greenBorder,
+    color:   T.green,
+    cursor:  'default',
+    icon:    CheckCircle,
+    label:   'Ready!',
+    pulse:   false,
+  },
+  error: {
+    bg:      T.redDim,
+    border:  T.redBorder,
+    color:   T.red,
+    cursor:  'pointer',
+    icon:    XCircle,
+    label:   'Failed — Retry',
+    pulse:   false,
+  },
+  cooldown: {
+    bg:      'rgba(255,255,255,0.02)',
+    border:  'rgba(255,255,255,0.05)',
+    color:   T.textDim,
+    cursor:  'not-allowed',
+    icon:    Clock,
+    label:   null, // dynamic: 'Wait Xs'
+    pulse:   false,
+  },
+};
+
+const COOLDOWN_MS  = 30_000;
+const COOLDOWN_KEY = 'wakeup_last_attempt';
+
+function isOnCooldown() {
+  const last = localStorage.getItem(COOLDOWN_KEY);
+  if (!last) return false;
+  return Date.now() - parseInt(last, 10) < COOLDOWN_MS;
+}
+
+function getRemainingCooldown() {
+  const last = localStorage.getItem(COOLDOWN_KEY);
+  if (!last) return 0;
+  const remaining = COOLDOWN_MS - (Date.now() - parseInt(last, 10));
+  return remaining > 0 ? Math.ceil(remaining / 1000) : 0;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   COMPONENT
+───────────────────────────────────────────────────────────── */
 const WakeUpButton = ({ compact = false }) => {
-    const [status, setStatus] = useState("idle"); // idle, loading, success, error, cooldown
-    const [cooldownTime, setCooldownTime] = useState(0);
+  const [status, setCooldownStatus]     = useState('idle');
+  const [cooldownTime, setCooldownTime] = useState(0);
 
-    // Rate limiting: 30 seconds cooldown between requests
-    const COOLDOWN_DURATION = 30000; // 30 seconds
-    const COOLDOWN_KEY = 'wakeup_last_attempt';
+  /* Check cooldown on mount */
+  useEffect(() => {
+    if (isOnCooldown()) {
+      setCooldownTime(getRemainingCooldown());
+      setCooldownStatus('cooldown');
+    }
+  }, []);
 
-    // Check if user is on cooldown
-    const isOnCooldown = () => {
-        const lastAttempt = localStorage.getItem(COOLDOWN_KEY);
-        if (!lastAttempt) return false;
+  /* Tick cooldown */
+  useEffect(() => {
+    if (status !== 'cooldown') return;
+    const id = setInterval(() => {
+      const remaining = getRemainingCooldown();
+      setCooldownTime(remaining);
+      if (remaining <= 0) {
+        setCooldownStatus('idle');
+        clearInterval(id);
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [status]);
 
-        const timeSinceLastAttempt = Date.now() - parseInt(lastAttempt, 10);
-        return timeSinceLastAttempt < COOLDOWN_DURATION;
-    };
+  const handleWakeUp = async () => {
+    if (isOnCooldown()) {
+      setCooldownTime(getRemainingCooldown());
+      setCooldownStatus('cooldown');
+      return;
+    }
+    setCooldownStatus('loading');
+    localStorage.setItem(COOLDOWN_KEY, Date.now().toString());
 
-    // Calculate remaining cooldown time
-    const getRemainingCooldown = () => {
-        const lastAttempt = localStorage.getItem(COOLDOWN_KEY);
-        if (!lastAttempt) return 0;
+    try {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+      const controller = new AbortController();
+      const tId = setTimeout(() => controller.abort(), 60_000);
+      const response = await fetch(`${backendUrl}/health`, {
+        method: 'GET',
+        signal: controller.signal,
+        mode:   'cors',
+      });
+      clearTimeout(tId);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-        const timeSinceLastAttempt = Date.now() - parseInt(lastAttempt, 10);
-        const remaining = COOLDOWN_DURATION - timeSinceLastAttempt;
-        return remaining > 0 ? Math.ceil(remaining / 1000) : 0;
-    };
-
-    // Check cooldown on mount
-    useEffect(() => {
-        if (isOnCooldown()) {
-            const remaining = getRemainingCooldown();
-            setCooldownTime(remaining);
-            setStatus("cooldown");
+      setCooldownStatus('success');
+      setTimeout(() => {
+        const r = getRemainingCooldown();
+        if (r > 0) {
+          setCooldownTime(r);
+          setCooldownStatus('cooldown');
+        } else {
+          setCooldownStatus('idle');
         }
-    }, []);
+      }, 3000);
+    } catch (err) {
+      localStorage.removeItem(COOLDOWN_KEY);
+      console.error('[WakeUpButton]', err);
+      setCooldownStatus('error');
+      setTimeout(() => setCooldownStatus('idle'), 3000);
+    }
+  };
 
-    // Update cooldown timer
-    useEffect(() => {
-        if (status === "cooldown") {
-            const interval = setInterval(() => {
-                const remaining = getRemainingCooldown();
-                setCooldownTime(remaining);
+  const disabled = status === 'loading' || status === 'success' || status === 'cooldown';
+  const cfg = STATES[status] ?? STATES.idle;
+  const Icon = cfg.icon;
+  const label = status === 'cooldown' ? `Wait ${cooldownTime}s` : cfg.label;
 
-                if (remaining <= 0) {
-                    setStatus("idle");
-                    clearInterval(interval);
-                }
-            }, 1000);
+  /* Base button styles — token-based */
+  const btnStyle = {
+    position: 'relative',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '0.4375rem',
+    /* 40px touch target for secondary action */
+    minHeight: 40,
+    padding: compact ? '0 0.875rem' : '0 1.25rem',
+    minWidth: compact ? 'unset' : 160,
+    borderRadius: '0.75rem',
+    border: `1px solid ${cfg.border}`,
+    background: cfg.bg,
+    color: cfg.color,
+    /* Minimum 14px */
+    fontSize: '0.875rem',
+    fontWeight: 600,
+    letterSpacing: '-0.01em',
+    cursor: cfg.cursor,
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    /* Specific transitions — more performant than 'all' */
+    transition: 'background 0.18s ease, border-color 0.18s ease, color 0.18s ease',
+    fontFamily: 'inherit',
+    overflow: 'hidden',
+    animation: cfg.pulse ? 'pulse 1.4s ease-in-out infinite' : 'none',
+  };
 
-            return () => clearInterval(interval);
+  return (
+    <button
+      onClick={handleWakeUp}
+      disabled={disabled}
+      style={btnStyle}
+      onMouseOver={e => {
+        if (!disabled && status === 'idle') {
+          e.currentTarget.style.background     = T.surfaceH;
+          e.currentTarget.style.borderColor    = T.borderHover;
+          e.currentTarget.style.color          = T.textPrimary;
         }
-    }, [status]);
-
-    const handleWakeUp = async () => {
-        // Check rate limiting
-        if (isOnCooldown()) {
-            const remaining = getRemainingCooldown();
-            setCooldownTime(remaining);
-            setStatus("cooldown");
-            return;
+        if (!disabled && status === 'error') {
+          e.currentTarget.style.background = 'rgba(239,68,68,0.14)';
         }
-
-        setStatus("loading");
-        localStorage.setItem(COOLDOWN_KEY, Date.now().toString());
-
-        try {
-            // Get the actual backend URL - use env var or default to localhost:8000
-            const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-
-            // Make a direct health check request to the backend server (not using axios instance)
-            // This bypasses Vite proxy and ensures we're checking the actual backend
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
-
-            const response = await fetch(`${backendUrl}/health`, {
-                method: 'GET',
-                signal: controller.signal,
-                mode: 'cors', // Explicitly handle CORS
-            });
-
-            clearTimeout(timeoutId);
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            setStatus("success");
-
-            // Reset after 3 seconds, then go to cooldown
-            setTimeout(() => {
-                const remaining = getRemainingCooldown();
-                if (remaining > 0) {
-                    setCooldownTime(remaining);
-                    setStatus("cooldown");
-                } else {
-                    setStatus("idle");
-                }
-            }, 3000);
-
-        } catch (error) {
-            // Clear the rate limit on error so user can retry
-            localStorage.removeItem(COOLDOWN_KEY);
-
-            setStatus("error");
-
-            // Better error handling
-            console.error('Wake up error:', error);
-
-            // Reset after 3 seconds
-            setTimeout(() => {
-                setStatus("idle");
-            }, 3000);
+      }}
+      onMouseOut={e => {
+        if (!disabled || status === 'error') {
+          e.currentTarget.style.background  = cfg.bg;
+          e.currentTarget.style.borderColor = cfg.border;
+          e.currentTarget.style.color       = cfg.color;
         }
-    };
+      }}
+      title={
+        status === 'cooldown'
+          ? `Please wait ${cooldownTime}s before trying again`
+          : 'Wake up the Render server'
+      }
+      aria-label={label}
+    >
+      {/* Subtle highlight overlay */}
+      <span
+        aria-hidden="true"
+        style={{
+          position: 'absolute', inset: 0, pointerEvents: 'none',
+          background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, transparent 60%)',
+          borderRadius: 'inherit',
+        }}
+      />
 
-    const getButtonContent = () => {
-        switch (status) {
-            case "loading":
-                return (
-                    <div className="relative z-10 flex items-center gap-1">
-                        <Loader className="w-5 h-5 animate-spin" />
-                        <span>Waking...</span>
-                    </div>
-                );
-            case "success":
-                return (
-                    <div className="relative z-10 flex items-center gap-1">
-                        <CheckCircle className="w-5 h-5" />
-                        <span>Ready!</span>
-                    </div>
-                );
-            case "error":
-                return (
-                    <div className="relative z-10 flex items-center gap-1">
-                        <XCircle className="w-5 h-5" />
-                        <span>Failed - Retry</span>
-                    </div>
-                );
-            case "cooldown":
-                return (
-                    <div className="relative z-10 flex items-center gap-1">
-                        <Clock className="w-5 h-5" />
-                        <span>Wait {cooldownTime}s</span>
-                    </div>
-                );
-            default:
-                return (
-                    <div className="relative z-10 flex items-center gap-1">
-                        <Power className="w-5 h-5" />
-                        <span>Wake Server</span>
-                    </div>
-                );
-        }
-    };
+      {/* Icon */}
+      <Icon
+        size={15}
+        style={{
+          flexShrink: 0,
+          animation: cfg.spin ? 'bar-spin 0.8s linear infinite' : 'none',
+        }}
+      />
 
-    const getButtonStyles = () => {
-    const baseStyles = compact
-        ? "relative flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all duration-200 overflow-hidden"
-        : "relative w-full sm:w-auto sm:min-w-[160px] px-6 py-3.5 rounded-xl font-semibold text-sm transition-all duration-200 flex items-center justify-center overflow-hidden";
-
-        switch (status) {
-            case "loading":
-                return `${baseStyles} bg-amber-500/8 border border-amber-500/25 text-amber-400 backdrop-blur-md cursor-wait animate-pulse`;
-            case "success":
-                return `${baseStyles} bg-green-500/8 border border-green-500/25 text-green-400 backdrop-blur-md cursor-default`;
-            case "error":
-                return `${baseStyles} bg-red-500/8 border border-red-500/25 text-red-400 backdrop-blur-md hover:bg-red-500/12`;
-            case "cooldown":
-                return `${baseStyles} bg-white/3 border border-white/8 text-zinc-500 backdrop-blur-md cursor-not-allowed`;
-            default:
-                return `${baseStyles} bg-white/3 border border-white/8 text-zinc-400 backdrop-blur-md hover:bg-white/6 hover:border-white/12 hover:text-white`;
-        }
-    };
-
-    const isDisabled = status === "loading" || status === "success" || status === "cooldown";
-
-    return (
-        <button
-            onClick={handleWakeUp}
-            disabled={isDisabled}
-            className={getButtonStyles()}
-            title={
-                status === "cooldown"
-                    ? `Please wait ${cooldownTime} seconds before trying again`
-                    : "Wake up the Render server"
-            }
-        >
-            {/* Multi-layered glassmorphic background */}
-            <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-transparent opacity-50" />
-
-            {/* Animated shine effect */}
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out" />
-
-            {/* Pulsing glow on loading */}
-            {status === "loading" && (
-                <div className="absolute inset-0 bg-amber-500/20 animate-pulse rounded-lg" />
-            )}
-
-            {/* Content */}
-            {getButtonContent()}
-        </button>
-    );
+      {/* Label */}
+      <span style={{ position: 'relative', zIndex: 1 }}>{label}</span>
+    </button>
+  );
 };
 
 export default WakeUpButton;
