@@ -129,7 +129,8 @@ const ErrorModal = ({ error, onClose }) => {
                 >
                   <p
                     style={{
-                      fontSize: '0.8125rem', color: '#888888',
+                      /* Raised from 0.8125rem/#888888 — WCAG AA requires 4.5:1 */
+                      fontSize: '0.875rem', color: '#a0a0a0',
                       textAlign: 'center', lineHeight: 1.6,
                     }}
                   >
@@ -141,22 +142,28 @@ const ErrorModal = ({ error, onClose }) => {
                 <button
                   onClick={onClose}
                   style={{
-                    width: '100%', padding: '0.6875rem',
+                    width: '100%',
+                    /* 44px touch target */
+                    minHeight: 44,
+                    padding: '0 1rem',
                     borderRadius: '0.625rem',
-                    border: '1px solid rgba(255,255,255,0.07)',
+                    border: '1px solid rgba(255,255,255,0.08)',
                     background: 'rgba(255,255,255,0.04)',
-                    color: '#888888', fontSize: '0.8125rem', fontWeight: 500,
+                    /* Raised from 0.8125rem/#888888 */
+                    color: '#a0a0a0', fontSize: '0.875rem', fontWeight: 500,
                     cursor: 'pointer', textAlign: 'center',
-                    transition: 'all 0.15s ease',
+                    /* Specific transition — more performant than 'all' */
+                    transition: 'background 0.15s ease, color 0.15s ease',
                     letterSpacing: '-0.01em',
+                    fontFamily: 'inherit',
                   }}
                   onMouseOver={e => {
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.07)';
-                    e.currentTarget.style.color = '#cccccc';
+                    e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+                    e.currentTarget.style.color = '#e0e0e0';
                   }}
                   onMouseOut={e => {
                     e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
-                    e.currentTarget.style.color = '#888888';
+                    e.currentTarget.style.color = '#a0a0a0';
                   }}
                 >
                   Got it
@@ -164,8 +171,11 @@ const ErrorModal = ({ error, onClose }) => {
 
                 <p
                   style={{
-                    textAlign: 'center', fontSize: '0.625rem',
-                    color: '#2a2a2a', marginTop: '0.75rem',
+                    textAlign: 'center',
+                    /* Raised from 0.625rem (10px) / #2a2a2a (near-invisible on dark bg) */
+                    fontSize: '0.75rem',
+                    color: '#505050',
+                    marginTop: '0.75rem',
                     letterSpacing: '0.02em',
                   }}
                 >
