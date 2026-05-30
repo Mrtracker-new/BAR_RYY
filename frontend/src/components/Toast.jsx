@@ -36,7 +36,8 @@ const Toast = ({ message, type = 'success', onClose, duration = 3000 }) => {
     <div
       style={{
         position: 'fixed',
-        top: '68px',
+        /* 72px = 56px (new navbar height) + 16px gap */
+        top: '72px',
         right: '1rem',
         zIndex: 150,
         display: 'flex',
@@ -53,14 +54,16 @@ const Toast = ({ message, type = 'success', onClose, duration = 3000 }) => {
         animation: 'fade-in-up 0.3s cubic-bezier(0.16,1,0.3,1) both',
       }}
     >
-      <Icon size={15} style={{ color, flexShrink: 0 }} />
+      <Icon size={16} style={{ color, flexShrink: 0 }} />
       <p
         style={{
-          fontSize: '0.8125rem',
+          /* Raised from 0.8125rem (13px) — below 14px minimum */
+          fontSize: '0.9375rem',
           fontWeight: 500,
-          color: '#cccccc',
+          color: '#d0d0d0',
           flex: 1,
           letterSpacing: '-0.01em',
+          lineHeight: 1.5,
         }}
       >
         {message}
@@ -69,16 +72,18 @@ const Toast = ({ message, type = 'success', onClose, duration = 3000 }) => {
         onClick={onClose}
         style={{
           flexShrink: 0,
-          width: 22,
-          height: 22,
+          /* 28×28 — better touch target for close action */
+          width: 28,
+          height: 28,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           background: 'transparent',
           border: 'none',
           cursor: 'pointer',
-          color: 'rgba(255,255,255,0.25)',
-          borderRadius: '0.25rem',
+          color: 'rgba(255,255,255,0.3)',
+          borderRadius: '0.375rem',
+          /* Specific transition — more performant than 'all' */
           transition: 'color 0.15s ease',
         }}
         onMouseOver={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.6)')}
