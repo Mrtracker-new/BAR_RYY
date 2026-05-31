@@ -51,6 +51,17 @@
   ],
   "rewrites": [
     {
+      "source": "/chat/:token",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(WhatsApp|Telegram|facebookexternalhit|Twitterbot|LinkedInBot|Slackbot|Discordbot|bot|crawl|spider).*"
+        }
+      ],
+      "destination": "/api/og/chat/:token"
+    },
+    {
       "source": "/og/chat/:token",
       "destination": "/api/og/chat/:token"
     },
