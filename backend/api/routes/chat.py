@@ -557,6 +557,9 @@ async def chat_websocket(token: str, websocket: WebSocket):
 
             elif msg_type == "pubkey":
                 # E2E key exchange — relay ECDH public key to all other participants.
+                # Broadcast-control rate limit: pubkey fans out to every peer.
+                if not await chat_service.check_control_rate(token, ws_id):
+                    continue
                 raw_key = data.get("public_key", "")
                 await chat_service.relay_e2e_pubkey(
                     token=token,
@@ -566,6 +569,9 @@ async def chat_websocket(token: str, websocket: WebSocket):
 
             elif msg_type == "session_key":
                 # E2E key distribution — creator unicasts wrapped AES key to one peer.
+                # Generous rate bucket sized for creator fanout across the room.
+                if not await chat_service.check_key_rate(token, ws_id):
+                    continue
                 raw_for  = str(data.get("for_ws_id", "")).strip()
                 raw_wkey = data.get("wrapped_key", "")
                 if raw_for:
@@ -583,6 +589,8 @@ async def chat_websocket(token: str, websocket: WebSocket):
                     break
 
             elif msg_type == "kick":
+                if not await chat_service.check_control_rate(token, ws_id):
+                    continue
                 target = str(data.get("target_ws_id", "")).strip()
                 if target:
                     await chat_service.kick_participant(
@@ -590,12 +598,16 @@ async def chat_websocket(token: str, websocket: WebSocket):
                     )
 
             elif msg_type == "lock_room":
+                if not await chat_service.check_control_rate(token, ws_id):
+                    continue
                 locked = bool(data.get("locked", True))
                 await chat_service.lock_room(
                     token=token, actor_ws_id=ws_id, locked=locked,
                 )
 
             elif msg_type == "extend_ttl":
+                if not await chat_service.check_control_rate(token, ws_id):
+                    continue
                 try:
                     extra = int(data.get("extra_seconds", chat_service.MAX_EXTEND_SECONDS))
                 except (ValueError, TypeError):

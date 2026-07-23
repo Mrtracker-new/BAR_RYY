@@ -84,9 +84,22 @@ _E2E_IV_MAX: int = 32
 #: standard base64 via btoa().
 _B64_RE: re.Pattern = re.compile(r'^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{4})?$')
 
-#: Rate-limit: messages per window per participant.
+#: Rate-limit: chat 'send' messages per window per participant.
 _RATE_LIMIT_MSGS: int = 10
 _RATE_WINDOW_SECS: float = 30.0
+
+#: Rate-limit: broadcast-control messages (pubkey/kick/lock_room/extend_ttl)
+#: per window per participant.  Each fans out to all participants, so a strict
+#: cap stops amplification floods.  Legit rate is 1-2 per participant.
+_CTRL_RATE_LIMIT_MSGS: int = 10
+_CTRL_RATE_WINDOW_SECS: float = 30.0
+
+#: Rate-limit: session_key unicasts per window per participant.  Bounded by
+#: room size — a creator keys up to MAX_PARTICIPANTS-1 peers on a join burst —
+#: so the cap carries headroom above the room cap to never break legit E2E
+#: key distribution while still bounding a runaway sender.
+_KEY_RATE_LIMIT_MSGS: int = MAX_PARTICIPANTS + 10
+_KEY_RATE_WINDOW_SECS: float = 30.0
 
 #: PIN character pool — uppercase letters + digits (easy to read, no 0/O ambiguity).
 _PIN_ALPHABET: str = "".join(
@@ -113,6 +126,98 @@ def _safe_text(raw: str, max_len: int) -> str:
     by React JSX text nodes, which inherently prevent XSS.
     """
     return raw[:max_len]
+
+
+def _consume_rate_token(
+    participant: "_Participant",
+    now: datetime,
+    *,
+    count_attr: str,
+    start_attr: str,
+    limit: int,
+    window_secs: float,
+) -> bool:
+    """Sliding-window token bucket over one of a participant's rate buckets.
+
+    Resets the window when *window_secs* have elapsed, then returns ``True``
+    and consumes one token if under *limit*, or ``False`` if the bucket is
+    exhausted.  Bucket state lives in the named ``count_attr`` / ``start_attr``
+    fields so several independent buckets can share this logic.
+    """
+    start: datetime = getattr(participant, start_attr)
+    if (now - start).total_seconds() > window_secs:
+        setattr(participant, count_attr, 0)
+        setattr(participant, start_attr, now)
+
+    if getattr(participant, count_attr) >= limit:
+        return False
+
+    setattr(participant, count_attr, getattr(participant, count_attr) + 1)
+    return True
+
+
+async def _enforce_rate(
+    token: str,
+    ws_id: str,
+    *,
+    count_attr: str,
+    start_attr: str,
+    limit: int,
+    window_secs: float,
+) -> bool:
+    """Look up (token, ws_id) and consume one token from the named bucket.
+
+    Returns ``True`` if the action is allowed.  On breach, sends a ``slow
+    down`` error to the offending participant and returns ``False``.  Also
+    returns ``False`` when the session or participant no longer exists.
+    """
+    session = get_session(token)
+    if session is None:
+        return False
+    participant = session.participants.get(ws_id)
+    if participant is None:
+        return False
+
+    allowed = _consume_rate_token(
+        participant,
+        datetime.now(timezone.utc),
+        count_attr=count_attr,
+        start_attr=start_attr,
+        limit=limit,
+        window_secs=window_secs,
+    )
+    if not allowed:
+        try:
+            await participant.ws.send_json(
+                {"type": "error", "text": "Slow down — you are sending requests too quickly."}
+            )
+        except Exception:
+            pass
+    return allowed
+
+
+async def check_control_rate(token: str, ws_id: str) -> bool:
+    """Rate-gate a broadcast-control message (pubkey/kick/lock_room/extend_ttl)."""
+    return await _enforce_rate(
+        token,
+        ws_id,
+        count_attr="_ctrl_count",
+        start_attr="_ctrl_window_start",
+        limit=_CTRL_RATE_LIMIT_MSGS,
+        window_secs=_CTRL_RATE_WINDOW_SECS,
+    )
+
+
+async def check_key_rate(token: str, ws_id: str) -> bool:
+    """Rate-gate a session_key unicast (generous headroom for creator fanout)."""
+    return await _enforce_rate(
+        token,
+        ws_id,
+        count_attr="_key_count",
+        start_attr="_key_window_start",
+        limit=_KEY_RATE_LIMIT_MSGS,
+        window_secs=_KEY_RATE_WINDOW_SECS,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -289,8 +394,26 @@ class _Participant:
     # used cryptographically by the server.
     public_key: Optional[str] = field(default=None, repr=False)
 
+    # Chat 'send' rate bucket.
     _msg_count: int = field(default=0, repr=False)
     _window_start: datetime = field(
+        default_factory=lambda: datetime.now(timezone.utc), repr=False
+    )
+
+    # Broadcast-control rate bucket (pubkey / kick / lock_room / extend_ttl) —
+    # each of these fans a message out to every participant, so a flood is a
+    # DoS amplifier.  Kept separate from _msg_count so control spam cannot
+    # block chat and vice-versa.
+    _ctrl_count: int = field(default=0, repr=False)
+    _ctrl_window_start: datetime = field(
+        default_factory=lambda: datetime.now(timezone.utc), repr=False
+    )
+
+    # session_key rate bucket — unicast (one recipient), but a creator
+    # legitimately fans keys out to every peer on join bursts, so this bucket
+    # has headroom sized to the room cap instead of the strict control limit.
+    _key_count: int = field(default=0, repr=False)
+    _key_window_start: datetime = field(
         default_factory=lambda: datetime.now(timezone.utc), repr=False
     )
 
@@ -653,12 +776,14 @@ async def broadcast_message(
 
     # ── Per-participant rate limit (applies to both paths) ─────────────────
     now = datetime.now(timezone.utc)
-    elapsed = (now - participant._window_start).total_seconds()
-    if elapsed > _RATE_WINDOW_SECS:
-        participant._msg_count = 0
-        participant._window_start = now
-
-    if participant._msg_count >= _RATE_LIMIT_MSGS:
+    if not _consume_rate_token(
+        participant,
+        now,
+        count_attr="_msg_count",
+        start_attr="_window_start",
+        limit=_RATE_LIMIT_MSGS,
+        window_secs=_RATE_WINDOW_SECS,
+    ):
         try:
             await participant.ws.send_json(
                 {"type": "error", "text": "Slow down — you are sending messages too quickly."}
@@ -666,8 +791,6 @@ async def broadcast_message(
         except Exception:
             pass
         return False
-
-    participant._msg_count += 1
 
     # ── Build payload ──────────────────────────────────────────────────────
     if e2e_mode:
