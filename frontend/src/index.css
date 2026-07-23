@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;0,14..32,900;1,14..32,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;0,14..32,900;1,14..32,400&family=JetBrains+Mono:wght@400;500;600;700&family=Patrick+Hand&family=Caveat:wght@400;500;600;700&family=Kalam:wght@300;400;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -12,81 +12,94 @@
    ============================================================ */
 :root {
 
-  /* ── Backgrounds ──────────────────────────────────────────
-     Ultra-dark hierarchy. Each step is +7-8 lightness units
-     so surfaces are distinct without looking "grey".
+  /* ── Backgrounds — NOTEBOOK PAPER ─────────────────────────
+     Warm cream paper hierarchy. Lightness steps stay subtle so
+     stacked "pages" read as tonal paper, not grey boxes.
+     Legacy var names kept; values flipped light so every
+     component reading these tokens re-skins for free.
   */
-  --bg:         #070707;   /* page canvas                          */
-  --surface-0:  #0e0e0e;   /* default card / panel                 */
-  --surface-1:  #141414;   /* elevated card (hover, modal)         */
-  --surface-2:  #1a1a1a;   /* inputs, code blocks                  */
-  --surface-3:  #212121;   /* hover overlay, active state          */
-  --surface-4:  #2a2a2a;   /* dividers, separators                 */
+  --bg:         #EDE3CE;   /* desk / canvas — aged cream paper      */
+  --surface-0:  #FAF4E6;   /* default notebook page / card          */
+  --surface-1:  #FFFDF6;   /* elevated page (hover, modal) — bright  */
+  --surface-2:  #F1E8D3;   /* inputs, code blocks — inset paper      */
+  --surface-3:  #E6D9BC;   /* hover overlay, active state            */
+  --surface-4:  #D8C9A6;   /* dividers, separators, rule lines       */
 
-  /* ── Text ────────────────────────────────────────────────
-     All values pass WCAG AA (4.5:1) against --bg (#070707).
-     Contrast ratios vs #070707:
-       --text-primary:   15.8:1  ✓ AAA
-       --text-secondary:  6.3:1  ✓ AA
-       --text-tertiary:   4.9:1  ✓ AA  (was #404040 = 4.2:1, borderline)
-       --text-dim:        3.6:1  ✗ AA  (used ONLY for decorative / disabled)
-       --text-muted:      2.1:1  ✗     (used ONLY for non-text decoration)
-  */
-  --text-primary:   #f0f0f0;   /* headings, button labels, key data     */
-  --text-secondary: #a0a0a0;   /* body copy, descriptions, card text    */
-  --text-tertiary:  #636363;   /* meta labels, timestamps, captions     */
-  --text-dim:       #424242;   /* disabled states, placeholders         */
-  --text-muted:     #2a2a2a;   /* purely decorative separators, dots    */
+  /* ── Paper texture helpers (used by .paper backgrounds) ── */
+  --paper-line:   rgba(70, 55, 30, 0.06);  /* faint ruled line       */
+  --paper-margin: rgba(190, 90, 70, 0.28); /* red margin rule        */
+  --paper-shadow: rgba(60, 45, 20, 0.16);  /* soft page drop-shadow  */
 
-  /* ── Gold Accent ─────────────────────────────────────────
-     Primary brand color. Used for CTAs, active states, links.
+  /* ── Text — INK ──────────────────────────────────────────
+     Dark sepia ink on cream. Contrast ratios vs --bg (#EDE3CE):
+       --text-primary:   ~13:1  ✓ AAA  (near-black ink)
+       --text-secondary:  ~7:1  ✓ AA   (faded ink)
+       --text-tertiary:  ~4.8:1 ✓ AA   (pencil grey)
+       --text-dim:       ~3.4:1 ✗      (decorative / disabled only)
+       --text-muted:     ~2:1   ✗      (non-text decoration only)
   */
-  --gold:         #E8A020;
-  --gold-light:   #F5BA3A;
-  --gold-muted:   #C8893A;
-  --gold-dim:     rgba(232, 160, 32, 0.10);
-  --gold-dim-lg:  rgba(232, 160, 32, 0.16);
-  --gold-border:  rgba(232, 160, 32, 0.22);
-  --gold-border-hover: rgba(232, 160, 32, 0.38);
-  --gold-glow:    rgba(232, 160, 32, 0.18);
-  --gold-glow-lg: rgba(232, 160, 32, 0.30);
+  --text-primary:   #2A2018;   /* headings, key data — dark ink         */
+  --text-secondary: #55483A;   /* body copy, descriptions               */
+  --text-tertiary:  #857358;   /* meta labels, timestamps, captions     */
+  --text-dim:       #A2916F;   /* disabled states, placeholders         */
+  --text-muted:     #C3B48F;   /* purely decorative separators, dots    */
+
+  /* ── Gold / Wax Accent ───────────────────────────────────
+     Primary brand color. Wax-seal amber. CTAs, active, links.
+     Darkened vs old palette so it reads on light paper.
+  */
+  --gold:         #B4791E;
+  --gold-light:   #CE9530;
+  --gold-muted:   #8F5E16;
+  --gold-dim:     rgba(180, 121, 30, 0.12);
+  --gold-dim-lg:  rgba(180, 121, 30, 0.18);
+  --gold-border:  rgba(180, 121, 30, 0.32);
+  --gold-border-hover: rgba(180, 121, 30, 0.50);
+  --gold-glow:    rgba(180, 121, 30, 0.20);
+  --gold-glow-lg: rgba(180, 121, 30, 0.30);
+
+  /* ── Ink Blue — blueprint / handwriting accent ───────────── */
+  --ink:         #2C4A6E;
+  --ink-light:   #3E6494;
+  --ink-dim:     rgba(44, 74, 110, 0.10);
+  --ink-border:  rgba(44, 74, 110, 0.28);
 
   /* ── Orange Accent ───────────────────────────────────────
      Used exclusively for BurnChat — do not mix with Gold.
   */
-  --orange:        #F97316;
-  --orange-muted:  #C05010;
-  --orange-dim:    rgba(249, 115, 22, 0.10);
-  --orange-border: rgba(249, 115, 22, 0.22);
-  --orange-border-hover: rgba(249, 115, 22, 0.38);
-  --orange-glow:   rgba(249, 115, 22, 0.20);
+  --orange:        #C4461A;
+  --orange-muted:  #9A3612;
+  --orange-dim:    rgba(196, 70, 26, 0.10);
+  --orange-border: rgba(196, 70, 26, 0.28);
+  --orange-border-hover: rgba(196, 70, 26, 0.46);
+  --orange-glow:   rgba(196, 70, 26, 0.22);
 
   /* ── Semantic Colors ─────────────────────────────────────
      Green = success / verified / healthy
      Red   = error / destroyed / danger
      Blue  = info / 2FA / verification
   */
-  --green:         #22C55E;
-  --green-dim:     rgba(34, 197, 94, 0.08);
-  --green-border:  rgba(34, 197, 94, 0.18);
-  --green-glow:    rgba(34, 197, 94, 0.22);
+  --green:         #3F7D3A;
+  --green-dim:     rgba(63, 125, 58, 0.10);
+  --green-border:  rgba(63, 125, 58, 0.28);
+  --green-glow:    rgba(63, 125, 58, 0.22);
 
-  --red:           #EF4444;
-  --red-dim:       rgba(239, 68, 68, 0.08);
-  --red-border:    rgba(239, 68, 68, 0.18);
+  --red:           #B33A2E;
+  --red-dim:       rgba(179, 58, 46, 0.09);
+  --red-border:    rgba(179, 58, 46, 0.26);
 
-  --blue:          #6B7FD4;
-  --blue-dim:      rgba(107, 127, 212, 0.08);
-  --blue-border:   rgba(107, 127, 212, 0.22);
+  --blue:          #2C4A6E;
+  --blue-dim:      rgba(44, 74, 110, 0.09);
+  --blue-border:   rgba(44, 74, 110, 0.26);
 
-  /* ── Borders ─────────────────────────────────────────────
+  /* ── Borders — PENCIL / INK LINES ────────────────────────
+     Dark ink strokes on paper (were white-on-dark before).
      Three tiers: resting / hover / focus.
-     Focus uses gold to reinforce the brand accent.
   */
-  --border:        rgba(255, 255, 255, 0.07);
-  --border-hover:  rgba(255, 255, 255, 0.13);
-  --border-strong: rgba(255, 255, 255, 0.10);
-  --border-focus:  rgba(232, 160, 32, 0.50);
+  --border:        rgba(60, 45, 20, 0.16);
+  --border-hover:  rgba(60, 45, 20, 0.30);
+  --border-strong: rgba(60, 45, 20, 0.24);
+  --border-focus:  rgba(180, 121, 30, 0.60);
 
   /* ── Typography ──────────────────────────────────────────
      Fluid scale using rem. Base = 16px browser default.
@@ -105,6 +118,10 @@
   */
   --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  /* Handwriting — investigator's notebook titles & annotations */
+  --font-hand:  'Caveat', 'Patrick Hand', cursive;      /* flowing script — headings */
+  --font-print: 'Patrick Hand', 'Kalam', cursive;       /* neat block hand — labels  */
+  --font-note:  'Kalam', 'Patrick Hand', cursive;       /* casual note — margin notes */
 
   --text-2xs:  0.6875rem;  /*  11px — badges & UPPERCASE labels ONLY  */
   --text-xs:   0.75rem;    /*  12px — timestamps, secondary meta       */
@@ -161,21 +178,22 @@
   /* ── Shadows ─────────────────────────────────────────────
      Layered for depth. Use md for cards, lg for modals.
   */
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.6);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.6);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.4);
-  --shadow-xl: 0 20px 60px rgba(0, 0, 0, 0.5), 0 4px 12px rgba(0, 0, 0, 0.4);
+  /* Soft warm paper shadows — pages lifting off a desk, not glows */
+  --shadow-xs: 0 1px 2px rgba(60, 45, 20, 0.10);
+  --shadow-sm: 0 1px 3px rgba(60, 45, 20, 0.12), 0 1px 2px rgba(60, 45, 20, 0.08);
+  --shadow-md: 0 4px 12px rgba(60, 45, 20, 0.14), 0 1px 3px rgba(60, 45, 20, 0.10);
+  --shadow-lg: 0 10px 30px rgba(60, 45, 20, 0.18), 0 2px 6px rgba(60, 45, 20, 0.12);
+  --shadow-xl: 0 22px 55px rgba(60, 45, 20, 0.22), 0 4px 12px rgba(60, 45, 20, 0.14);
 
-  --shadow-gold-sm: 0 4px 16px rgba(232, 160, 32, 0.18);
-  --shadow-gold-md: 0 6px 24px rgba(232, 160, 32, 0.24);
-  --shadow-gold-lg: 0 8px 40px rgba(232, 160, 32, 0.30);
+  --shadow-gold-sm: 0 4px 16px rgba(180, 121, 30, 0.18);
+  --shadow-gold-md: 0 6px 24px rgba(180, 121, 30, 0.24);
+  --shadow-gold-lg: 0 8px 40px rgba(180, 121, 30, 0.28);
 
-  --shadow-orange-sm: 0 4px 16px rgba(249, 115, 22, 0.18);
-  --shadow-orange-md: 0 6px 24px rgba(249, 115, 22, 0.26);
+  --shadow-orange-sm: 0 4px 16px rgba(196, 70, 26, 0.18);
+  --shadow-orange-md: 0 6px 24px rgba(196, 70, 26, 0.24);
 
-  --shadow-green-sm: 0 4px 16px rgba(34, 197, 94, 0.16);
-  --shadow-green-md: 0 6px 24px rgba(34, 197, 94, 0.22);
+  --shadow-green-sm: 0 4px 16px rgba(63, 125, 58, 0.16);
+  --shadow-green-md: 0 6px 24px rgba(63, 125, 58, 0.20);
 
   /* ── Component: Navbar ───────────────────────────────────
      Height is a token so paddingTop of <main> always matches.
@@ -212,7 +230,30 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
+
+  /* ── Aged-paper canvas ──────────────────────────────────
+     Layered, GPU-cheap: two soft radial "stains" + a fine
+     grain speckle + a warm base. Fixed so it doesn't scroll.
+     Subtle by design — must never fight foreground content. */
+  background-image:
+    radial-gradient(ellipse 60% 45% at 18% 12%, rgba(150, 110, 50, 0.05), transparent 60%),
+    radial-gradient(ellipse 50% 40% at 85% 85%, rgba(120, 90, 40, 0.045), transparent 62%),
+    radial-gradient(circle at 50% 30%, rgba(255, 252, 244, 0.35), transparent 70%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+  background-attachment: fixed, fixed, fixed, fixed;
+  background-repeat: no-repeat, no-repeat, no-repeat, repeat;
 }
+
+/* Handwritten titles — investigator's notebook. Applied to
+   real headings so semantic markup carries the notebook voice.
+   Body copy stays Inter for readability. */
+h1, h2, .text-display, .text-headline, .text-subhead {
+  font-family: var(--font-hand);
+  font-weight: 700;
+  letter-spacing: 0.005em !important;   /* script fonts cramp under negative tracking */
+}
+/* Caveat renders ~15% small for its point size — nudge up a touch */
+.text-display { font-size: clamp(3rem, 9vw, 7.5rem); line-height: 0.95; }
 
 /* ============================================================
    FLUID RESPONSIVE TYPOGRAPHY RAMP
@@ -314,7 +355,7 @@ code, kbd, samp {
   border: 1px solid var(--border);
   border-radius: var(--r1);
   padding: 0.1em 0.35em;
-  color: var(--gold-light);
+  color: var(--gold-muted);
 }
 
 pre {
@@ -382,10 +423,10 @@ input, select, textarea {
   font-size: inherit;
 }
 
-/* Text selection — gold tinted */
+/* Text selection — highlighter marker swipe */
 ::selection {
-  background: rgba(232, 160, 32, 0.22);
-  color: #FBBF24;
+  background: rgba(232, 200, 90, 0.45);
+  color: #2A2018;
 }
 
 /* Focus visible — keyboard navigation ring */
@@ -495,7 +536,7 @@ input, select, textarea {
 
 /* Glass / blur — navbar, floating overlays */
 .surface-glass {
-  background: rgba(9, 9, 9, 0.85);
+  background: rgba(250, 244, 230, 0.82);
   backdrop-filter: blur(20px) saturate(160%);
   -webkit-backdrop-filter: blur(20px) saturate(160%);
   border: 1px solid var(--border);
@@ -526,53 +567,65 @@ input, select, textarea {
   min-height: 48px;
   padding: 0.8125rem 1.875rem;
 
-  background: linear-gradient(160deg, var(--gold-light) 0%, var(--gold) 45%, var(--gold-muted) 100%);
-  color: #000;
+  /* Rubber-stamp: matte warm-gold ink block, cream label, ring */
+  background: linear-gradient(165deg, var(--gold-light) 0%, var(--gold) 55%, var(--gold-muted) 100%);
+  color: #FFF8EA;
 
-  font-family: var(--font-sans);
-  font-size: var(--text-base);    /* 16px — never smaller */
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-family: var(--font-print);   /* stamped block-hand lettering */
+  font-size: 1.2rem;                /* Patrick Hand runs small       */
+  font-weight: 400;
+  letter-spacing: 0.02em;
 
   border: none;
-  border-radius: var(--r3);
+  border-radius: 10px 12px 11px 13px / 13px 11px 12px 10px;  /* hand-cut edge */
   cursor: pointer;
   position: relative;
   overflow: hidden;
   white-space: nowrap;
+  text-shadow: 0 1px 1px rgba(60, 40, 10, 0.35);
 
-  /* Inner highlight shimmer */
+  /* Inset ink ring — the stamp's raised border */
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.15) inset,
+    0 0 0 1.5px rgba(60, 40, 10, 0.35) inset,
+    0 0 0 4px rgba(255, 248, 234, 0.14) inset,
     var(--shadow-sm);
 
   transition:
-    transform var(--dur-base) var(--ease-spring),
+    transform var(--dur-fast) var(--ease-spring),
     box-shadow var(--dur-base) var(--ease-spring),
     background var(--dur-base) ease;
 }
 
-/* Top-highlight overlay */
+/* Speckled-ink stamp texture overlay */
 .btn-primary::before {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(160deg, rgba(255, 255, 255, 0.16) 0%, transparent 55%);
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255, 248, 234, 0.16) 0%, transparent 45%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cfilter id='s'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='2'/%3E%3C/filter%3E%3Crect width='60' height='60' filter='url(%23s)' opacity='0.08'/%3E%3C/svg%3E");
   border-radius: inherit;
   pointer-events: none;
+  mix-blend-mode: overlay;
 }
 
 .btn-primary:hover {
-  transform: translateY(-1px);
-  background: linear-gradient(160deg, #FFC040 0%, #F0A828 45%, #D09038 100%);
+  transform: translateY(-1px) rotate(-0.4deg);
+  background: linear-gradient(165deg, #DFA53C 0%, #C0871F 55%, #9A6A18 100%);
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.15) inset,
+    0 0 0 1.5px rgba(60, 40, 10, 0.40) inset,
+    0 0 0 4px rgba(255, 248, 234, 0.16) inset,
     var(--shadow-gold-md);
 }
 
+/* Stamp press-down */
 .btn-primary:active {
-  transform: translateY(0px);
-  transition-duration: var(--dur-fast);
+  transform: translateY(1px) rotate(0.5deg) scale(0.985);
+  transition-duration: var(--dur-instant);
+  box-shadow:
+    0 0 0 1.5px rgba(60, 40, 10, 0.45) inset,
+    0 0 0 4px rgba(255, 248, 234, 0.10) inset,
+    var(--shadow-xs);
 }
 
 .btn-primary:disabled {
@@ -615,7 +668,7 @@ input, select, textarea {
 
 .btn-ghost:hover {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(60, 45, 20, 0.05);
   border-color: var(--border-hover);
   transform: translateY(-1px);
 }
@@ -656,12 +709,12 @@ input, select, textarea {
 
 .btn-icon:hover {
   color: var(--text-secondary);
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(60, 45, 20, 0.06);
   border-color: var(--border);
 }
 
 .btn-icon:active {
-  background: rgba(255, 255, 255, 0.09);
+  background: rgba(60, 45, 20, 0.09);
   transition-duration: var(--dur-fast);
 }
 
@@ -691,7 +744,7 @@ input, select, textarea {
 
 .btn-pill:hover {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(60, 45, 20, 0.05);
   border-color: var(--border-hover);
 }
 
@@ -732,8 +785,8 @@ input, select, textarea {
 
 .input-field:focus {
   border-color: var(--border-focus);
-  background: rgba(18, 18, 18, 1);
-  box-shadow: 0 0 0 3px rgba(232, 160, 32, 0.10);
+  background: #FFFDF6;
+  box-shadow: 0 0 0 3px rgba(180, 121, 30, 0.10);
 }
 
 /* Select variant */
@@ -747,7 +800,7 @@ select.input-field {
 }
 
 select.input-field option {
-  background: #1c1c1c;
+  background: #F1E8D3;
   color: var(--text-primary);
   font-size: var(--text-sm);
 }
@@ -772,7 +825,7 @@ select.input-field option {
   display: flex;
   align-items: center;
 
-  background: rgba(7, 7, 7, 0.92);
+  background: rgba(250, 244, 230, 0.88);
   backdrop-filter: blur(20px) saturate(150%);
   -webkit-backdrop-filter: blur(20px) saturate(150%);
   border-bottom: 1px solid var(--border-strong);
@@ -812,8 +865,8 @@ select.input-field option {
   display: block;
   height: 1px;
   background: linear-gradient(90deg,
-    rgba(232, 160, 32, 0.65) 0%,
-    rgba(232, 160, 32, 0.18) 55%,
+    rgba(180, 121, 30, 0.65) 0%,
+    rgba(180, 121, 30, 0.18) 55%,
     transparent 100%
   );
 }
@@ -823,8 +876,8 @@ select.input-field option {
   display: block;
   height: 1px;
   background: linear-gradient(90deg,
-    rgba(249, 115, 22, 0.65) 0%,
-    rgba(249, 115, 22, 0.18) 55%,
+    rgba(196, 70, 26, 0.65) 0%,
+    rgba(196, 70, 26, 0.18) 55%,
     transparent 100%
   );
 }
@@ -834,8 +887,8 @@ select.input-field option {
   display: block;
   height: 1px;
   background: linear-gradient(90deg,
-    rgba(34, 197, 94, 0.55) 0%,
-    rgba(34, 197, 94, 0.14) 55%,
+    rgba(63, 125, 58, 0.55) 0%,
+    rgba(63, 125, 58, 0.14) 55%,
     transparent 100%
   );
 }
@@ -866,7 +919,7 @@ select.input-field option {
   opacity: 0;
   background: radial-gradient(
     ellipse at 50% 0%,
-    rgba(232, 160, 32, 0.05) 0%,
+    rgba(180, 121, 30, 0.05) 0%,
     transparent 70%
   );
   transition: opacity var(--dur-slow) ease;
@@ -874,9 +927,9 @@ select.input-field option {
 }
 
 .feature-card:hover {
-  border-color: rgba(255, 255, 255, 0.11);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
-  transform: translateY(-2px);
+  border-color: rgba(60, 45, 20, 0.28);
+  box-shadow: 0 14px 34px rgba(60, 45, 20, 0.18);
+  transform: translateY(-2px) rotate(-0.15deg);
 }
 
 .feature-card:hover::after {
@@ -901,7 +954,7 @@ select.input-field option {
 }
 
 .badge-gold {
-  background: rgba(232, 160, 32, 0.10);
+  background: rgba(180, 121, 30, 0.10);
   border: 1px solid var(--gold-border);
   color: var(--gold);
 }
@@ -925,7 +978,7 @@ select.input-field option {
 }
 
 .badge-neutral {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(60, 45, 20, 0.05);
   border: 1px solid var(--border);
   color: var(--text-secondary);
 }
@@ -955,25 +1008,25 @@ select.input-field option {
 .alert-error {
   background: var(--red-dim);
   border: 1px solid var(--red-border);
-  color: #fca5a5;
+  color: #8A2B22;
 }
 
 .alert-success {
   background: var(--green-dim);
   border: 1px solid var(--green-border);
-  color: #86efac;
+  color: #2F5E2C;
 }
 
 .alert-warning {
-  background: rgba(232, 160, 32, 0.08);
+  background: rgba(180, 121, 30, 0.08);
   border: 1px solid var(--gold-border);
-  color: #fbbf24;
+  color: #8F5E16;
 }
 
 .alert-info {
   background: var(--blue-dim);
   border: 1px solid var(--blue-border);
-  color: #a5b4fc;
+  color: #22406A;
 }
 
 
@@ -981,7 +1034,7 @@ select.input-field option {
    UPLOAD ZONE
    ============================================================ */
 .upload-zone {
-  border: 1.5px dashed rgba(255, 255, 255, 0.10);
+  border: 2px dashed rgba(60, 45, 20, 0.28);
   border-radius: var(--r4);
   cursor: pointer;
   transition:
@@ -992,7 +1045,7 @@ select.input-field option {
 .upload-zone:hover,
 .upload-zone.dragging {
   border-color: var(--gold-border);
-  background: rgba(232, 160, 32, 0.03);
+  background: rgba(180, 121, 30, 0.03);
 }
 
 
@@ -1004,7 +1057,7 @@ select.input-field option {
   padding: 0.875rem 1rem;
   border-radius: var(--r3);
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(60, 45, 20, 0.02);
   cursor: pointer;
   text-align: left;
   transition:
@@ -1014,7 +1067,7 @@ select.input-field option {
 
 .mode-card:hover {
   border-color: var(--border-hover);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(60, 45, 20, 0.04);
 }
 
 .mode-card.active {
@@ -1067,7 +1120,7 @@ select.input-field option {
   position: absolute;
   inset: 0;
   border-radius: var(--r-full);
-  background: rgba(255, 255, 255, 0.09);
+  background: rgba(60, 45, 20, 0.09);
   border: 1px solid var(--border-hover);
   cursor: pointer;
   transition:
@@ -1100,7 +1153,7 @@ select.input-field option {
 }
 
 .toggle-switch input:focus-visible + .toggle-track {
-  box-shadow: 0 0 0 3px rgba(232, 160, 32, 0.20);
+  box-shadow: 0 0 0 3px rgba(180, 121, 30, 0.20);
 }
 
 /* Toggle row layout */
@@ -1115,7 +1168,7 @@ select.input-field option {
 }
 
 .toggle-row:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(60, 45, 20, 0.03);
 }
 
 
@@ -1151,11 +1204,11 @@ select.input-field option {
 
 .stepper-btn:hover {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(60, 45, 20, 0.06);
 }
 
 .stepper-btn:active {
-  background: rgba(255, 255, 255, 0.10);
+  background: rgba(60, 45, 20, 0.10);
   transition-duration: var(--dur-instant);
 }
 
@@ -1188,11 +1241,11 @@ select.input-field option {
 }
 
 .info-row + .info-row {
-  border-top: 1px solid rgba(255, 255, 255, 0.035);
+  border-top: 1px solid rgba(60, 45, 20, 0.08);
 }
 
 .info-row:nth-child(even) {
-  background: rgba(255, 255, 255, 0.015);
+  background: rgba(60, 45, 20, 0.015);
 }
 
 .info-row__label {
@@ -1228,7 +1281,7 @@ select.input-field option {
   font-weight: 700;
   letter-spacing: 0.10em;
   text-transform: uppercase;
-  color: rgba(232, 160, 32, 0.80);
+  color: rgba(180, 121, 30, 0.80);
   margin-bottom: var(--s3);
   display: block;
 }
@@ -1236,12 +1289,12 @@ select.input-field option {
 /* Colour modifiers — append to .eyebrow OR .section-label */
 .eyebrow-green,
 .section-label-green {
-  color: rgba(34, 197, 94, 0.80);
+  color: rgba(63, 125, 58, 0.80);
 }
 
 .eyebrow-orange,
 .section-label-orange {
-  color: rgba(249, 115, 22, 0.80);
+  color: rgba(196, 70, 26, 0.80);
 }
 
 .eyebrow-blue,
@@ -1280,7 +1333,7 @@ select.input-field option {
 
 .divider-gold {
   background: linear-gradient(90deg,
-    rgba(232, 160, 32, 0.18) 0%,
+    rgba(180, 121, 30, 0.18) 0%,
     transparent 60%
   );
 }
@@ -1290,14 +1343,14 @@ select.input-field option {
    GRADIENT TEXT
    ============================================================ */
 .text-gradient-gold {
-  background: linear-gradient(135deg, #FBBF24 0%, #E8A020 50%, #C08018 100%);
+  background: linear-gradient(135deg, #CE9530 0%, #B4791E 50%, #8F5E16 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
 .text-gradient-orange {
-  background: linear-gradient(135deg, #FB923C 0%, #F97316 45%, #EA6010 100%);
+  background: linear-gradient(135deg, #D2591F 0%, #C4461A 45%, #9A3612 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -1318,10 +1371,10 @@ select.input-field option {
 .glow-border {
   box-shadow:
     0 0 0 1px var(--gold-glow),
-    0 0 24px rgba(232, 160, 32, 0.08);
+    0 0 24px rgba(180, 121, 30, 0.08);
 }
 
-.glow-amber      { box-shadow: 0 0 0 1px var(--gold-glow), 0 0 24px rgba(232,160,32,0.08), 0 0 48px rgba(232,160,32,0.04); }
+.glow-amber      { box-shadow: 0 0 0 1px var(--gold-glow), 0 0 24px rgba(180,121,30,0.10), 0 0 48px rgba(180,121,30,0.05); }
 
 
 /* ============================================================
@@ -1329,8 +1382,8 @@ select.input-field option {
    ============================================================ */
 .bg-grid {
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+    linear-gradient(rgba(44, 74, 110, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(44, 74, 110, 0.07) 1px, transparent 1px);
   background-size: 52px 52px;
 }
 
@@ -1542,7 +1595,7 @@ input[type="range"] {
   appearance: none;
   height: 3px;
   border-radius: 2px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(60, 45, 20, 0.08);
   outline: none;
   cursor: pointer;
   width: 100%;
@@ -1556,14 +1609,14 @@ input[type="range"]::-webkit-slider-thumb {
   border-radius: 50%;
   background: var(--gold);
   cursor: pointer;
-  box-shadow: 0 0 0 3px rgba(232, 160, 32, 0.18);
+  box-shadow: 0 0 0 3px rgba(180, 121, 30, 0.18);
   transition:
     box-shadow var(--dur-base) ease,
     transform var(--dur-base) ease;
 }
 
 input[type="range"]::-webkit-slider-thumb:hover {
-  box-shadow: 0 0 0 5px rgba(232, 160, 32, 0.22);
+  box-shadow: 0 0 0 5px rgba(180, 121, 30, 0.22);
   transform: scale(1.1);
 }
 
@@ -1587,7 +1640,7 @@ input[type="checkbox"] {
   height: 18px;
   min-width: 18px;
   border-radius: 5px;
-  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  border: 1.5px solid rgba(60, 45, 20, 0.45);
   background: transparent;
   cursor: pointer;
   position: relative;
@@ -1616,7 +1669,7 @@ input[type="checkbox"]:checked::after {
 
 input[type="checkbox"]:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(232, 160, 32, 0.20);
+  box-shadow: 0 0 0 3px rgba(180, 121, 30, 0.20);
 }
 
 
@@ -1690,7 +1743,7 @@ input[type="checkbox"]:focus-visible {
   background: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(255, 255, 255, 0.06) 50%,
+    rgba(60, 45, 20, 0.05) 50%,
     transparent 100%
   );
   background-size: 200% 100%;
@@ -1720,6 +1773,306 @@ input[type="checkbox"]:focus-visible {
 
 
 /* ============================================================
+   NOTEBOOK COMPONENT VOCABULARY
+   Reusable "handcrafted stationery" primitives. Components opt
+   in with these classes. All decorative layers are aria-hidden
+   friendly (::before / ::after) and honour reduced-motion.
+   ============================================================ */
+
+/* ── Paper page — cream sheet with faint ruled lines + red margin.
+   Put content in a child with padding-left to clear the margin. */
+.paper {
+  position: relative;
+  background-color: var(--surface-0);
+  background-image:
+    /* horizontal ruled lines */
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 31px,
+      var(--paper-line) 31px,
+      var(--paper-line) 32px
+    );
+  border: 1px solid var(--border);
+  border-radius: 4px 10px 8px 6px / 8px 6px 10px 4px;
+  box-shadow: var(--shadow-md);
+}
+
+/* Red margin rule down the left — like a real notebook */
+.paper--ruled::before {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0; left: 38px;
+  width: 1.5px;
+  background: var(--paper-margin);
+  pointer-events: none;
+}
+
+/* Dotted grid paper (bullet-journal) */
+.paper--dotted {
+  background-image: radial-gradient(var(--paper-line) 1.2px, transparent 1.2px);
+  background-size: 20px 20px;
+}
+
+/* Blueprint paper — ink-blue grid on a deeper blue wash */
+.paper--blueprint {
+  background-color: #23415f;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.10) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.10) 1px, transparent 1px);
+  background-size: 24px 24px;
+  color: #E8F0FA;
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+/* ── Folded / dog-eared page corner ── */
+.dog-ear {
+  position: relative;
+}
+.dog-ear::after {
+  content: '';
+  position: absolute;
+  top: 0; right: 0;
+  width: 28px; height: 28px;
+  background: linear-gradient(225deg, var(--bg) 0%, var(--bg) 50%, transparent 50%);
+  border-left: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+  box-shadow: -2px 2px 4px rgba(60, 45, 20, 0.10);
+  pointer-events: none;
+}
+
+/* ── Torn / deckle bottom edge ── */
+.torn-bottom {
+  -webkit-mask: radial-gradient(6px 8px at 6px -2px, transparent 98%, #000) bottom left / 18px 8px repeat-x;
+          mask: radial-gradient(6px 8px at 6px -2px, transparent 98%, #000) bottom left / 18px 8px repeat-x;
+  padding-bottom: 10px;
+}
+
+/* ── Washi / masking tape strip (position with inline top/left/rotate) ── */
+.tape {
+  position: absolute;
+  width: 96px; height: 26px;
+  background: rgba(210, 190, 130, 0.55);
+  border-left: 1px dashed rgba(120, 100, 50, 0.25);
+  border-right: 1px dashed rgba(120, 100, 50, 0.25);
+  box-shadow: 0 1px 3px rgba(60, 45, 20, 0.18);
+  backdrop-filter: saturate(140%);
+  pointer-events: none;
+}
+.tape--blue  { background: rgba(120, 150, 190, 0.45); }
+.tape--red   { background: rgba(196, 120, 100, 0.42); }
+
+/* ── Sticky note — square pad leaf, slight tilt, curled shadow ── */
+.sticky {
+  position: relative;
+  background: #FBE79A;
+  color: #3A2E12;
+  border-radius: 2px;
+  padding: var(--s4);
+  box-shadow: 2px 3px 8px rgba(60, 45, 20, 0.22);
+  transition: transform var(--dur-base) var(--ease-spring),
+              box-shadow var(--dur-base) var(--ease-spring);
+}
+.sticky::after {          /* peeled bottom-right curl */
+  content: '';
+  position: absolute;
+  bottom: 0; right: 0;
+  width: 22px; height: 22px;
+  background: linear-gradient(135deg, transparent 50%, rgba(60, 45, 20, 0.10) 50%);
+  border-radius: 0 0 3px 0;
+}
+.sticky--pink  { background: #F7C0C0; }
+.sticky--blue  { background: #BFD8E8; }
+.sticky--green { background: #C4E0AC; }
+.sticky:hover { transform: rotate(-1deg) translateY(-2px); box-shadow: 3px 5px 12px rgba(60, 45, 20, 0.26); }
+
+/* ── Binder rings — a top row of holes for "bound" panels ── */
+.binder-rings {
+  display: flex; gap: 26px; justify-content: center;
+  padding: 6px 0;
+}
+.binder-rings i {
+  width: 13px; height: 13px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff, #b9a986 60%, #8a7a55);
+  box-shadow: inset 0 -1px 2px rgba(60, 45, 20, 0.4), 0 1px 1px rgba(255,255,255,0.5);
+}
+
+/* ── Wax seal — round embossed disc; put a glyph inside ── */
+.wax-seal {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 60px; height: 60px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #9E2B25, #6E1712 75%);
+  color: rgba(255, 225, 210, 0.85);
+  box-shadow: inset 0 2px 4px rgba(255,255,255,0.25), inset 0 -3px 6px rgba(0,0,0,0.45), 0 3px 6px rgba(60,45,20,0.3);
+  /* irregular pressed-wax rim */
+  clip-path: polygon(50% 0,63% 6%,78% 4%,86% 16%,98% 24%,95% 40%,100% 54%,92% 66%,94% 82%,80% 86%,68% 97%,52% 93%,38% 99%,26% 88%,12% 84%,8% 68%,1% 54%,5% 38%,2% 24%,15% 17%,22% 5%,37% 7%);
+}
+
+/* ── Handwritten section title & margin note helpers ── */
+.hand-title {
+  font-family: var(--font-hand);
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.01em;
+  line-height: 1.05;
+}
+.margin-note {
+  font-family: var(--font-note);
+  color: var(--ink);
+  font-size: 1.05rem;
+  transform: rotate(-2deg);
+  display: inline-block;
+}
+
+/* ── Ink-underline that draws on scroll/hover ── */
+.ink-underline {
+  position: relative;
+  display: inline-block;
+}
+.ink-underline::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: -4px; height: 5px;
+  background: no-repeat center/100% url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='6'%3E%3Cpath d='M1 3.5 C30 1, 60 6, 90 2.5 S118 3, 119 3' stroke='%23B4791E' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.5s var(--ease-spring);
+}
+.ink-underline:hover::after,
+.ink-underline.is-drawn::after { transform: scaleX(1); }
+
+/* ── Hand-drawn checkbox (opt-in wrapper .check-hand around native input) ── */
+.check-hand input[type="checkbox"] {
+  border-radius: 3px 5px 4px 6px / 5px 4px 6px 3px;
+  border: 2px solid var(--text-secondary);
+  background: transparent;
+}
+.check-hand input[type="checkbox"]:checked {
+  background: transparent;
+  border-color: var(--gold-muted);
+}
+.check-hand input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  top: -3px; left: 3px;
+  width: 8px; height: 13px;
+  border: none;
+  background: no-repeat center/contain url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='16'%3E%3Cpath d='M1 8 C3 9, 5 12, 6 14 C8 9, 11 3, 13 1' stroke='%238F5E16' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  transform: none;
+}
+
+/* ── Log-book table — ledger rows for history/transfers ── */
+.logbook {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+.logbook th {
+  font-family: var(--font-print);
+  font-weight: 400;
+  font-size: 1.05rem;
+  text-align: left;
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  border-bottom: 2px solid var(--surface-4);
+}
+.logbook td {
+  padding: 10px 12px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--paper-line);
+}
+.logbook tr:nth-child(even) td { background: rgba(60, 45, 20, 0.028); }
+
+/* ── Pencil progress bar — a ruler that fills with graphite ── */
+.pencil-bar {
+  height: 12px;
+  border: 1.5px solid var(--text-secondary);
+  border-radius: 3px;
+  background:
+    repeating-linear-gradient(90deg, transparent 0, transparent 9px, rgba(60,45,20,0.18) 9px, rgba(60,45,20,0.18) 10px);
+  overflow: hidden;
+}
+.pencil-bar > i {
+  display: block; height: 100%;
+  background: linear-gradient(90deg, #6b6b6b, #3a3a3a);
+  transition: width var(--dur-slow) var(--ease-out);
+}
+
+/* ── Notebook index tab (sidebar) ── */
+.index-tab {
+  display: flex; align-items: center; gap: var(--s2);
+  font-family: var(--font-print);
+  font-size: 1.1rem;
+  padding: 10px 14px;
+  color: var(--text-secondary);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-right: none;
+  border-radius: 8px 0 0 8px;
+  margin-left: 8px;
+  cursor: pointer;
+  transition: background var(--dur-base) ease, color var(--dur-base) ease, margin-left var(--dur-base) var(--ease-spring);
+}
+.index-tab:hover { margin-left: 0; color: var(--text-primary); background: var(--surface-1); }
+.index-tab.active {
+  color: var(--gold-muted);
+  background: var(--surface-1);
+  border-color: var(--gold-border);
+  margin-left: 0;
+}
+
+/* ============================================================
+   NOTEBOOK KEYFRAMES — burn / ash / ink / page-flip / stamp
+   ============================================================ */
+@keyframes ink-bleed {
+  from { opacity: 0; filter: blur(3px); }
+  to   { opacity: 1; filter: blur(0); }
+}
+.animate-ink { animation: ink-bleed 0.5s var(--ease-out) both; }
+
+@keyframes sticky-pop {
+  0%   { opacity: 0; transform: scale(0.8) rotate(-4deg); }
+  60%  { transform: scale(1.04) rotate(1deg); }
+  100% { opacity: 1; transform: scale(1) rotate(-1deg); }
+}
+.animate-sticky-pop { animation: sticky-pop 0.4s var(--ease-spring) both; }
+
+@keyframes page-flip-in {
+  from { opacity: 0; transform: perspective(1200px) rotateY(-18deg) translateX(20px); transform-origin: left center; }
+  to   { opacity: 1; transform: perspective(1200px) rotateY(0) translateX(0); }
+}
+.animate-page-flip { animation: page-flip-in 0.55s var(--ease-out) both; }
+
+@keyframes stamp-in {
+  0%   { opacity: 0; transform: scale(2.2) rotate(-14deg); }
+  55%  { opacity: 1; transform: scale(0.94) rotate(-6deg); }
+  100% { opacity: 1; transform: scale(1) rotate(-8deg); }
+}
+.animate-stamp { animation: stamp-in 0.45s cubic-bezier(0.2,1.4,0.5,1) both; }
+
+/* Ash flotation — apply to particles during burn */
+@keyframes ash-rise {
+  0%   { opacity: 0.9; transform: translate(0,0) rotate(0); }
+  100% { opacity: 0; transform: translate(var(--ash-x, 14px), -60px) rotate(140deg); }
+}
+
+/* Charred-edge burn sweep — animate on a mask/overlay */
+@keyframes ember-eat {
+  0%   { transform: scaleY(0); opacity: 1; }
+  100% { transform: scaleY(1); opacity: 1; }
+}
+
+/* Approval / VOID stamp ring pulse */
+@keyframes seal-pop {
+  0%   { transform: scale(0.6); opacity: 0; }
+  50%  { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.animate-seal { animation: seal-pop 0.5s var(--ease-spring) both; }
+
+
+/* ============================================================
    REDUCED MOTION
    Respect user OS preference. Critical for accessibility.
    ============================================================ */
@@ -1742,7 +2095,7 @@ input[type="checkbox"]:focus-visible {
 
 /* Navbar aliases */
 .glass-navbar {
-  background: rgba(7, 7, 7, 0.92);
+  background: rgba(250, 244, 230, 0.88);
   backdrop-filter: blur(20px) saturate(150%);
   -webkit-backdrop-filter: blur(20px) saturate(150%);
   border-bottom: 1px solid var(--border-strong);
@@ -1750,21 +2103,21 @@ input[type="checkbox"]:focus-visible {
 
 /* Card aliases */
 .glass-card {
-  background: rgba(14, 14, 14, 0.65);
+  background: rgba(250, 244, 230, 0.72);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border);
 }
 
 .glass-panel {
-  background: rgba(13, 13, 13, 0.78);
+  background: rgba(250, 244, 230, 0.80);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--border);
 }
 
 .glass-hero {
-  background: linear-gradient(135deg, rgba(232, 160, 32, 0.04) 0%, rgba(255, 255, 255, 0.02) 100%);
+  background: linear-gradient(135deg, rgba(180, 121, 30, 0.04) 0%, rgba(255, 255, 255, 0.02) 100%);
   backdrop-filter: blur(24px) saturate(160%);
   -webkit-backdrop-filter: blur(24px) saturate(160%);
   border: 1px solid var(--border);
@@ -1772,18 +2125,18 @@ input[type="checkbox"]:focus-visible {
 
 /* Surface aliases */
 .surface-elevated { background: var(--surface-1); border: 1px solid var(--border); box-shadow: var(--shadow-md); }
-.surface-glass    { background: rgba(9,9,9,0.85); backdrop-filter: blur(20px) saturate(160%); -webkit-backdrop-filter: blur(20px) saturate(160%); border: 1px solid var(--border); }
+.surface-glass    { background: rgba(250, 244, 230, 0.82); backdrop-filter: blur(20px) saturate(160%); -webkit-backdrop-filter: blur(20px) saturate(160%); border: 1px solid var(--border); }
 
 /* Gradient text aliases */
-.gradient-text-amber   { background: linear-gradient(135deg, #FBBF24 0%, #E8A020 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
-.gradient-text-primary { background: linear-gradient(135deg, #E8A020 0%, #C8893A 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
-.text-gradient-amber   { background: linear-gradient(135deg, #FBBF24 0%, #E8A020 50%, #C08018 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
-.text-gradient-mixed   { background: linear-gradient(135deg, #E8A020 0%, #C8893A 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.gradient-text-amber   { background: linear-gradient(135deg, #CE9530 0%, #B4791E 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.gradient-text-primary { background: linear-gradient(135deg, #B4791E 0%, #8F5E16 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.text-gradient-amber   { background: linear-gradient(135deg, #CE9530 0%, #B4791E 50%, #8F5E16 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.text-gradient-mixed   { background: linear-gradient(135deg, #B4791E 0%, #8F5E16 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
 
 /* Glow aliases */
-.glow-text-amber  { text-shadow: 0 0 32px rgba(232, 160, 32, 0.38); }
-.glow-border-purple { box-shadow: 0 0 0 1px rgba(232, 160, 32, 0.14), 0 0 24px rgba(232, 160, 32, 0.06); }
-.text-shadow-gold { text-shadow: 0 0 20px rgba(232, 160, 32, 0.38); }
+.glow-text-amber  { text-shadow: 0 0 32px rgba(180, 121, 30, 0.38); }
+.glow-border-purple { box-shadow: 0 0 0 1px rgba(180, 121, 30, 0.14), 0 0 24px rgba(180, 121, 30, 0.06); }
+.text-shadow-gold { text-shadow: 0 0 20px rgba(180, 121, 30, 0.38); }
 
 /* Misc aliases */
 .text-balance    { text-wrap: balance; }

@@ -7,39 +7,41 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Design system tokens
+        // Notebook palette — cream paper & sepia ink
         surface: {
-          DEFAULT: '#0c0c0c',
-          50:  '#f5f5f5',
-          100: '#1a1a1a',
-          200: '#222222',
-          300: '#2a2a2a',
-          400: '#333333',
+          DEFAULT: '#FAF4E6',
+          50:  '#FFFDF6',
+          100: '#F1E8D3',
+          200: '#E6D9BC',
+          300: '#D8C9A6',
+          400: '#C3B48F',
         },
         amber: {
-          300: '#FCD34D',
-          400: '#FBBF24',
-          500: '#E8A020',
-          600: '#D08000',
-          700: '#B06800',
+          300: '#E8C85A',
+          400: '#CE9530',
+          500: '#B4791E',
+          600: '#8F5E16',
+          700: '#6E4711',
         },
         violet: {
-          400: '#A78BFA',
-          500: '#8B5CF6',
-          600: '#7C3AED',
+          400: '#6B3FA0',
+          500: '#573385',
+          600: '#43276A',
         },
-        // Legacy compat
+        // Legacy compat → wax-seal gold
         gold: {
-          400: '#FDB022',
-          500: '#E8A020',
-          600: '#D97706',
+          400: '#CE9530',
+          500: '#B4791E',
+          600: '#8F5E16',
         },
+        // "dark" palette repurposed as warm paper tones so legacy
+        // from-dark-800/to-dark-900 card gradients render as cream pages
         dark: {
-          900: '#080808',
-          800: '#0c0c0c',
-          700: '#111111',
-          600: '#1a1a1a',
-          500: '#222222',
+          900: '#EDE3CE',
+          800: '#FAF4E6',
+          700: '#E6D9BC',
+          600: '#F1E8D3',
+          500: '#D8C9A6',
         }
       },
       fontFamily: {
@@ -91,11 +93,11 @@ export default {
         '400': '400ms',
       },
       boxShadow: {
-        'amber-sm': '0 0 12px rgba(232, 160, 32, 0.15)',
-        'amber-md': '0 0 24px rgba(232, 160, 32, 0.20)',
-        'amber-lg': '0 0 48px rgba(232, 160, 32, 0.25)',
-        'surface': '0 1px 3px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.3)',
-        'surface-lg': '0 4px 6px rgba(0,0,0,0.5), 0 20px 48px rgba(0,0,0,0.4)',
+        'amber-sm': '0 0 12px rgba(180, 121, 30, 0.15)',
+        'amber-md': '0 0 24px rgba(180, 121, 30, 0.20)',
+        'amber-lg': '0 0 48px rgba(180, 121, 30, 0.25)',
+        'surface': '0 1px 3px rgba(60,45,20,0.12), 0 8px 24px rgba(60,45,20,0.10)',
+        'surface-lg': '0 4px 6px rgba(60,45,20,0.14), 0 20px 48px rgba(60,45,20,0.14)',
       },
     },
   },
