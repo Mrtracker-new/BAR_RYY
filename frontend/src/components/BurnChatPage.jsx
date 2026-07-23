@@ -927,6 +927,10 @@ export default function BurnChatPage({ token }) {
     };
   }
 
+  // True when crypto is supported but the E2E session key hasn't been
+  // established yet — we MUST NOT allow sending in this window.
+  const e2ePending = cryptoAvailable && !e2eReady;
+
   const sendMessage = async () => {
     const text = input.trim();
     if (!text || wsRef.current?.readyState !== WebSocket.OPEN) return;
@@ -948,10 +952,15 @@ export default function BurnChatPage({ token }) {
         // Message text intentionally preserved in <textarea> so user can retry.
         setWsError('Encryption failed — message not sent. Please try again.');
       }
-    } else {
-      // ── Plaintext path: TLS-only (insecure context or key not yet ready) ─
+    } else if (!cryptoAvailable) {
+      // ── Plaintext path: TLS-only (insecure context, no SubtleCrypto) ──
       wsRef.current.send(JSON.stringify({ type: 'send', text }));
       setInput('');
+    } else {
+      // Crypto is available but key not ready — refuse to send.
+      // This branch should be unreachable because the UI disables the
+      // send button, but guard defensively.
+      console.warn('[E2E] Send blocked — session key not yet established.');
     }
   };
 
@@ -1234,8 +1243,8 @@ export default function BurnChatPage({ token }) {
           <textarea
             value={input}
             onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-            placeholder="Message… (Enter to send)"
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!e2ePending) sendMessage(); } }}
+            placeholder={e2ePending ? '⏳ Waiting for encryption…' : 'Message… (Enter to send)'}
             maxLength={2000}
             rows={1}
             aria-label="Chat message"
@@ -1264,20 +1273,20 @@ export default function BurnChatPage({ token }) {
           />
           <button
             onClick={sendMessage}
-            disabled={!input.trim()}
-            aria-label="Send message"
+            disabled={!input.trim() || e2ePending}
+            aria-label={e2ePending ? 'Waiting for encryption' : 'Send message'}
             style={{
               /* 44×44px — WCAG 2.5.5 touch target (was 42×42) */
               width:44, height:44,
               minWidth:44, minHeight:44,
               borderRadius:'0.75rem', border:'none',
-              background:input.trim()?'linear-gradient(160deg,#C4461A 0%,#9A3612 100%)':'rgba(60,45,20,0.08)',
-              color:input.trim()?'#fff':T.textT,
+              background:e2ePending?'rgba(180,121,30,0.12)':input.trim()?'linear-gradient(160deg,#C4461A 0%,#9A3612 100%)':'rgba(60,45,20,0.08)',
+              color:e2ePending?T.gold:input.trim()?'#fff':T.textT,
               display:'flex', alignItems:'center', justifyContent:'center',
-              cursor:input.trim()?'pointer':'not-allowed', flexShrink:0,
+              cursor:(input.trim() && !e2ePending)?'pointer':'not-allowed', flexShrink:0,
               /* Specific properties — more performant than 'all 0.15s' */
               transition:'background 0.18s ease, box-shadow 0.18s ease, transform 0.15s ease',
-              boxShadow:input.trim()?'0 2px 10px rgba(196,70,26,0.28)':'none',
+              boxShadow:input.trim() && !e2ePending?'0 2px 10px rgba(196,70,26,0.28)':'none',
             }}
             onMouseOver={e => { if (input.trim()) { e.currentTarget.style.transform='translateY(-1px)'; e.currentTarget.style.boxShadow='0 4px 14px rgba(196,70,26,0.38)'; } }}
             onMouseOut={e  => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow=input.trim()?'0 2px 10px rgba(196,70,26,0.28)':'none'; }}
