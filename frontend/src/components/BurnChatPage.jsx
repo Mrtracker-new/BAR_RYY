@@ -18,6 +18,9 @@ const T = {
   mono: "'JetBrains Mono', monospace",
 };
 
+/** Cap in-memory messages to prevent OOM in long-lived sessions. */
+const MAX_MESSAGES = 500;
+
 function fmtTime(s) {
   const n = Number.isFinite(s) ? Math.max(0, Math.floor(s)) : 0;
   const h = Math.floor(n / 3600), m = Math.floor((n % 3600) / 60), sec = n % 60;
@@ -842,7 +845,10 @@ export default function BurnChatPage({ token }) {
         }
 
         case 'message':
-          setMessages(prev => [...prev, data]);
+          setMessages(prev => {
+            const next = [...prev, data];
+            return next.length > MAX_MESSAGES ? next.slice(-MAX_MESSAGES) : next;
+          });
           break;
 
         case 'system':
