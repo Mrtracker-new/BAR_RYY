@@ -459,6 +459,17 @@ async def chat_websocket(token: str, websocket: WebSocket):
             await websocket.close(code=4003, reason="Room locked")
             return
 
+        if status == chat_service.JoinStatus.CREATOR_ALREADY_CONNECTED:
+            await websocket.send_json(
+                {
+                    "type": "error",
+                    "text": "The room creator is already connected. Only one creator connection is allowed at a time.",
+                    "code": "creator_already_connected",
+                }
+            )
+            await websocket.close(code=4003, reason="Creator already connected")
+            return
+
         if status != chat_service.JoinStatus.OK:
             # SESSION_NOT_FOUND or SESSION_FULL — keep the message vague to
             # avoid leaking which condition triggered the rejection.

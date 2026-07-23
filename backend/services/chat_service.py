@@ -123,6 +123,7 @@ class JoinStatus(str, Enum):
     SESSION_FULL     = "session_full"
     LOCKED           = "locked"
     PIN_INVALID      = "pin_invalid"
+    CREATOR_ALREADY_CONNECTED = "creator_already_connected"
 
 
 # ---------------------------------------------------------------------------
@@ -516,6 +517,11 @@ async def join_session(
     if pin:
         if not secrets.compare_digest(pin, session.creator_pin):
             return None, JoinStatus.PIN_INVALID
+        # Reject if another creator is already connected — allowing two
+        # creators would cause each to generate an independent E2E session
+        # key, splitting participants into incompatible encryption groups.
+        if any(p.is_creator for p in session.participants.values()):
+            return None, JoinStatus.CREATOR_ALREADY_CONNECTED
         is_creator = True
 
     if session.locked and not is_creator:
