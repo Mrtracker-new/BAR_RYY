@@ -66,6 +66,8 @@ from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisco
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from core import security
+from core.config import settings
+from core.csrf import _origin_is_allowed
 from models.schemas import ChatCreateRequest
 from services import chat_service
 
@@ -329,6 +331,7 @@ async def chat_websocket(token: str, websocket: WebSocket):
     1.  Token format validation — cheapest guard, runs before accept.
     2.  Extract real client IP from ASGI scope.
     2.5 WS connection rate limit check — rejected before accept so no slot is consumed.
+    2.7 Origin validation — cross-origin browser upgrades rejected before accept.
     3.  Accept the connection.
     4.  Wait for ``{"type": "join", ...}`` handshake frame (10-second timeout).
     5.  PIN rate-limit pre-check, then join_session dispatch.
@@ -337,6 +340,7 @@ async def chat_websocket(token: str, websocket: WebSocket):
     Security
     --------
     *  Invalid tokens dropped before accept.
+    *  Cross-origin browser WS upgrades rejected (close 4003) via Origin allow-list.
     *  Per-IP WS connection rate limit: CHAT_WS_CONNECT_LIMIT / CHAT_WS_CONNECT_WINDOW_SECS (default 10/60 s).
     *  Real client IP resolved by ProxyHeadersMiddleware before this handler runs.
     *  PIN brute-force: CHAT_PIN_MAX_FAILURES failures → close 4029.
@@ -351,6 +355,22 @@ async def chat_websocket(token: str, websocket: WebSocket):
 
     if not security.check_ws_rate_limit(client_ip):
         await websocket.close(code=4029, reason="Connection rate limit exceeded")
+        return
+
+    # ── 2.7 Origin validation (defence-in-depth, mirrors CSRFGuard) ──────
+    # Browsers always send Origin on a cross-origin WS upgrade, so an
+    # attacker page at evil.com is rejected here.  A missing Origin is
+    # allowed (native/mobile clients, curl) to avoid false positives —
+    # same policy as the HTTP CSRFGuard middleware.
+    origin_header = websocket.headers.get("origin", "").strip()
+    if origin_header and not _origin_is_allowed(origin_header, settings.allowed_origins):
+        logger.warning(
+            "WS upgrade rejected — untrusted origin '%s' (ip=%s, token=%s…)",
+            origin_header,
+            client_ip,
+            token[:8],
+        )
+        await websocket.close(code=4003, reason="Origin not allowed")
         return
 
     await websocket.accept()
