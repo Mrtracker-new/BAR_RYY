@@ -516,16 +516,17 @@ export default function BurnChatPage({ token }) {
    * re-renders when updated. setE2eSessionKey / setE2eReady / setE2eFingerprint
    * are the React-visible mirrors that drive the UI.
    *
-   * pendingSessionKey: {fromWsId, wrappedKey} stored when a 'session_key'
-   * message arrives before the creator's pubkey has been received — retried
-   * once the creator pubkey is stored (race-condition guard).
+   * pendingSessionKeys: Map<fromWsId, wrappedKey> holding session_key
+   * messages that arrived before the sender's pubkey was received — each
+   * retried once that sender's pubkey is stored (race-condition guard).
+   * Keyed by sender so multiple pending keys never overwrite each other.
    */
   const e2eRef = useRef({
     keyPair:           null,        // { publicKey, privateKey } — ECDH P-256
     sessionKey:        null,        // AES-GCM-256 CryptoKey (creator-generated)
     pubkeys:           new Map(),   // ws_id → base64-JWK pubkey for all known peers
     keyedPeers:        new Set(),   // ws_ids the creator has already sent session_key to
-    pendingSessionKey: null,        // { fromWsId, wrappedKey } — held during pubkey race
+    pendingSessionKeys: new Map(),  // fromWsId → wrappedKey — held during pubkey race
   });
 
   // Share URL — routes through the server-rendered OG preview page so
@@ -632,7 +633,7 @@ export default function BurnChatPage({ token }) {
       sessionKey:        null,
       pubkeys:           new Map(),
       keyedPeers:        new Set(),
-      pendingSessionKey: null,
+      pendingSessionKeys: new Map(),
     };
     setE2eReady(false);
     setE2eFingerprint(null);
@@ -681,7 +682,7 @@ export default function BurnChatPage({ token }) {
           // it in participant_list inside the 'joined' payload.  By populating the
           // map here (synchronously, before the async keypair generation starts),
           // we guarantee that when session_key arrives later the creator's pubkey
-          // is already present — no race, no pendingSessionKey fallback needed for
+          // is already present — no race, no pendingSessionKeys fallback needed for
           // the normal single-creator flow.
           //
           // This also handles the case where a participant joins an already-active
@@ -786,10 +787,10 @@ export default function BurnChatPage({ token }) {
 
           // ── Participant: resolve a pending session_key that arrived before
           //                this pubkey (race-condition guard) ───────────────
-          const pending = e2eRef.current.pendingSessionKey;
-          if (pending && pending.fromWsId === peerWsId) {
-            e2eRef.current.pendingSessionKey = null;
-            const { fromWsId, wrappedKey } = pending;
+          const pendingWrappedKey = e2eRef.current.pendingSessionKeys.get(peerWsId);
+          if (pendingWrappedKey) {
+            e2eRef.current.pendingSessionKeys.delete(peerWsId);
+            const wrappedKey = pendingWrappedKey;
             (async () => {
               try {
                 const { keyPair: kp } = e2eRef.current;
@@ -823,7 +824,7 @@ export default function BurnChatPage({ token }) {
           if (!creatorPubKeyB64) {
             // Race: creator's pubkey hasn't arrived yet — park this message.
             // The 'pubkey' handler will detect and resolve it.
-            e2eRef.current.pendingSessionKey = { fromWsId, wrappedKey };
+            e2eRef.current.pendingSessionKeys.set(fromWsId, wrappedKey);
             break;
           }
 
