@@ -576,7 +576,10 @@ async def chat_websocket(token: str, websocket: WebSocket):
                 )
 
             elif msg_type == "extend_ttl":
-                extra = int(data.get("extra_seconds", chat_service.MAX_EXTEND_SECONDS))
+                try:
+                    extra = int(data.get("extra_seconds", chat_service.MAX_EXTEND_SECONDS))
+                except (ValueError, TypeError):
+                    continue
                 await chat_service.extend_ttl(
                     token=token, actor_ws_id=ws_id, extra_seconds=extra,
                 )
