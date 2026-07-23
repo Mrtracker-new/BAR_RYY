@@ -10,34 +10,34 @@ import SEO from './SEO';
    DESIGN TOKENS — consistent with index.css :root
 ───────────────────────────────────────────────────────────── */
 const T = {
-  gold:        '#E8A020',
-  goldDim:     'rgba(232,160,32,0.10)',
-  goldBorder:  'rgba(232,160,32,0.22)',
-  green:       '#22C55E',
-  greenDim:    'rgba(34,197,94,0.08)',
-  greenBorder: 'rgba(34,197,94,0.20)',
-  red:         '#EF4444',
-  redDim:      'rgba(239,68,68,0.07)',
-  redBorder:   'rgba(239,68,68,0.18)',
-  blue:        '#60A5FA',
-  blueDim:     'rgba(96,165,250,0.06)',
-  blueBorder:  'rgba(96,165,250,0.18)',
+  gold:        '#B4791E',
+  goldDim:     'rgba(180,121,30,0.10)',
+  goldBorder:  'rgba(180,121,30,0.22)',
+  green:       '#3F7D3A',
+  greenDim:    'rgba(63,125,58,0.08)',
+  greenBorder: 'rgba(63,125,58,0.20)',
+  red:         '#B33A2E',
+  redDim:      'rgba(179,58,46,0.07)',
+  redBorder:   'rgba(179,58,46,0.18)',
+  blue:        '#2C4A6E',
+  blueDim:     'rgba(44,74,110,0.06)',
+  blueBorder:  'rgba(44,74,110,0.18)',
 
   /* Backgrounds */
-  bg:       '#070707',
-  surface0: '#0e0e0e',
-  surface1: '#141414',
-  surface2: '#1a1a1a',
+  bg:       '#EDE3CE',
+  surface0: '#FAF4E6',
+  surface1: '#FFFDF6',
+  surface2: '#F1E8D3',
 
   /* Text */
-  textPrimary:   '#f0f0f0',
-  textSecondary: '#a0a0a0',
-  textTertiary:  '#636363',
-  textDim:       '#505050',
+  textPrimary:   '#2A2018',
+  textSecondary: '#55483A',
+  textTertiary:  '#857358',
+  textDim:       '#857358',
 
   /* Borders */
-  border:      'rgba(255,255,255,0.07)',
-  borderHover: 'rgba(255,255,255,0.13)',
+  border:      'rgba(60,45,20,0.16)',
+  borderHover: 'rgba(60,45,20,0.30)',
 
   /* Font */
   mono: "'JetBrains Mono', monospace",
@@ -48,10 +48,10 @@ const T = {
 ───────────────────────────────────────────────────────────── */
 function AlertBlock({ variant = 'error', icon: Icon, children }) {
   const variantMap = {
-    error:   { bg: T.redDim,   border: T.redBorder,   color: T.red,   textColor: '#fca5a5' },
-    success: { bg: T.greenDim, border: T.greenBorder,  color: T.green, textColor: '#86efac' },
-    info:    { bg: T.blueDim,  border: T.blueBorder,   color: T.blue,  textColor: '#93c5fd' },
-    warning: { bg: T.goldDim,  border: T.goldBorder,   color: T.gold,  textColor: '#fbbf24' },
+    error:   { bg: T.redDim,   border: T.redBorder,   color: T.red,   textColor: '#8A2B22' },
+    success: { bg: T.greenDim, border: T.greenBorder,  color: T.green, textColor: '#2F5E2C' },
+    info:    { bg: T.blueDim,  border: T.blueBorder,   color: T.blue,  textColor: '#22406A' },
+    warning: { bg: T.goldDim,  border: T.goldBorder,   color: T.gold,  textColor: '#8F5E16' },
   };
   const v = variantMap[variant] || variantMap.error;
 
@@ -250,7 +250,7 @@ const SharePage = ({ token }) => {
         title="Secure File Access — BAR Web"
         description="You have a secure, encrypted file waiting. One-time access protected by AES-256 encryption. The file permanently self-destructs after viewing — open it before it's gone."
         ogImageAlt="Secure encrypted file — BAR by Rolan"
-        url={`https://bar-rnr.vercel.app/share/${token}`}
+        url={`${window.location.origin}/share/${token}`}
         noIndex={true}
       />
 
@@ -271,7 +271,7 @@ const SharePage = ({ token }) => {
       <div
         style={{
           minHeight: '100vh',
-          background: '#070707',
+          background: '#EDE3CE',
           color: T.textPrimary,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           /* p-5 sm:p-7 → fluid padding: tighter on phones */
@@ -283,14 +283,14 @@ const SharePage = ({ token }) => {
           {/* ── Main card ── */}
           <div
             style={{
-              border: `1px solid rgba(255,255,255,0.07)`,
+              border: `1px solid rgba(60,45,20,0.16)`,
               borderRadius: '1rem',
               /* p-5 sm:p-7 — fluid padding (was p-8 = 32px fixed, cramped on 375px) */
               padding: 'clamp(1.25rem, 5vw, 1.75rem)',
-              background: 'rgba(14,14,14,0.85)',
+              background: 'rgba(250,244,230,0.88)',
               backdropFilter: 'blur(20px) saturate(140%)',
               WebkitBackdropFilter: 'blur(20px) saturate(140%)',
-              boxShadow: '0 24px 64px rgba(0,0,0,0.6)',
+              boxShadow: '0 24px 64px rgba(60,45,20,0.12)',
             }}
           >
             <div style={{ textAlign: 'center' }}>
@@ -305,7 +305,7 @@ const SharePage = ({ token }) => {
                   borderRadius: '1rem',
                   border: `1px solid ${T.border}`,
                   marginBottom: '1.25rem',
-                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+                  boxShadow: 'inset 0 1px 0 rgba(60,45,20,0.06)',
                 }}
               >
                 <FileCheck size={40} style={{ color: T.gold }} />
@@ -377,7 +377,7 @@ const SharePage = ({ token }) => {
                         padding: '0.75rem 1rem',
                         borderRadius: '0.625rem',
                         border: `1px solid ${T.border}`,
-                        background: 'rgba(255,255,255,0.03)',
+                        background: 'rgba(60,45,20,0.04)',
                         color: T.textTertiary,
                         fontSize: '0.875rem', fontWeight: 500,
                         cursor: 'pointer', textAlign: 'left',
@@ -473,7 +473,7 @@ const SharePage = ({ token }) => {
                           /* OTP code entry */
                           <div
                             style={{
-                              background: 'rgba(255,255,255,0.02)',
+                              background: 'rgba(60,45,20,0.04)',
                               border: `1px solid ${T.border}`,
                               borderRadius: '0.75rem',
                               padding: 'clamp(1rem, 3vw, 1.25rem)',
@@ -509,7 +509,7 @@ const SharePage = ({ token }) => {
                               style={{
                                 width: '100%',
                                 padding: '0.75rem 1rem',
-                                background: 'rgba(0,0,0,0.20)',
+                                background: 'rgba(60,45,20,0.12)',
                                 border: `1px solid ${T.border}`,
                                 borderRadius: '0.5rem',
                                 color: T.textPrimary, outline: 'none',
@@ -535,9 +535,9 @@ const SharePage = ({ token }) => {
                                 fontWeight: 700, fontSize: '0.9375rem',
                                 cursor: (otpCode.length === 6 && !isLoading) ? 'pointer' : 'not-allowed',
                                 background: (otpCode.length === 6 && !isLoading)
-                                  ? 'linear-gradient(160deg, #FBBF24 0%, #E8A020 100%)'
+                                  ? 'linear-gradient(160deg, #CE9530 0%, #B4791E 100%)'
                                   : T.surface2,
-                                color: (otpCode.length === 6 && !isLoading) ? '#000' : T.textTertiary,
+                                color: (otpCode.length === 6 && !isLoading) ? '#2A2018' : T.textTertiary,
                                 transition: 'all 0.18s ease',
                               }}
                             >
@@ -631,7 +631,7 @@ const SharePage = ({ token }) => {
                     borderRadius: '0.5rem',
                   }}
                 >
-                  <p style={{ fontSize: '0.8125rem', color: 'rgba(232,160,32,0.75)', textAlign: 'left' }}>
+                  <p style={{ fontSize: '0.8125rem', color: 'rgba(180,121,30,0.75)', textAlign: 'left' }}>
                     <strong>Notice:</strong> This file may self-destruct after viewing.
                   </p>
                 </div>
@@ -645,7 +645,7 @@ const SharePage = ({ token }) => {
                       marginTop: '1.5rem',
                       border: `1px solid ${T.border}`,
                       borderRadius: '0.75rem', overflow: 'hidden',
-                      background: 'rgba(0,0,0,0.40)',
+                      background: 'rgba(60,45,20,0.12)',
                     }}
                   >
                     {/* File viewer toolbar */}
