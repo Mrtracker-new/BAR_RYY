@@ -18,7 +18,6 @@ Design principles
 from __future__ import annotations
 
 import asyncio
-import html
 import re
 import logging
 import os
@@ -108,8 +107,12 @@ def _generate_pin() -> str:
 
 
 def _safe_text(raw: str, max_len: int) -> str:
-    """Strip HTML from *raw* and truncate to *max_len* characters."""
-    return html.escape(raw[:max_len], quote=True)
+    """Truncate *raw* to *max_len* characters.
+
+    No HTML-escaping is applied — output is serialised as JSON and rendered
+    by React JSX text nodes, which inherently prevent XSS.
+    """
+    return raw[:max_len]
 
 
 # ---------------------------------------------------------------------------
