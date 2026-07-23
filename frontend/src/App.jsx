@@ -34,6 +34,7 @@ import LandingPage from "./components/LandingPage";
 import ErrorModal from "./components/ErrorModal";
 import BurnChatPage from "./components/BurnChatPage";
 import BurnChatLandingPage from "./components/BurnChatLandingPage";
+import DynamicQRCode from "./components/DynamicQRCode";
 
 /* ─────────────────────────────────────────────────────────────
    CONSTANTS
@@ -46,45 +47,47 @@ const EASE = [0.16, 1, 0.3, 1];
    Any update here MUST also update index.css and vice-versa.
 ───────────────────────────────────────────────────────────── */
 const T = {
-  /* Brand accent */
-  gold:        "#E8A020",
-  goldLight:   "#F5BA3A",
-  goldMuted:   "#C8893A",
-  goldDim:     "rgba(232,160,32,0.10)",
-  goldBorder:  "rgba(232,160,32,0.22)",
-  goldGlow:    "rgba(232,160,32,0.18)",
+  /* Brand accent — wax-seal gold on paper */
+  gold:        "#B4791E",
+  goldLight:   "#CE9530",
+  goldMuted:   "#8F5E16",
+  goldDim:     "rgba(180,121,30,0.12)",
+  goldBorder:  "rgba(180,121,30,0.32)",
+  goldGlow:    "rgba(180,121,30,0.20)",
 
   /* Semantic */
-  green:       "#22C55E",
-  greenDim:    "rgba(34,197,94,0.08)",
-  greenBorder: "rgba(34,197,94,0.18)",
+  green:       "#3F7D3A",
+  greenDim:    "rgba(63,125,58,0.10)",
+  greenBorder: "rgba(63,125,58,0.28)",
 
-  /* Backgrounds */
-  bg:       "#070707",
-  surface0: "#0e0e0e",
-  surface1: "#141414",
-  surface2: "#1a1a1a",
+  /* Backgrounds — cream paper */
+  bg:       "#EDE3CE",
+  surface0: "#FAF4E6",
+  surface1: "#FFFDF6",
+  surface2: "#F1E8D3",
 
-  /* Text — all values pass WCAG AA against #070707 */
-  textPrimary:   "#f0f0f0",   /* 15.8:1 AAA */
-  textSecondary: "#a0a0a0",   /*  6.3:1  AA */
-  textTertiary:  "#636363",   /*  4.9:1  AA */
-  textDim:       "#424242",   /*  3.6:1  decorative only */
+  /* Text — ink on cream (contrast vs #EDE3CE) */
+  textPrimary:   "#2A2018",   /* ~13:1  AAA */
+  textSecondary: "#55483A",   /*  ~7:1  AA  */
+  textTertiary:  "#857358",   /* ~4.8:1 AA  */
+  textDim:       "#A2916F",   /* decorative only */
 
-  /* Borders */
-  border:       "rgba(255,255,255,0.07)",
-  borderHover:  "rgba(255,255,255,0.13)",
-  borderStrong: "rgba(255,255,255,0.10)",
-  borderFocus:  "rgba(232,160,32,0.50)",
+  /* Borders — pencil/ink lines */
+  border:       "rgba(60,45,20,0.16)",
+  borderHover:  "rgba(60,45,20,0.30)",
+  borderStrong: "rgba(60,45,20,0.24)",
+  borderFocus:  "rgba(180,121,30,0.60)",
 
   /* Fonts */
   mono: "'JetBrains Mono', monospace",
+  hand: "'Caveat', 'Patrick Hand', cursive",
+  print: "'Patrick Hand', cursive",
 
   /* Navbar height — matches --navbar-height CSS token */
   navbarHeight: 56,
 };
 
-const shadow = "0 4px 12px rgba(0,0,0,0.40), 0 1px 3px rgba(0,0,0,0.50)";
+const shadow = "0 4px 12px rgba(60,45,20,0.14), 0 1px 3px rgba(60,45,20,0.10)";
 
 /* ─────────────────────────────────────────────────────────────
    ROUTE WRAPPERS
@@ -113,10 +116,18 @@ function AppNav({ showDecrypt, onToggleDecrypt }) {
           position: fixed; top: 0; left: 0; right: 0; z-index: 100;
           height: ${T.navbarHeight}px;
           display: flex; align-items: center;
-          background: rgba(7,7,7,0.92);
-          backdrop-filter: blur(22px) saturate(160%);
-          -webkit-backdrop-filter: blur(22px) saturate(160%);
+          background:
+            linear-gradient(180deg, rgba(250,244,230,0.94), rgba(244,236,216,0.90));
+          backdrop-filter: blur(18px) saturate(150%);
+          -webkit-backdrop-filter: blur(18px) saturate(150%);
+          /* stitched notebook-binding underline */
           border-bottom: 1px solid ${T.borderStrong};
+          box-shadow: 0 2px 0 rgba(180,121,30,0.18), 0 4px 10px rgba(60,45,20,0.10);
+        }
+        .app-navbar::after {
+          content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
+          background: repeating-linear-gradient(90deg, ${T.goldMuted} 0 8px, transparent 8px 16px);
+          opacity: 0.35; pointer-events: none;
         }
         .app-nav-toggle {
           display: inline-flex; align-items: center; gap: 0.375rem;
@@ -131,8 +142,8 @@ function AppNav({ showDecrypt, onToggleDecrypt }) {
         }
         .app-nav-toggle.decrypt {
           color: ${T.gold};
-          background: rgba(232,160,32,0.08);
-          border: 1px solid rgba(232,160,32,0.22);
+          background: ${T.goldDim};
+          border: 1px solid ${T.goldBorder};
         }
         .app-nav-toggle.create {
           color: ${T.textSecondary};
@@ -171,13 +182,15 @@ function AppNav({ showDecrypt, onToggleDecrypt }) {
             </div>
             <span
               style={{
-                fontSize: "1rem",           /* raised from 0.9rem */
-                fontWeight: 700,            /* raised from 600 */
-                letterSpacing: "-0.03em",
+                fontFamily: T.hand,
+                fontSize: "1.5rem",
+                fontWeight: 700,
+                letterSpacing: "0.01em",
                 color: T.textPrimary,
+                lineHeight: 1,
               }}
             >
-              BAR<span style={{ color: T.textDim, fontWeight: 400 }}>.web</span>
+              BAR<span style={{ color: T.gold, fontWeight: 400 }}>.web</span>
             </span>
           </a>
 
@@ -209,7 +222,7 @@ function Card({ children, accentColor, style = {} }) {
   return (
     <div
       style={{
-        borderRadius: "var(--r4)",          /* 16px — matches CSS token */
+        borderRadius: "10px 14px 12px 11px / 12px 11px 14px 10px",  /* hand-cut page */
         border: `1px solid ${T.border}`,
         background: T.surface0,
         overflow: "hidden",
@@ -256,10 +269,11 @@ function CardHeader({ icon: Icon, label, color = T.gold, children }) {
         </div>
         <span
           style={{
-            fontSize: "0.875rem",           /* 14px — raised from 13px */
-            fontWeight: 600,
-            color: T.textPrimary,           /* raised from #c0c0c0 */
-            letterSpacing: "-0.02em",
+            fontFamily: T.print,
+            fontSize: "1.05rem",
+            fontWeight: 400,
+            color: T.textPrimary,
+            letterSpacing: "0.01em",
           }}
         >
           {label}
@@ -316,8 +330,8 @@ function ContainerPreview({ uploadedFile, rules }) {
             style={{
               display: "flex", justifyContent: "space-between", alignItems: "center",
               padding: "0.625rem 1.25rem",
-              background: i % 2 === 1 ? "rgba(255,255,255,0.015)" : "transparent",
-              borderBottom: i < rows.length - 1 ? `1px solid rgba(255,255,255,0.035)` : "none",
+              background: i % 2 === 1 ? "rgba(60,45,20,0.04)" : "transparent",
+              borderBottom: i < rows.length - 1 ? `1px solid rgba(60,45,20,0.08)` : "none",
               gap: "1rem",
             }}
           >
@@ -434,7 +448,7 @@ function ResultCard({ barResult, onDownload, onAnalytics, onReset, showToast }) 
               aria-hidden="true"
               style={{
                 position: "absolute", inset: 0, borderRadius: "50%",
-                border: "2px solid rgba(34,197,94,0.28)",
+                border: "2px solid rgba(63,125,58,0.28)",
                 animation: "pulse-ring 2.5s ease-out infinite",
               }}
             />
@@ -474,10 +488,10 @@ function ResultCard({ barResult, onDownload, onAnalytics, onReset, showToast }) 
         <div
           style={{
             padding: "0.875rem 1.5rem",
-            borderTop: `1px solid rgba(255,255,255,0.05)`,
-            borderBottom: `1px solid rgba(255,255,255,0.05)`,
+            borderTop: `1px solid rgba(60,45,20,0.06)`,
+            borderBottom: `1px solid rgba(60,45,20,0.06)`,
             display: "flex", flexWrap: "wrap", gap: "1.5rem",
-            background: "rgba(255,255,255,0.015)",
+            background: "rgba(60,45,20,0.04)",
           }}
         >
           {/* Mode */}
@@ -600,7 +614,7 @@ function ResultCard({ barResult, onDownload, onAnalytics, onReset, showToast }) 
                       cursor: "pointer", color: T.gold,
                       transition: "background 0.18s ease",
                     }}
-                    onMouseOver={e => { e.currentTarget.style.background = "rgba(232,160,32,0.18)"; }}
+                    onMouseOver={e => { e.currentTarget.style.background = "rgba(180,121,30,0.18)"; }}
                     onMouseOut={e  => { e.currentTarget.style.background = T.goldDim; }}
                   >
                     <Copy size={13} />
@@ -608,13 +622,15 @@ function ResultCard({ barResult, onDownload, onAnalytics, onReset, showToast }) 
                 </div>
               </div>
 
-              {/* QR code section */}
-              {barResult.qr_code && (
+              {/* QR code section — generated client-side so the URL always
+                 matches the host the user is currently on (LAN IP, localhost,
+                 or production domain). */}
+              {isServer && (
                 <div
                   style={{
                     borderRadius: "var(--r3)",
-                    border: `1px solid rgba(255,255,255,0.07)`,
-                    background: "rgba(255,255,255,0.02)",
+                    border: `1px solid rgba(60,45,20,0.16)`,
+                    background: "rgba(60,45,20,0.04)",
                     overflow: "hidden",
                   }}
                 >
@@ -660,10 +676,10 @@ function ResultCard({ barResult, onDownload, onAnalytics, onReset, showToast }) 
                         />
                       ))}
                       <div style={{ padding: "0.625rem", background: "#fff", borderRadius: "0.375rem", lineHeight: 0 }}>
-                        <img
-                          src={barResult.qr_code}
+                        <DynamicQRCode
+                          path={`/share/${barResult.access_token}`}
+                          size={160}
                           alt="QR Code — scan to open the share link"
-                          style={{ width: 160, height: 160, display: "block", imageRendering: "pixelated" }}
                         />
                       </div>
                     </div>
@@ -682,7 +698,7 @@ function ResultCard({ barResult, onDownload, onAnalytics, onReset, showToast }) 
                   padding: "0 1rem",
                   borderRadius: "var(--r3)",
                   border: `1px solid ${T.border}`,
-                  background: "rgba(255,255,255,0.03)",
+                  background: "rgba(60,45,20,0.04)",
                   color: T.textSecondary,
                   fontSize: "var(--text-sm)",  /* 14px — raised from 13px */
                   fontWeight: 500,
@@ -690,12 +706,12 @@ function ResultCard({ barResult, onDownload, onAnalytics, onReset, showToast }) 
                   transition: "background 0.18s ease, color 0.18s ease, border-color 0.18s ease",
                 }}
                 onMouseOver={e => {
-                  e.currentTarget.style.background = "rgba(255,255,255,0.07)";
+                  e.currentTarget.style.background = "rgba(60,45,20,0.16)";
                   e.currentTarget.style.color = T.textPrimary;
                   e.currentTarget.style.borderColor = T.borderHover;
                 }}
                 onMouseOut={e => {
-                  e.currentTarget.style.background = "rgba(255,255,255,0.03)";
+                  e.currentTarget.style.background = "rgba(60,45,20,0.04)";
                   e.currentTarget.style.color = T.textSecondary;
                   e.currentTarget.style.borderColor = T.border;
                 }}
@@ -867,7 +883,7 @@ function MainApp() {
           style={{
             position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)",
             width: "60vw", height: "22vh",
-            background: "radial-gradient(ellipse at top, rgba(232,160,32,0.05) 0%, transparent 70%)",
+            background: "radial-gradient(ellipse at top, rgba(180,121,30,0.05) 0%, transparent 70%)",
           }}
         />
       </div>
@@ -956,7 +972,7 @@ function MainApp() {
                 <div
                   style={{
                     height: "1px", marginTop: "1.5rem",
-                    background: "linear-gradient(90deg, rgba(232,160,32,0.20) 0%, transparent 60%)",
+                    background: "linear-gradient(90deg, rgba(180,121,30,0.20) 0%, transparent 60%)",
                   }}
                 />
               </div>
@@ -1021,7 +1037,7 @@ function MainApp() {
                   <div
                     style={{
                       height: "1px",
-                      background: "linear-gradient(90deg, rgba(232,160,32,0.48) 0%, rgba(232,160,32,0.14) 55%, transparent 100%)",
+                      background: "linear-gradient(90deg, rgba(180,121,30,0.48) 0%, rgba(180,121,30,0.14) 55%, transparent 100%)",
                     }}
                   />
                   <div style={{ padding: "1.125rem" }}>
@@ -1059,8 +1075,9 @@ function MainApp() {
       {/* Footer */}
       <footer
         style={{
-          borderTop: `1px solid rgba(255,255,255,0.05)`,
+          borderTop: `1px solid ${T.border}`,
           position: "relative", zIndex: 1, marginTop: "4rem",
+          background: `linear-gradient(180deg, transparent, rgba(216,201,166,0.35))`,
         }}
       >
         <div
