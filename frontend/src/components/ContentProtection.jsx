@@ -130,7 +130,7 @@ const ContentProtection = ({ children, enabled = true, watermarkText = '' }) => 
                 top: `${(i * 150) % 800}px`,
                 left: `${(i * 300) % 1200}px`,
                 transform: 'rotate(-45deg)',
-                color: 'rgba(255, 255, 255, 0.05)',
+                color: 'rgba(60, 45, 20, 0.05)',
                 fontSize: '14px',
                 fontWeight: '500',
                 whiteSpace: 'nowrap',

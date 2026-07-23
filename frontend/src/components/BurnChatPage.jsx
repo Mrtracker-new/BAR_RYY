@@ -7,14 +7,14 @@ import SEO from './SEO';
 import * as E2E from '../crypto/burnChatE2E';
 
 const T = {
-  gold: '#E8A020', green: '#22C55E', red: '#EF4444', orange: '#F97316',
-  bg: '#070707', s0: '#0d0d0d', s1: '#111111', s2: '#161616',
-  border: 'rgba(255,255,255,0.07)', borderH: 'rgba(255,255,255,0.13)',
-  /* Text — all WCAG AA against #070707 */
-  text:  '#f0f0f0',    /* 15.8:1 AAA — was #efefef (trivial change, system-aligned) */
-  textS: '#a0a0a0',    /*  6.3:1  AA — raised from #888888 */
-  textT: '#636363',    /*  4.9:1  AA — raised from #404040 */
-  textD: '#505050',    /*  4.3:1  AA — raised from implicit unset */
+  gold: '#B4791E', green: '#3F7D3A', red: '#B33A2E', orange: '#C4461A',
+  bg: '#EDE3CE', s0: '#FAF4E6', s1: '#FFFDF6', s2: '#F1E8D3',
+  border: 'rgba(60,45,20,0.16)', borderH: 'rgba(60,45,20,0.30)',
+  /* Text — ink on cream */
+  text:  '#2A2018',
+  textS: '#55483A',
+  textT: '#857358',
+  textD: '#A2916F',
   mono: "'JetBrains Mono', monospace",
 };
 
@@ -94,10 +94,10 @@ function JoinScreen({ token, onJoin, error, infoState, joinSecsLeft, joinPartici
         ogImageAlt="Burn Chat — End-to-End Encrypted Ephemeral Chat | BAR Web"
         noIndex={true}
       />
-      <div style={{ minHeight:'100vh', background:T.bg, display:'flex', alignItems:'center', justifyContent:'center', padding:'clamp(1rem, 4vw, 1.5rem)' }}>
+      <div style={{ minHeight:'100vh', background:'#EDE3CE', display:'flex', alignItems:'center', justifyContent:'center', padding:'clamp(1rem, 4vw, 1.5rem)' }}>
         <div style={{ width:'100%', maxWidth:380 }}>
         <div style={{ textAlign:'center', marginBottom:'2rem' }}>
-          <div style={{ width:56, height:56, borderRadius:'50%', background:'rgba(249,115,22,0.1)', border:'1px solid rgba(249,115,22,0.2)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 1rem' }}>
+          <div style={{ width:56, height:56, borderRadius:'50%', background:'rgba(196,70,26,0.1)', border:'1px solid rgba(196,70,26,0.2)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 1rem' }}>
             <Flame size={24} style={{ color:T.orange }} />
           </div>
           <h1 style={{ fontSize:'1.375rem', fontWeight:700, letterSpacing:'-0.03em', color:T.text, marginBottom:'0.375rem' }}>Join Burn Chat</h1>
@@ -112,11 +112,11 @@ function JoinScreen({ token, onJoin, error, infoState, joinSecsLeft, joinPartici
           marginBottom:'1rem', minHeight:28,
         }}>
           {infoState === 'loading' && (
-            <div style={{ height:8, width:120, borderRadius:4, background:'rgba(255,255,255,0.06)', animation:'pulse 1.4s ease-in-out infinite' }} />
+            <div style={{ height:8, width:120, borderRadius:4, background:'rgba(60,45,20,0.08)', animation:'pulse 1.4s ease-in-out infinite' }} />
           )}
           {infoState === 'ok' && joinSecsLeft !== null && (
             <>
-              <div style={{ display:'flex', alignItems:'center', gap:'0.35rem', padding:'0.25rem 0.7rem', borderRadius:'999px', background:'rgba(255,255,255,0.04)', border:`1px solid ${tColor}30` }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'0.35rem', padding:'0.25rem 0.7rem', borderRadius:'999px', background:'rgba(60,45,20,0.06)', border:`1px solid ${tColor}30` }}>
                 <Clock size={12} style={{ color:tColor }} />
                 <span style={{ fontSize:'0.875rem', fontWeight:700, color:tColor, fontFamily:T.mono }}>
                   {fmtTime(joinSecsLeft)}
@@ -146,7 +146,7 @@ function JoinScreen({ token, onJoin, error, infoState, joinSecsLeft, joinPartici
             <input className="input-field" placeholder="Your name…" value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&canJoin&&onJoin(name.trim(),isCreator?pin:null)} maxLength={30} style={{ fontSize:'var(--text-sm)' }} />
           </div>
 
-          <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.625rem 0.75rem', borderRadius:'0.5rem', background:'rgba(255,255,255,0.02)', border:`1px solid ${T.border}`, cursor:'pointer' }} onClick={()=>setIsCreator(v=>!v)}>
+          <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.625rem 0.75rem', borderRadius:'0.5rem', background:'rgba(60,45,20,0.04)', border:`1px solid ${T.border}`, cursor:'pointer' }} onClick={()=>setIsCreator(v=>!v)}>
             <input type="checkbox" id="creator-chk" checked={isCreator} onChange={()=>setIsCreator(v=>!v)} style={{ cursor:'pointer' }} />
             <label htmlFor="creator-chk" style={{ fontSize:'0.875rem', color:T.textS, cursor:'pointer', display:'flex', alignItems:'center', gap:'0.375rem' }}>
               <Shield size={13} style={{ color:T.orange }} /> I'm the creator (have PIN)
@@ -161,9 +161,9 @@ function JoinScreen({ token, onJoin, error, infoState, joinSecsLeft, joinPartici
           )}
 
           {error && (
-            <div style={{ display:'flex', gap:'0.5rem', padding:'0.75rem', borderRadius:'0.5rem', background:'rgba(239,68,68,0.07)', border:'1px solid rgba(239,68,68,0.15)' }}>
+            <div style={{ display:'flex', gap:'0.5rem', padding:'0.75rem', borderRadius:'0.5rem', background:'rgba(179,58,46,0.07)', border:'1px solid rgba(179,58,46,0.15)' }}>
               <AlertTriangle size={14} style={{ color:T.red, flexShrink:0 }} />
-              <p style={{ fontSize:'0.875rem', color:'#fca5a5' }}>{error}</p>
+              <p style={{ fontSize:'0.875rem', color:'#B33A2E' }}>{error}</p>
             </div>
           )}
 
@@ -177,12 +177,12 @@ function JoinScreen({ token, onJoin, error, infoState, joinSecsLeft, joinPartici
               fontFamily:'inherit',
               cursor: canJoin ? 'pointer' : 'not-allowed',
               transition: 'background 0.18s ease, box-shadow 0.18s ease, transform 0.15s ease',
-              background: canJoin ? 'linear-gradient(160deg,#F97316 0%,#C05010 100%)' : 'rgba(255,255,255,0.06)',
+              background: canJoin ? 'linear-gradient(160deg,#C4461A 0%,#9A3612 100%)' : 'rgba(60,45,20,0.08)',
               color: canJoin ? '#fff' : T.textT, display:'flex', alignItems:'center', justifyContent:'center', gap:'0.5rem',
-              boxShadow: canJoin ? '0 4px 16px rgba(249,115,22,0.22)' : 'none',
+              boxShadow: canJoin ? '0 4px 16px rgba(196,70,26,0.22)' : 'none',
             }}
-            onMouseOver={e => { if (canJoin) { e.currentTarget.style.transform='translateY(-1px)'; e.currentTarget.style.boxShadow='0 6px 20px rgba(249,115,22,0.30)'; } }}
-            onMouseOut={e  => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow=canJoin?'0 4px 16px rgba(249,115,22,0.22)':'none'; }}
+            onMouseOver={e => { if (canJoin) { e.currentTarget.style.transform='translateY(-1px)'; e.currentTarget.style.boxShadow='0 6px 20px rgba(196,70,26,0.30)'; } }}
+            onMouseOut={e  => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow=canJoin?'0 4px 16px rgba(196,70,26,0.22)':'none'; }}
           >
             <Flame size={14} /> Join Session
           </button>
@@ -196,14 +196,14 @@ function JoinScreen({ token, onJoin, error, infoState, joinSecsLeft, joinPartici
 /* ── Destroyed screen ──────────────────────────────────────── */
 function DestroyedScreen() {
   return (
-    <div style={{ minHeight:'100vh', background:T.bg, display:'flex', alignItems:'center', justifyContent:'center' }}>
+    <div style={{ minHeight:'100vh', background:'#EDE3CE', display:'flex', alignItems:'center', justifyContent:'center' }}>
       <div style={{ textAlign:'center', padding:'2rem' }}>
-        <div style={{ width:72, height:72, borderRadius:'50%', background:'rgba(239,68,68,0.1)', border:'1px solid rgba(239,68,68,0.2)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 1.5rem' }}>
+        <div style={{ width:72, height:72, borderRadius:'50%', background:'rgba(179,58,46,0.1)', border:'1px solid rgba(179,58,46,0.2)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 1.5rem' }}>
           <Flame size={32} style={{ color:T.red }} />
         </div>
         <h2 style={{ fontSize:'1.5rem', fontWeight:700, color:T.text, letterSpacing:'-0.03em', marginBottom:'0.5rem' }}>Session Burned</h2>
         <p style={{ color:T.textS, fontSize:'0.875rem', maxWidth:'28ch', margin:'0 auto 2rem' }}>All messages have been permanently erased. No trace remains.</p>
-        <a href="/" style={{ display:'inline-flex', alignItems:'center', gap:'0.5rem', padding:'0.75rem 1.25rem', borderRadius:'0.625rem', background:'rgba(255,255,255,0.05)', border:`1px solid ${T.border}`, color:T.textS, textDecoration:'none', fontSize:'0.875rem', fontWeight:500 }}>
+        <a href="/" style={{ display:'inline-flex', alignItems:'center', gap:'0.5rem', padding:'0.75rem 1.25rem', borderRadius:'0.625rem', background:'rgba(60,45,20,0.06)', border:`1px solid ${T.border}`, color:T.textS, textDecoration:'none', fontSize:'0.875rem', fontWeight:500 }}>
           <ArrowLeft size={13} /> Back to BAR Web
         </a>
       </div>
@@ -262,7 +262,7 @@ function Bubble({ msg, myName, sessionKey }) {
   if (msg.type === 'system') return (
     <div style={{ textAlign:'center', padding:'0.25rem 0' }}>
       {/* System pill — 12px acceptable for inline contextual system messages */}
-      <span style={{ fontSize:'0.75rem', color:T.textT, background:'rgba(255,255,255,0.03)', padding:'0.2rem 0.75rem', borderRadius:'999px', border:`1px solid ${T.border}` }}>{msg.text}</span>
+      <span style={{ fontSize:'0.75rem', color:T.textT, background:'rgba(60,45,20,0.04)', padding:'0.2rem 0.75rem', borderRadius:'999px', border:`1px solid ${T.border}` }}>{msg.text}</span>
     </div>
   );
 
@@ -301,8 +301,8 @@ function Bubble({ msg, myName, sessionKey }) {
       )}
       <div style={{
         maxWidth:'75%', padding:'0.625rem 0.875rem', borderRadius:isMe?'1rem 1rem 0.25rem 1rem':'1rem 1rem 1rem 0.25rem',
-        background:isMe?'rgba(249,115,22,0.15)':'rgba(255,255,255,0.05)',
-        border:`1px solid ${isMe?'rgba(249,115,22,0.25)':T.border}`,
+        background:isMe?'rgba(196,70,26,0.15)':'rgba(60,45,20,0.06)',
+        border:`1px solid ${isMe?'rgba(196,70,26,0.25)':T.border}`,
         /* Message text: 0.9375rem (15px) minimum per spec */
         fontSize:'0.9375rem', color:T.text, lineHeight:1.55,
         wordBreak:'break-word',
@@ -354,8 +354,8 @@ function ParticipantPanel({ participantList, myWsId, isCreator, roomLocked, onKi
             style={{
               display: 'flex', alignItems: 'center', gap: '0.4rem',
               padding: '0.4rem 0.65rem', borderRadius: '0.4rem',
-              border: `1px solid ${roomLocked ? 'rgba(249,115,22,0.3)' : T.border}`,
-              background: roomLocked ? 'rgba(249,115,22,0.07)' : 'rgba(255,255,255,0.03)',
+              border: `1px solid ${roomLocked ? 'rgba(196,70,26,0.3)' : T.border}`,
+              background: roomLocked ? 'rgba(196,70,26,0.07)' : 'rgba(60,45,20,0.04)',
               cursor: 'pointer', width: '100%', transition: 'all 0.15s',
               fontSize: '0.75rem', fontWeight: 600,
               color: roomLocked ? T.orange : T.textS,
@@ -370,7 +370,7 @@ function ParticipantPanel({ participantList, myWsId, isCreator, roomLocked, onKi
               display: 'flex', alignItems: 'center', gap: '0.4rem',
               padding: '0.4rem 0.65rem', borderRadius: '0.4rem',
               border: `1px solid ${T.border}`,
-              background: 'rgba(255,255,255,0.03)',
+              background: 'rgba(60,45,20,0.04)',
               cursor: 'pointer', width: '100%', transition: 'all 0.15s',
               fontSize: '0.75rem', fontWeight: 600, color: T.textS,
             }}
@@ -388,14 +388,14 @@ function ParticipantPanel({ participantList, myWsId, isCreator, roomLocked, onKi
             style={{
               display: 'flex', alignItems: 'center', gap: '0.5rem',
               padding: '0.375rem 0.875rem',
-              background: p.ws_id === myWsId ? 'rgba(249,115,22,0.05)' : 'transparent',
+              background: p.ws_id === myWsId ? 'rgba(196,70,26,0.05)' : 'transparent',
             }}
           >
             {/* Avatar initial */}
             <div style={{
               width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
-              background: p.is_creator ? 'rgba(249,115,22,0.15)' : 'rgba(255,255,255,0.06)',
-              border: `1px solid ${p.is_creator ? 'rgba(249,115,22,0.25)' : T.border}`,
+              background: p.is_creator ? 'rgba(196,70,26,0.15)' : 'rgba(60,45,20,0.08)',
+              border: `1px solid ${p.is_creator ? 'rgba(196,70,26,0.25)' : T.border}`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: '0.65rem', fontWeight: 700,
               color: p.is_creator ? T.orange : T.textS,
@@ -424,14 +424,14 @@ function ParticipantPanel({ participantList, myWsId, isCreator, roomLocked, onKi
                 title={`Remove ${p.name}`}
                 style={{
                   width: 20, height: 20, borderRadius: 4,
-                  border: '1px solid rgba(239,68,68,0.2)',
+                  border: '1px solid rgba(179,58,46,0.2)',
                   background: 'transparent', cursor: 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: 'rgba(239,68,68,0.5)', flexShrink: 0,
+                  color: 'rgba(179,58,46,0.5)', flexShrink: 0,
                   transition: 'all 0.15s',
                 }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; e.currentTarget.style.color = T.red; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(239,68,68,0.5)'; }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(179,58,46,0.1)'; e.currentTarget.style.color = T.red; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(179,58,46,0.5)'; }}
               >
                 <X size={10} />
               </button>
@@ -1017,19 +1017,19 @@ export default function BurnChatPage({ token }) {
         ogImageAlt="Burn Chat — End-to-End Encrypted Ephemeral Chat | BAR Web"
         noIndex={true}
       />
-      <div style={{ height:'100dvh', display:'flex', flexDirection:'column', background:T.bg, color:T.text, overflow:'hidden' }}>
+      <div style={{ height:'100dvh', display:'flex', flexDirection:'column', background:'#EDE3CE', color:T.text, overflow:'hidden' }}>
 
         {/* Top bar — 56px (matches --navbar-height token) */}
-        <div style={{ flexShrink:0, padding:'0 1rem', height:56, display:'flex', alignItems:'center', justifyContent:'space-between', background:'rgba(7,7,7,0.92)', backdropFilter:'blur(22px) saturate(160%)', WebkitBackdropFilter:'blur(22px) saturate(160%)', borderBottom:`1px solid rgba(255,255,255,0.10)`, zIndex:10 }}>
+        <div style={{ flexShrink:0, padding:'0 1rem', height:56, display:'flex', alignItems:'center', justifyContent:'space-between', background:'rgba(250,244,230,0.92)', backdropFilter:'blur(22px) saturate(160%)', WebkitBackdropFilter:'blur(22px) saturate(160%)', borderBottom:`1px solid rgba(60,45,20,0.18)`, zIndex:10 }}>
           <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
             <Flame size={16} style={{ color:T.orange }} />
             <span style={{ fontSize:'1rem', fontWeight:700, letterSpacing:'-0.03em', color:T.text }}>Burn Chat</span>
             {/* Creator badge pill — 10px is acceptable for a single-word identifier badge */}
             {isCreator && (
-              <span style={{ fontSize:'0.625rem', fontWeight:700, letterSpacing:'0.06em', textTransform:'uppercase', color:T.orange, background:'rgba(249,115,22,0.1)', border:'1px solid rgba(249,115,22,0.22)', borderRadius:'999px', padding:'0.175rem 0.5rem' }}>Creator</span>
+              <span style={{ fontSize:'0.625rem', fontWeight:700, letterSpacing:'0.06em', textTransform:'uppercase', color:T.orange, background:'rgba(196,70,26,0.1)', border:'1px solid rgba(196,70,26,0.22)', borderRadius:'999px', padding:'0.175rem 0.5rem' }}>Creator</span>
             )}
             {roomLocked && (
-              <span style={{ fontSize:'0.625rem', fontWeight:700, letterSpacing:'0.06em', textTransform:'uppercase', color:T.textS, background:'rgba(255,255,255,0.04)', border:`1px solid ${T.border}`, borderRadius:'999px', padding:'0.175rem 0.5rem', display:'flex', alignItems:'center', gap:'0.25rem' }}>
+              <span style={{ fontSize:'0.625rem', fontWeight:700, letterSpacing:'0.06em', textTransform:'uppercase', color:T.textS, background:'rgba(60,45,20,0.06)', border:`1px solid ${T.border}`, borderRadius:'999px', padding:'0.175rem 0.5rem', display:'flex', alignItems:'center', gap:'0.25rem' }}>
                 <Lock size={9} /> Locked
               </span>
             )}
@@ -1040,8 +1040,8 @@ export default function BurnChatPage({ token }) {
                 title="E2E encryption unavailable — page is not served over HTTPS. Messages are protected by TLS only."
                 style={{
                   fontSize:'0.625rem', fontWeight:700, letterSpacing:'0.04em',
-                  color:'#fca5a5', background:'rgba(239,68,68,0.09)',
-                  border:'1px solid rgba(239,68,68,0.25)', borderRadius:'999px',
+                  color:'#B33A2E', background:'rgba(179,58,46,0.09)',
+                  border:'1px solid rgba(179,58,46,0.25)', borderRadius:'999px',
                   padding:'0.175rem 0.5rem', cursor:'help',
                   display:'flex', alignItems:'center', gap:'0.25rem',
                 }}
@@ -1053,8 +1053,8 @@ export default function BurnChatPage({ token }) {
                 title={`E2E encrypted — server cannot read messages.\n\nSession code: ${e2eFingerprint}\nAll participants should see the same code. If someone's code differs, the server may be substituting keys — leave immediately.`}
                 style={{
                   fontSize:'0.625rem', fontWeight:700, letterSpacing:'0.06em',
-                  color:T.green, background:'rgba(34,197,94,0.08)',
-                  border:'1px solid rgba(34,197,94,0.22)', borderRadius:'999px',
+                  color:T.green, background:'rgba(63,125,58,0.08)',
+                  border:'1px solid rgba(63,125,58,0.22)', borderRadius:'999px',
                   padding:'0.175rem 0.5rem', cursor:'help', fontFamily:T.mono,
                   display:'flex', alignItems:'center', gap:'0.3rem',
                   transition:'opacity 0.3s ease',
@@ -1067,8 +1067,8 @@ export default function BurnChatPage({ token }) {
                 title="E2E key exchange in progress…"
                 style={{
                   fontSize:'0.625rem', fontWeight:700, letterSpacing:'0.04em',
-                  color:T.gold, background:'rgba(232,160,32,0.08)',
-                  border:'1px solid rgba(232,160,32,0.22)', borderRadius:'999px',
+                  color:T.gold, background:'rgba(180,121,30,0.08)',
+                  border:'1px solid rgba(180,121,30,0.22)', borderRadius:'999px',
                   padding:'0.175rem 0.5rem', cursor:'help',
                   display:'flex', alignItems:'center', gap:'0.25rem',
                   animation:'pulse 1.4s ease-in-out infinite',
@@ -1089,8 +1089,8 @@ export default function BurnChatPage({ token }) {
               title="Participants"
               style={{
                 display:'flex', alignItems:'center', gap:'0.3rem',
-                background: panelOpen ? 'rgba(249,115,22,0.08)' : 'transparent',
-                border: panelOpen ? '1px solid rgba(249,115,22,0.2)' : '1px solid transparent',
+                background: panelOpen ? 'rgba(196,70,26,0.08)' : 'transparent',
+                border: panelOpen ? '1px solid rgba(196,70,26,0.2)' : '1px solid transparent',
                 borderRadius:'0.375rem', padding:'0.2rem 0.4rem',
                 cursor:'pointer', transition:'all 0.15s',
               }}
@@ -1104,8 +1104,8 @@ export default function BurnChatPage({ token }) {
               <div style={{
                 display:'flex', alignItems:'center', gap:'0.375rem',
                 padding:'0.25rem 0.75rem', borderRadius:'999px',
-                background: urgent ? 'rgba(239,68,68,0.10)' : 'rgba(255,255,255,0.04)',
-                border: `1px solid ${urgent ? 'rgba(239,68,68,0.28)' : T.border}`,
+                background: urgent ? 'rgba(179,58,46,0.10)' : 'rgba(60,45,20,0.06)',
+                border: `1px solid ${urgent ? 'rgba(179,58,46,0.28)' : T.border}`,
                 animation: urgent && secsLeft <= 10 ? 'pulse 1s ease-in-out infinite' : 'none',
               }}>
                 <div style={{ width:6, height:6, borderRadius:'50%', background:tColor, boxShadow:`0 0 6px ${tColor}`, flexShrink:0 }} />
@@ -1117,7 +1117,7 @@ export default function BurnChatPage({ token }) {
             )}
 
             {/* Copy link */}
-            <button onClick={copy} title="Copy share link" style={{ width:28, height:28, borderRadius:'0.375rem', background:'rgba(255,255,255,0.04)', border:`1px solid ${copyFailed ? 'rgba(239,68,68,0.4)' : T.border}`, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', color:copied ? T.green : copyFailed ? T.red : T.textS }}>
+            <button onClick={copy} title="Copy share link" style={{ width:28, height:28, borderRadius:'0.375rem', background:'rgba(60,45,20,0.06)', border:`1px solid ${copyFailed ? 'rgba(179,58,46,0.4)' : T.border}`, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', color:copied ? T.green : copyFailed ? T.red : T.textS }}>
               {copied ? <CheckCircle2 size={13} /> : copyFailed ? <AlertTriangle size={13} /> : <Copy size={13} />}
             </button>
           </div>
@@ -1125,9 +1125,9 @@ export default function BurnChatPage({ token }) {
 
         {/* Copy-failed toast */}
         {copyFailed && (
-          <div style={{ flexShrink:0, padding:'0.5rem 1rem', background:'rgba(239,68,68,0.07)', borderBottom:'1px solid rgba(239,68,68,0.15)', display:'flex', alignItems:'center', gap:'0.5rem' }}>
+          <div style={{ flexShrink:0, padding:'0.5rem 1rem', background:'rgba(179,58,46,0.07)', borderBottom:'1px solid rgba(179,58,46,0.15)', display:'flex', alignItems:'center', gap:'0.5rem' }}>
             <AlertTriangle size={14} style={{ color:T.red, flexShrink:0 }} />
-            <p style={{ fontSize:'0.875rem', color:'#fca5a5' }}>Copy failed — please select and copy the link manually.</p>
+            <p style={{ fontSize:'0.875rem', color:'#B33A2E' }}>Copy failed — please select and copy the link manually.</p>
           </div>
         )}
 
@@ -1135,11 +1135,11 @@ export default function BurnChatPage({ token }) {
         {!cryptoAvailable && (
           <div style={{
             flexShrink:0, padding:'0.45rem 1rem',
-            background:'rgba(239,68,68,0.07)', borderBottom:'1px solid rgba(239,68,68,0.18)',
+            background:'rgba(179,58,46,0.07)', borderBottom:'1px solid rgba(179,58,46,0.18)',
             display:'flex', alignItems:'center', gap:'0.5rem',
           }}>
             <AlertTriangle size={14} style={{ color:T.red, flexShrink:0 }} />
-            <p style={{ fontSize:'0.875rem', color:'#fca5a5', lineHeight:1.5 }}>
+            <p style={{ fontSize:'0.875rem', color:'#B33A2E', lineHeight:1.5 }}>
               <strong>E2E encryption unavailable</strong> — page must be served over HTTPS.
               {' '}Messages are protected by TLS only.
             </p>
@@ -1148,9 +1148,9 @@ export default function BurnChatPage({ token }) {
 
         {/* Warning bar when &lt; 60s */}
         {urgent && secsLeft > 0 && (
-          <div style={{ flexShrink:0, padding:'0.5rem 1rem', background:'rgba(239,68,68,0.08)', borderBottom:'1px solid rgba(239,68,68,0.16)', display:'flex', alignItems:'center', gap:'0.5rem' }}>
+          <div style={{ flexShrink:0, padding:'0.5rem 1rem', background:'rgba(179,58,46,0.08)', borderBottom:'1px solid rgba(179,58,46,0.16)', display:'flex', alignItems:'center', gap:'0.5rem' }}>
             <AlertTriangle size={14} style={{ color:T.red }} />
-            <p style={{ fontSize:'0.875rem', color:'#fca5a5' }}>
+            <p style={{ fontSize:'0.875rem', color:'#B33A2E' }}>
               ⚠️ Session burns in {secsLeft}s — save anything important now.
             </p>
           </div>
@@ -1158,7 +1158,7 @@ export default function BurnChatPage({ token }) {
 
         {/* Reconnecting banner */}
         {connStatus === 'reconnecting' && (
-          <div style={{ flexShrink:0, padding:'0.5rem 1rem', background:'rgba(249,115,22,0.07)', borderBottom:'1px solid rgba(249,115,22,0.15)', display:'flex', alignItems:'center', gap:'0.5rem' }}>
+          <div style={{ flexShrink:0, padding:'0.5rem 1rem', background:'rgba(196,70,26,0.07)', borderBottom:'1px solid rgba(196,70,26,0.15)', display:'flex', alignItems:'center', gap:'0.5rem' }}>
             <div style={{ width:7, height:7, borderRadius:'50%', background:T.orange, flexShrink:0, animation:'pulse 1s ease-in-out infinite' }} />
             <p style={{ fontSize:'0.875rem', color:T.orange }}>Reconnecting… (attempt {reconnectRef.current.count} of 3)</p>
           </div>
@@ -1166,9 +1166,9 @@ export default function BurnChatPage({ token }) {
 
         {/* WS error */}
         {wsError && (
-          <div style={{ flexShrink:0, padding:'0.5rem 1rem', background:'rgba(239,68,68,0.07)', borderBottom:'1px solid rgba(239,68,68,0.15)', display:'flex', alignItems:'center', gap:'0.5rem' }}>
+          <div style={{ flexShrink:0, padding:'0.5rem 1rem', background:'rgba(179,58,46,0.07)', borderBottom:'1px solid rgba(179,58,46,0.15)', display:'flex', alignItems:'center', gap:'0.5rem' }}>
             <AlertTriangle size={14} style={{ color:T.red, flexShrink:0 }} />
-            <p style={{ fontSize:'0.875rem', color:'#fca5a5' }}>{wsError}</p>
+            <p style={{ fontSize:'0.875rem', color:'#B33A2E' }}>{wsError}</p>
           </div>
         )}
 
@@ -1219,7 +1219,7 @@ export default function BurnChatPage({ token }) {
             padding:'0.625rem 1rem',
             paddingBottom:'max(0.625rem, env(safe-area-inset-bottom))',
             borderTop:`1px solid ${T.border}`,
-            background:'rgba(7,7,7,0.88)',
+            background:'rgba(250,244,230,0.90)',
             backdropFilter:'blur(12px)',
             WebkitBackdropFilter:'blur(12px)',
             display:'flex', gap:'0.5rem', alignItems:'flex-end',
@@ -1248,8 +1248,8 @@ export default function BurnChatPage({ token }) {
               transition:'border-color 0.18s ease, box-shadow 0.18s ease',
             }}
             onFocus={e => {
-              e.target.style.borderColor='rgba(249,115,22,0.45)';
-              e.target.style.boxShadow='0 0 0 3px rgba(249,115,22,0.12)';
+              e.target.style.borderColor='rgba(196,70,26,0.45)';
+              e.target.style.boxShadow='0 0 0 3px rgba(196,70,26,0.12)';
             }}
             onBlur={e => {
               e.target.style.borderColor=T.border;
@@ -1265,16 +1265,16 @@ export default function BurnChatPage({ token }) {
               width:44, height:44,
               minWidth:44, minHeight:44,
               borderRadius:'0.75rem', border:'none',
-              background:input.trim()?'linear-gradient(160deg,#F97316 0%,#C05010 100%)':'rgba(255,255,255,0.06)',
+              background:input.trim()?'linear-gradient(160deg,#C4461A 0%,#9A3612 100%)':'rgba(60,45,20,0.08)',
               color:input.trim()?'#fff':T.textT,
               display:'flex', alignItems:'center', justifyContent:'center',
               cursor:input.trim()?'pointer':'not-allowed', flexShrink:0,
               /* Specific properties — more performant than 'all 0.15s' */
               transition:'background 0.18s ease, box-shadow 0.18s ease, transform 0.15s ease',
-              boxShadow:input.trim()?'0 2px 10px rgba(249,115,22,0.28)':'none',
+              boxShadow:input.trim()?'0 2px 10px rgba(196,70,26,0.28)':'none',
             }}
-            onMouseOver={e => { if (input.trim()) { e.currentTarget.style.transform='translateY(-1px)'; e.currentTarget.style.boxShadow='0 4px 14px rgba(249,115,22,0.38)'; } }}
-            onMouseOut={e  => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow=input.trim()?'0 2px 10px rgba(249,115,22,0.28)':'none'; }}
+            onMouseOver={e => { if (input.trim()) { e.currentTarget.style.transform='translateY(-1px)'; e.currentTarget.style.boxShadow='0 4px 14px rgba(196,70,26,0.38)'; } }}
+            onMouseOut={e  => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow=input.trim()?'0 2px 10px rgba(196,70,26,0.28)':'none'; }}
           >
             <Send size={17} />
           </button>

@@ -3,14 +3,14 @@ import { copyToClipboard } from '../utils/clipboard';
 import { Flame, Copy, AlertCircle, CheckCircle2, ArrowRight, Shield, Eye, EyeOff } from 'lucide-react';
 import CreateSessionForm, { fmtSecs } from './CreateSessionForm';
 
-/* ── Design tokens (match App.jsx) ────────────────────────── */
+/* ── Design tokens (notebook palette) ─────────────────────── */
 const T = {
-  gold: '#E8A020', green: '#22C55E', red: '#EF4444',
-  bg: '#070707', s0: '#0d0d0d', s1: '#111111', s2: '#161616',
-  border: 'rgba(255,255,255,0.06)', borderH: 'rgba(255,255,255,0.11)',
-  text: '#efefef', textS: '#888888', textT: '#404040', textD: '#292929',
+  gold: '#B4791E', green: '#3F7D3A', red: '#B33A2E',
+  bg: '#EDE3CE', s0: '#FAF4E6', s1: '#FFFDF6', s2: '#F1E8D3',
+  border: 'rgba(60,45,20,0.16)', borderH: 'rgba(60,45,20,0.30)',
+  text: '#2A2018', textS: '#55483A', textT: '#857358', textD: '#A2916F',
   mono: "'JetBrains Mono', monospace",
-  orange: '#F97316',
+  orange: '#C4461A',
 };
 
 
@@ -65,7 +65,7 @@ export default function BurnChatCreate({ onCreated }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
         <div style={{
           width: 32, height: 32, borderRadius: '50%',
-          background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)',
+          background: 'rgba(63,125,58,0.10)', border: '1px solid rgba(63,125,58,0.28)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           <CheckCircle2 size={15} style={{ color: T.green }} />
@@ -82,8 +82,8 @@ export default function BurnChatCreate({ onCreated }) {
 
       {/* Creator PIN — shown ONCE */}
       <div style={{
-        borderRadius: '0.625rem', border: '1px solid rgba(249,115,22,0.25)',
-        background: 'rgba(249,115,22,0.05)', padding: '0.875rem 1rem',
+        borderRadius: '0.625rem', border: '1px solid rgba(196,70,26,0.28)',
+        background: 'rgba(196,70,26,0.09)', padding: '0.875rem 1rem',
       }}>
         {/* Header row */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginBottom: '0.5rem' }}>
@@ -121,8 +121,8 @@ export default function BurnChatCreate({ onCreated }) {
             disabled={!pinVisible}
             style={{
               marginLeft: 'auto', width: 28, height: 28, borderRadius: '0.375rem',
-              background: copied === 'pin' ? 'rgba(34,197,94,0.1)' : copyFailed ? 'rgba(239,68,68,0.08)' : 'rgba(249,115,22,0.1)',
-              border: `1px solid ${copied === 'pin' ? 'rgba(34,197,94,0.2)' : copyFailed ? 'rgba(239,68,68,0.2)' : 'rgba(249,115,22,0.2)'}`,
+              background: copied === 'pin' ? 'rgba(63,125,58,0.10)' : copyFailed ? 'rgba(179,58,46,0.09)' : 'rgba(196,70,26,0.10)',
+              border: `1px solid ${copied === 'pin' ? 'rgba(63,125,58,0.28)' : copyFailed ? 'rgba(179,58,46,0.26)' : 'rgba(196,70,26,0.28)'}`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               cursor: pinVisible ? 'pointer' : 'not-allowed',
               color: copied === 'pin' ? T.green : copyFailed ? T.red : pinVisible ? T.orange : T.textT,
@@ -158,8 +158,8 @@ export default function BurnChatCreate({ onCreated }) {
             title="Copy share link"
             style={{
               flexShrink: 0, width: 28, height: 28, borderRadius: '0.375rem',
-              background: copied === 'url' ? 'rgba(34,197,94,0.08)' : copyFailed ? 'rgba(239,68,68,0.08)' : 'rgba(232,160,32,0.08)',
-              border: `1px solid ${copied === 'url' ? 'rgba(34,197,94,0.16)' : copyFailed ? 'rgba(239,68,68,0.16)' : 'rgba(232,160,32,0.16)'}`,
+              background: copied === 'url' ? 'rgba(63,125,58,0.10)' : copyFailed ? 'rgba(179,58,46,0.09)' : 'rgba(180,121,30,0.12)',
+              border: `1px solid ${copied === 'url' ? 'rgba(63,125,58,0.28)' : copyFailed ? 'rgba(179,58,46,0.26)' : 'rgba(180,121,30,0.32)'}`,
               display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
               color: copied === 'url' ? T.green : copyFailed ? T.red : T.gold,
             }}
@@ -171,9 +171,9 @@ export default function BurnChatCreate({ onCreated }) {
 
       {/* Copy-failed toast */}
       {copyFailed && (
-        <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.5rem 0.75rem', borderRadius:'0.5rem', background:'rgba(239,68,68,0.07)', border:'1px solid rgba(239,68,68,0.15)' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.5rem 0.75rem', borderRadius:'0.5rem', background:'rgba(179,58,46,0.09)', border:'1px solid rgba(179,58,46,0.26)' }}>
           <AlertCircle size={13} style={{ color: T.red, flexShrink: 0 }} />
-          <p style={{ fontSize:'0.8125rem', color:'#fca5a5' }}>Copy failed — please select and copy manually.</p>
+          <p style={{ fontSize:'0.8125rem', color:'#B33A2E' }}>Copy failed — please select and copy manually.</p>
         </div>
       )}
 
@@ -183,9 +183,9 @@ export default function BurnChatCreate({ onCreated }) {
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
           padding: '0.8125rem', borderRadius: '0.625rem', textDecoration: 'none',
-          background: 'linear-gradient(160deg,#F97316 0%,#C05010 100%)',
-          color: '#fff', fontWeight: 700, fontSize: '0.875rem', letterSpacing: '-0.01em',
-          boxShadow: '0 4px 16px rgba(249,115,22,0.25)',
+          background: 'linear-gradient(160deg,#C4461A 0%,#9A3612 100%)',
+          color: '#FFFDF6', fontWeight: 700, fontSize: '0.875rem', letterSpacing: '-0.01em',
+          boxShadow: '0 4px 16px rgba(196,70,26,0.28)',
         }}
       >
         <Flame size={14} />
@@ -203,24 +203,24 @@ export default function BurnChatCreate({ onCreated }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
         <div style={{
           width: 28, height: 28, borderRadius: '0.4rem',
-          background: 'rgba(249,115,22,0.1)', border: '1px solid rgba(249,115,22,0.2)',
+          background: 'rgba(196,70,26,0.10)', border: '1px solid rgba(196,70,26,0.28)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          <Flame size={13} style={{ color: '#F97316' }} />
+          <Flame size={13} style={{ color: '#C4461A' }} />
         </div>
-        <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#c0c0c0', letterSpacing: '-0.02em' }}>
+        <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#55483A', letterSpacing: '-0.02em' }}>
           Burn Chat
         </span>
         <span style={{
           marginLeft: 'auto', fontSize: '0.625rem', fontWeight: 700,
           letterSpacing: '0.06em', textTransform: 'uppercase',
-          color: '#22C55E', background: 'rgba(34,197,94,0.08)',
-          border: '1px solid rgba(34,197,94,0.16)', borderRadius: '999px',
+          color: '#3F7D3A', background: 'rgba(63,125,58,0.10)',
+          border: '1px solid rgba(63,125,58,0.28)', borderRadius: '999px',
           padding: '0.15rem 0.5rem',
         }}>E2E Encrypted</span>
       </div>
 
-      <p style={{ fontSize: '0.8125rem', color: '#888888', lineHeight: 1.6 }}>
+      <p style={{ fontSize: '0.8125rem', color: '#55483A', lineHeight: 1.6 }}>
         Messages are encrypted in your browser before they leave your device.
         The server only relays ciphertext — no logs, no disk writes, no traces.
       </p>

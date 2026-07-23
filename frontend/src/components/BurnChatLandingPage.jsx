@@ -16,36 +16,38 @@ import CreateSessionForm from './CreateSessionForm';
    Key changes: textT #404040→#636363, textD #292929→#505050
 ───────────────────────────────────────────────────────────── */
 const T = {
-  orange:       '#F97316',
-  orangeD:      '#C05010',
-  orangeDim:    'rgba(249,115,22,0.09)',
-  orangeBorder: 'rgba(249,115,22,0.22)',
-  green:        '#22C55E',
-  greenDim:     'rgba(34,197,94,0.08)',
-  greenBorder:  'rgba(34,197,94,0.20)',
-  red:          '#EF4444',
-  gold:         '#E8A020',
-  goldDim:      'rgba(232,160,32,0.10)',
-  goldBorder:   'rgba(232,160,32,0.22)',
+  orange:       '#C4461A',
+  orangeD:      '#9A3612',
+  orangeDim:    'rgba(196,70,26,0.09)',
+  orangeBorder: 'rgba(196,70,26,0.28)',
+  green:        '#3F7D3A',
+  greenDim:     'rgba(63,125,58,0.10)',
+  greenBorder:  'rgba(63,125,58,0.28)',
+  red:          '#B33A2E',
+  gold:         '#B4791E',
+  goldDim:      'rgba(180,121,30,0.12)',
+  goldBorder:   'rgba(180,121,30,0.32)',
 
-  /* Backgrounds */
-  bg:       '#070707',
-  surface0: '#0e0e0e',
-  surface1: '#141414',
-  surface2: '#1a1a1a',
+  /* Backgrounds — cream paper */
+  bg:       '#EDE3CE',
+  surface0: '#FAF4E6',
+  surface1: '#FFFDF6',
+  surface2: '#F1E8D3',
 
-  /* Text — all WCAG AA against #070707 */
-  textPrimary:   '#f0f0f0',    /* 15.8:1 AAA */
-  textSecondary: '#a0a0a0',    /*  6.3:1  AA */
-  textTertiary:  '#636363',    /*  4.9:1  AA — raised from #404040 */
-  textDim:       '#505050',    /*  4.3:1  AA — raised from #292929 */
+  /* Text — ink on cream */
+  textPrimary:   '#2A2018',
+  textSecondary: '#55483A',
+  textTertiary:  '#857358',
+  textDim:       '#A2916F',
 
-  /* Borders */
-  border:      'rgba(255,255,255,0.07)',
-  borderHover: 'rgba(255,255,255,0.13)',
+  /* Borders — pencil lines */
+  border:      'rgba(60,45,20,0.16)',
+  borderHover: 'rgba(60,45,20,0.30)',
 
   /* Fonts */
   mono: "'JetBrains Mono', monospace",
+  hand: "'Caveat', 'Patrick Hand', cursive",
+  print: "'Patrick Hand', cursive",
 
   /* Navbar height token */
   navbarHeight: 56,
@@ -76,13 +78,13 @@ const FEATURES = [
   },
   {
     icon:  Zap,
-    color: '#C8893A',
+    color: '#8F5E16',
     title: 'Real-Time',
     desc:  'Powered by WebSockets. Messages appear instantly across all participants with no polling.',
   },
   {
     icon:  Shield,
-    color: '#6B7FD4',
+    color: '#2C4A6E',
     title: 'Key Fingerprint',
     desc:  'A 6-char session code lets you verify the encryption key out-of-band. If codes differ across participants, leave immediately.',
   },
@@ -108,10 +110,10 @@ function Navbar({ onBack }) {
           position: fixed; top: 0; left: 0; right: 0; z-index: 100;
           height: ${T.navbarHeight}px;
           display: flex; align-items: center;
-          background: rgba(7,7,7,0.92);
+          background: rgba(250,244,230,0.92);
           backdrop-filter: blur(22px) saturate(160%);
           -webkit-backdrop-filter: blur(22px) saturate(160%);
-          border-bottom: 1px solid rgba(255,255,255,0.10);
+          border-bottom: 1px solid rgba(60,45,20,0.24);
         }
         @media (min-width: 768px) {
           .bc-navbar { height: 60px; }
@@ -158,13 +160,15 @@ function Navbar({ onBack }) {
             </div>
             <span
               style={{
-                fontSize: '1rem',              /* raised from 0.9rem */
-                fontWeight: 700,               /* raised from 600 */
-                letterSpacing: '-0.03em',
+                fontFamily: T.hand,
+                fontSize: '1.5rem',
+                fontWeight: 700,
+                letterSpacing: '0.01em',
                 color: T.textPrimary,
+                lineHeight: 1,
               }}
             >
-              Burn<span style={{ color: T.textDim, fontWeight: 400 }}>Chat</span>
+              Burn<span style={{ color: T.orange, fontWeight: 400 }}>Chat</span>
             </span>
           </div>
 
@@ -253,17 +257,17 @@ function CreateCard({ onCreated }) {
       {...fadeUp(0.3)}
       style={{
         background: T.surface0,
-        border: '1px solid rgba(249,115,22,0.18)',
+        border: '1px solid rgba(196,70,26,0.18)',
         borderRadius: '1.25rem',
         overflow: 'hidden',
-        boxShadow: '0 8px 32px rgba(249,115,22,0.06)',
+        boxShadow: '0 8px 32px rgba(196,70,26,0.06)',
       }}
     >
       {/* Orange accent top border */}
       <div
         style={{
           height: '1px',
-          background: 'linear-gradient(90deg, rgba(249,115,22,0.65) 0%, rgba(249,115,22,0.15) 55%, transparent 100%)',
+          background: 'linear-gradient(90deg, rgba(196,70,26,0.65) 0%, rgba(196,70,26,0.15) 55%, transparent 100%)',
         }}
       />
 
@@ -358,14 +362,14 @@ function ResultCard({ result, ttlSeconds }) {
         border: `1px solid ${T.greenBorder}`,
         borderRadius: '1.25rem',
         overflow: 'hidden',
-        boxShadow: '0 8px 32px rgba(34,197,94,0.06)',
+        boxShadow: '0 8px 32px rgba(63,125,58,0.06)',
       }}
     >
       {/* Green accent top border */}
       <div
         style={{
           height: '1px',
-          background: 'linear-gradient(90deg, rgba(34,197,94,0.55) 0%, rgba(34,197,94,0.12) 55%, transparent 100%)',
+          background: 'linear-gradient(90deg, rgba(63,125,58,0.55) 0%, rgba(63,125,58,0.12) 55%, transparent 100%)',
         }}
       />
 
@@ -406,8 +410,8 @@ function ResultCard({ result, ttlSeconds }) {
         <div
           style={{
             borderRadius: '0.75rem',
-            border: '1px solid rgba(249,115,22,0.25)',
-            background: 'rgba(249,115,22,0.05)',
+            border: '1px solid rgba(196,70,26,0.25)',
+            background: 'rgba(196,70,26,0.05)',
             padding: '1rem clamp(0.875rem, 3vw, 1.125rem)',
           }}
         >
@@ -468,10 +472,10 @@ function ResultCard({ result, ttlSeconds }) {
                 width: 34, height: 34, borderRadius: '0.5rem',
                 background: copied === 'pin'
                   ? T.greenDim
-                  : copyFailed ? 'rgba(239,68,68,0.08)' : T.orangeDim,
+                  : copyFailed ? 'rgba(179,58,46,0.08)' : T.orangeDim,
                 border: `1px solid ${copied === 'pin'
                   ? T.greenBorder
-                  : copyFailed ? 'rgba(239,68,68,0.20)' : T.orangeBorder}`,
+                  : copyFailed ? 'rgba(179,58,46,0.20)' : T.orangeBorder}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 cursor: pinVisible ? 'pointer' : 'not-allowed',
                 color: copied === 'pin' ? T.green : copyFailed ? T.red : pinVisible ? T.orange : T.textTertiary,
@@ -534,10 +538,10 @@ function ResultCard({ result, ttlSeconds }) {
                 flexShrink: 0, width: 32, height: 32, borderRadius: '0.5rem',
                 background: copied === 'url'
                   ? T.greenDim
-                  : copyFailed ? 'rgba(239,68,68,0.08)' : T.goldDim,
+                  : copyFailed ? 'rgba(179,58,46,0.08)' : T.goldDim,
                 border: `1px solid ${copied === 'url'
                   ? T.greenBorder
-                  : copyFailed ? 'rgba(239,68,68,0.18)' : T.goldBorder}`,
+                  : copyFailed ? 'rgba(179,58,46,0.18)' : T.goldBorder}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 cursor: 'pointer',
                 color: copied === 'url' ? T.green : copyFailed ? T.red : T.gold,
@@ -557,7 +561,7 @@ function ResultCard({ result, ttlSeconds }) {
             style={{
               display: 'flex', alignItems: 'center', gap: '0.5rem',
               padding: '0.625rem 0.875rem', borderRadius: '0.625rem',
-              background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.15)',
+              background: 'rgba(179,58,46,0.07)', border: '1px solid rgba(179,58,46,0.15)',
             }}
           >
             <AlertCircle size={14} style={{ color: T.red, flexShrink: 0 }} />
@@ -575,18 +579,18 @@ function ResultCard({ result, ttlSeconds }) {
             /* 52px height — primary CTA deserves more weight */
             padding: '0.9375rem 1rem',
             borderRadius: '0.75rem', textDecoration: 'none',
-            background: 'linear-gradient(160deg, #F97316 0%, #C05010 100%)',
-            color: '#fff', fontWeight: 700, fontSize: '1rem', letterSpacing: '-0.015em',
-            boxShadow: '0 6px 24px rgba(249,115,22,0.28)',
+            background: 'linear-gradient(160deg, #C4461A 0%, #9A3612 100%)',
+            color: '#FFF8EA', fontWeight: 700, fontSize: '1rem', letterSpacing: '-0.015em',
+            boxShadow: '0 6px 24px rgba(196,70,26,0.28)',
             transition: 'transform 0.15s ease, box-shadow 0.15s ease',
           }}
           onMouseOver={e => {
             e.currentTarget.style.transform = 'translateY(-1px)';
-            e.currentTarget.style.boxShadow = '0 8px 28px rgba(249,115,22,0.36)';
+            e.currentTarget.style.boxShadow = '0 8px 28px rgba(196,70,26,0.36)';
           }}
           onMouseOut={e => {
             e.currentTarget.style.transform = '';
-            e.currentTarget.style.boxShadow = '0 6px 24px rgba(249,115,22,0.28)';
+            e.currentTarget.style.boxShadow = '0 6px 24px rgba(196,70,26,0.28)';
           }}
         >
           <Flame size={16} />
@@ -631,7 +635,7 @@ export default function BurnChatLandingPage() {
             position: 'absolute', top: '-12%', left: '50%', transform: 'translateX(-50%)',
             width: 'clamp(280px, 55vw, 650px)', height: 'clamp(280px, 55vw, 650px)',
             borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(249,115,22,0.07) 0%, transparent 65%)',
+            background: 'radial-gradient(circle, rgba(196,70,26,0.07) 0%, transparent 65%)',
           }}
         />
       </div>
@@ -676,7 +680,7 @@ export default function BurnChatLandingPage() {
                 <span
                   style={{
                     width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-                    background: T.green, boxShadow: '0 0 6px rgba(34,197,94,0.85)',
+                    background: T.green, boxShadow: '0 0 6px rgba(63,125,58,0.85)',
                     animation: 'pulse 2s ease-in-out infinite',
                   }}
                 />
@@ -698,7 +702,7 @@ export default function BurnChatLandingPage() {
               <span
                 style={{
                   display: 'block',
-                  background: 'linear-gradient(135deg, #FB923C 0%, #F97316 45%, #EA6010 100%)',
+                  background: 'linear-gradient(135deg, #D2591F 0%, #C4461A 45%, #9A3612 100%)',
                   WebkitBackgroundClip: 'text', backgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
                 }}

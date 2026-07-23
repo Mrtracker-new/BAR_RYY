@@ -7,76 +7,48 @@ import { FileX, Flame } from 'lucide-react';
  * Full-screen destruction overlay shown immediately before the final
  * "destroyed" screen. Supports two visual modes:
  *
- *   mode="file"  (default)
- *     Icon    : FileX (red)
- *     Heading : "File Destroyed"
- *     Body    : "This file has been permanently deleted and can no longer be accessed."
- *     Glow    : red
+ *   mode="file"  (default) — FileX icon, red glow
+ *   mode="chat"            — Flame icon, orange glow
  *
- *   mode="chat"
- *     Icon    : Flame (orange)
- *     Heading : "Session Burned"
- *     Body    : "All messages have been permanently erased. No trace remains."
- *     Glow    : orange
- *
- * Props
- * -----
- * @param {'file' | 'chat'} [mode='file']  Visual / copy variant.
- * @param {() => void}      [onComplete]   Called after the animation finishes (3 s).
+ * @param {'file' | 'chat'} [mode='file']
+ * @param {() => void}      [onComplete]   Called after 3 s.
  */
 const BurningAnimation = ({ mode = 'file', onComplete }) => {
   useEffect(() => {
     const timer = setTimeout(() => {
       if (onComplete) onComplete();
-    }, 3000); // 3 s — snappy yet long enough for the animation to register
-
+    }, 3000);
     return () => clearTimeout(timer);
   }, [onComplete]);
 
-  const isChat = mode === 'chat';
-
-  /* ── Mode-specific values ───────────────────────────────── */
-  const glowColor  = isChat ? 'bg-orange-500/20' : 'bg-red-500/20';
-  const barColor   = isChat ? 'bg-orange-500'    : 'bg-red-500';
-  const heading    = isChat ? 'Session Burned'   : 'File Destroyed';
-  const body       = isChat
+  const isChat  = mode === 'chat';
+  const color   = isChat ? '#C4461A' : '#B33A2E';
+  const glowBg  = isChat ? 'rgba(196,70,26,0.18)' : 'rgba(179,58,46,0.18)';
+  const heading = isChat ? 'Session Burned'   : 'File Destroyed';
+  const body    = isChat
     ? 'All messages have been permanently erased. No trace remains.'
     : 'This file has been permanently deleted and can no longer be accessed.';
 
   return (
-    <div className="fixed inset-0 bg-zinc-950 flex items-center justify-center z-[9999]">
-      <div className="flex flex-col items-center animate-fade-in text-center p-8">
+    <div style={{ position:'fixed', inset:0, background:'#EDE3CE', display:'flex', alignItems:'center', justifyContent:'center', zIndex:9999 }}>
+      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', textAlign:'center', padding:'2rem' }}>
 
-        {/* Icon — file-specific vs chat-specific */}
-        <div className="relative mb-8">
-          <div className={`absolute inset-0 ${glowColor} blur-3xl rounded-full animate-pulse-slow`} />
-
+        <div style={{ position:'relative', marginBottom:'2rem' }}>
+          <div style={{ position:'absolute', inset:0, background:glowBg, filter:'blur(40px)', borderRadius:'50%' }} />
           {isChat ? (
-            <Flame
-              className="text-orange-500 animate-bounce relative z-10"
-              size={80}
-              strokeWidth={1.5}
-            />
+            <Flame size={80} strokeWidth={1.5} style={{ color, position:'relative', zIndex:1, animation:'bounce 1s infinite' }} />
           ) : (
-            <FileX
-              className="text-red-500 animate-bounce relative z-10"
-              size={80}
-              strokeWidth={1.5}
-            />
+            <FileX  size={80} strokeWidth={1.5} style={{ color, position:'relative', zIndex:1, animation:'bounce 1s infinite' }} />
           )}
         </div>
 
-        {/* Copy */}
-        <h2 className="text-3xl font-bold text-white mb-2 tracking-tight">
+        <h2 style={{ fontSize:'1.875rem', fontWeight:700, color:'#2A2018', marginBottom:'0.5rem', letterSpacing:'-0.03em' }}>
           {heading}
         </h2>
-        <p className="text-zinc-400 max-w-xs mx-auto">
-          {body}
-        </p>
+        <p style={{ color:'#857358', maxWidth:'20rem', margin:'0 auto' }}>{body}</p>
 
-        {/* Progress bar */}
-        <div className="w-48 h-1 bg-zinc-800 rounded-full mt-8 overflow-hidden">
-          <div className={`h-full ${barColor} animate-progress-bar w-full origin-left`} />
+        <div style={{ width:'12rem', height:'0.25rem', background:'rgba(60,45,20,0.12)', borderRadius:'9999px', marginTop:'2rem', overflow:'hidden' }}>
+          <div style={{ height:'100%', background:color, animation:'progress-bar 3s linear forwards', transformOrigin:'left' }} />
         </div>
 
       </div>

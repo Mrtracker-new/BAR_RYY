@@ -33,7 +33,7 @@ const ErrorModal = ({ error, onClose }) => {
             onClick={onClose}
             style={{
               position: 'fixed', inset: 0, zIndex: 200,
-              background: 'rgba(0,0,0,0.7)',
+              background: 'rgba(60,45,20,0.12)',
               backdropFilter: 'blur(4px)',
               WebkitBackdropFilter: 'blur(4px)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -49,18 +49,18 @@ const ErrorModal = ({ error, onClose }) => {
               onClick={e => e.stopPropagation()}
               style={{
                 position: 'relative', width: '100%', maxWidth: 400,
-                background: '#0d0d0d',
-                border: '1px solid rgba(239,68,68,0.22)',
+                background: '#FAF4E6',
+                border: '1px solid rgba(179,58,46,0.22)',
                 borderRadius: '1rem',
                 overflow: 'hidden',
-                boxShadow: '0 8px 40px rgba(0,0,0,0.7)',
+                boxShadow: '0 8px 40px rgba(60,45,20,0.12)',
               }}
             >
               {/* Top accent */}
               <div
                 style={{
                   height: '1px',
-                  background: 'linear-gradient(90deg, rgba(239,68,68,0.55) 0%, rgba(239,68,68,0.15) 55%, transparent 100%)',
+                  background: 'linear-gradient(90deg, rgba(179,58,46,0.55) 0%, rgba(179,58,46,0.15) 55%, transparent 100%)',
                 }}
               />
 
@@ -77,16 +77,16 @@ const ErrorModal = ({ error, onClose }) => {
                     border: '1px solid transparent',
                     borderRadius: '0.375rem',
                     cursor: 'pointer',
-                    color: 'rgba(255,255,255,0.3)',
+                    color: 'rgba(60,45,20,0.45)',
                     transition: 'all 0.15s ease',
                   }}
                   onMouseOver={e => {
-                    e.currentTarget.style.color = 'rgba(255,255,255,0.7)';
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
-                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
+                    e.currentTarget.style.color = 'rgba(60,45,20,0.80)';
+                    e.currentTarget.style.background = 'rgba(60,45,20,0.08)';
+                    e.currentTarget.style.borderColor = 'rgba(60,45,20,0.16)';
                   }}
                   onMouseOut={e => {
-                    e.currentTarget.style.color = 'rgba(255,255,255,0.3)';
+                    e.currentTarget.style.color = 'rgba(60,45,20,0.45)';
                     e.currentTarget.style.background = 'transparent';
                     e.currentTarget.style.borderColor = 'transparent';
                   }}
@@ -99,12 +99,12 @@ const ErrorModal = ({ error, onClose }) => {
                   <div
                     style={{
                       width: 44, height: 44, borderRadius: '50%',
-                      background: 'rgba(239,68,68,0.08)',
-                      border: '1px solid rgba(239,68,68,0.18)',
+                      background: 'rgba(179,58,46,0.08)',
+                      border: '1px solid rgba(179,58,46,0.18)',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}
                   >
-                    <AlertCircle size={20} style={{ color: '#EF4444' }} />
+                    <AlertCircle size={20} style={{ color: '#B33A2E' }} />
                   </div>
                 </div>
 
@@ -112,7 +112,7 @@ const ErrorModal = ({ error, onClose }) => {
                 <h3
                   style={{
                     fontSize: '1rem', fontWeight: 700, letterSpacing: '-0.025em',
-                    color: '#efefef', textAlign: 'center', marginBottom: '0.875rem',
+                    color: '#2A2018', textAlign: 'center', marginBottom: '0.875rem',
                   }}
                 >
                   Something went wrong
@@ -122,15 +122,15 @@ const ErrorModal = ({ error, onClose }) => {
                 <div
                   style={{
                     padding: '0.75rem 1rem', borderRadius: '0.625rem',
-                    background: 'rgba(239,68,68,0.06)',
-                    border: '1px solid rgba(239,68,68,0.14)',
+                    background: 'rgba(179,58,46,0.06)',
+                    border: '1px solid rgba(179,58,46,0.14)',
                     marginBottom: '1.25rem',
                   }}
                 >
                   <p
                     style={{
                       /* Raised from 0.8125rem/#888888 — WCAG AA requires 4.5:1 */
-                      fontSize: '0.875rem', color: '#a0a0a0',
+                      fontSize: '0.875rem', color: '#55483A',
                       textAlign: 'center', lineHeight: 1.6,
                     }}
                   >
@@ -147,10 +147,10 @@ const ErrorModal = ({ error, onClose }) => {
                     minHeight: 44,
                     padding: '0 1rem',
                     borderRadius: '0.625rem',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(60,45,20,0.16)',
+                    background: 'rgba(60,45,20,0.06)',
                     /* Raised from 0.8125rem/#888888 */
-                    color: '#a0a0a0', fontSize: '0.875rem', fontWeight: 500,
+                    color: '#55483A', fontSize: '0.875rem', fontWeight: 500,
                     cursor: 'pointer', textAlign: 'center',
                     /* Specific transition — more performant than 'all' */
                     transition: 'background 0.15s ease, color 0.15s ease',
@@ -158,12 +158,12 @@ const ErrorModal = ({ error, onClose }) => {
                     fontFamily: 'inherit',
                   }}
                   onMouseOver={e => {
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+                    e.currentTarget.style.background = 'rgba(60,45,20,0.16)';
                     e.currentTarget.style.color = '#e0e0e0';
                   }}
                   onMouseOut={e => {
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
-                    e.currentTarget.style.color = '#a0a0a0';
+                    e.currentTarget.style.background = 'rgba(60,45,20,0.06)';
+                    e.currentTarget.style.color = '#55483A';
                   }}
                 >
                   Got it
@@ -174,7 +174,7 @@ const ErrorModal = ({ error, onClose }) => {
                     textAlign: 'center',
                     /* Raised from 0.625rem (10px) / #2a2a2a (near-invisible on dark bg) */
                     fontSize: '0.75rem',
-                    color: '#505050',
+                    color: '#857358',
                     marginTop: '0.75rem',
                     letterSpacing: '0.02em',
                   }}

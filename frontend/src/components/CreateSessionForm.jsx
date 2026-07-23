@@ -3,9 +3,9 @@ import axios from '../config/axios';
 import { Flame, Clock, AlertCircle, Loader } from 'lucide-react';
 
 const T = {
-  orange: '#F97316', red: '#EF4444', gold: '#E8A020',
-  border: 'rgba(255,255,255,0.06)',
-  text: '#efefef', textS: '#888888', textT: '#404040',
+  orange: '#C4461A', red: '#B33A2E', gold: '#B4791E',
+  border: 'rgba(60,45,20,0.08)',
+  text: '#2A2018', textS: '#55483A', textT: '#857358',
   mono: "'JetBrains Mono', monospace",
 };
 
@@ -96,8 +96,8 @@ export default function CreateSessionForm({ onCreated, compact = false }) {
                   padding: chipPad, borderRadius: '999px',
                   fontSize: '0.8125rem', fontWeight: 600,
                   cursor: 'pointer', transition: 'all 0.15s ease',
-                  background: active ? 'rgba(249,115,22,0.14)' : 'rgba(255,255,255,0.04)',
-                  border: `1px solid ${active ? 'rgba(249,115,22,0.35)' : T.border}`,
+                  background: active ? 'rgba(196,70,26,0.14)' : 'rgba(60,45,20,0.06)',
+                  border: `1px solid ${active ? 'rgba(196,70,26,0.35)' : T.border}`,
                   color: active ? T.orange : T.textS,
                 }}
               >
@@ -149,7 +149,7 @@ export default function CreateSessionForm({ onCreated, compact = false }) {
       <div style={{
         display: 'flex', alignItems: 'center', gap: compact ? '0.5rem' : '0.625rem',
         padding: infoPad, borderRadius: compact ? '0.5rem' : '0.625rem',
-        background: 'rgba(249,115,22,0.05)', border: '1px solid rgba(249,115,22,0.12)',
+        background: 'rgba(196,70,26,0.05)', border: '1px solid rgba(196,70,26,0.12)',
       }}>
         <Clock size={compact ? 13 : 14} style={{ color: T.orange, flexShrink: 0 }} />
         <p style={{ fontSize: '0.8125rem', color: T.textS, lineHeight: 1.5 }}>
@@ -165,10 +165,10 @@ export default function CreateSessionForm({ onCreated, compact = false }) {
           display: 'flex', gap: '0.5rem',
           padding: compact ? '0.75rem' : '0.75rem 1rem',
           borderRadius: compact ? '0.5rem' : '0.625rem',
-          background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.15)',
+          background: 'rgba(179,58,46,0.07)', border: '1px solid rgba(179,58,46,0.15)',
         }}>
           <AlertCircle size={14} style={{ color: T.red, flexShrink: 0 }} />
-          <p style={{ fontSize: '0.8125rem', color: '#fca5a5' }}>{error}</p>
+          <p style={{ fontSize: '0.8125rem', color: '#8A2B22' }}>{error}</p>
         </div>
       )}
 
@@ -182,13 +182,13 @@ export default function CreateSessionForm({ onCreated, compact = false }) {
           borderRadius: compact ? '0.625rem' : '0.75rem',
           border: 'none',
           background: validTtl && !creating
-            ? 'linear-gradient(160deg, #F97316 0%, #C05010 100%)'
-            : 'rgba(255,255,255,0.06)',
+            ? 'linear-gradient(160deg, #C4461A 0%, #9A3612 100%)'
+            : 'rgba(60,45,20,0.08)',
           color: validTtl && !creating ? '#fff' : T.textT,
           fontWeight: 700, fontSize: btnSize,
           cursor: validTtl && !creating ? 'pointer' : 'not-allowed',
           transition: 'all 0.2s ease',
-          boxShadow: validTtl && !creating ? '0 6px 24px rgba(249,115,22,0.25)' : 'none',
+          boxShadow: validTtl && !creating ? '0 6px 24px rgba(196,70,26,0.25)' : 'none',
           letterSpacing: '-0.015em',
         }}
       >

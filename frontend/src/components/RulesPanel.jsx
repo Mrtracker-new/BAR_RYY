@@ -10,33 +10,33 @@ import {
    Any change must propagate to all three sources.
 ───────────────────────────────────────────────────────────── */
 const T = {
-  gold:        '#E8A020',
-  goldLight:   '#F5BA3A',
-  goldMuted:   '#C8893A',
-  goldDim:     'rgba(232,160,32,0.10)',
-  goldBorder:  'rgba(232,160,32,0.22)',
-  goldBorderH: 'rgba(232,160,32,0.38)',
+  gold:        '#B4791E',
+  goldLight:   '#CE9530',
+  goldMuted:   '#8F5E16',
+  goldDim:     'rgba(180,121,30,0.10)',
+  goldBorder:  'rgba(180,121,30,0.22)',
+  goldBorderH: 'rgba(180,121,30,0.38)',
 
   /* Text — all WCAG AA against #070707 */
-  textPrimary:   '#f0f0f0',    /* 15.8:1 AAA */
-  textSecondary: '#a0a0a0',    /*  6.3:1  AA */
-  textTertiary:  '#636363',    /*  4.9:1  AA */
-  textDim:       '#424242',    /*  3.6:1  decorative only */
+  textPrimary:   '#2A2018',    /* 15.8:1 AAA */
+  textSecondary: '#55483A',    /*  6.3:1  AA */
+  textTertiary:  '#857358',    /*  4.9:1  AA */
+  textDim:       '#A2916F',    /*  3.6:1  decorative only */
 
   /* Surfaces */
-  surface0: '#0e0e0e',
-  surface1: '#141414',
-  surface2: '#1a1a1a',
-  surface3: '#212121',
+  surface0: '#FAF4E6',
+  surface1: '#FFFDF6',
+  surface2: '#F1E8D3',
+  surface3: '#E6D9BC',
 
   /* Borders */
-  border:      'rgba(255,255,255,0.07)',
-  borderHover: 'rgba(255,255,255,0.13)',
+  border:      'rgba(60,45,20,0.16)',
+  borderHover: 'rgba(60,45,20,0.30)',
 
   /* Semantic */
-  red:       '#EF4444',
-  redDim:    'rgba(239,68,68,0.08)',
-  redBorder: 'rgba(239,68,68,0.18)',
+  red:       '#B33A2E',
+  redDim:    'rgba(179,58,46,0.08)',
+  redBorder: 'rgba(179,58,46,0.18)',
 
   /* Font */
   mono: "'JetBrains Mono', monospace",
@@ -89,7 +89,7 @@ function Sep() {
     <div
       style={{
         height: 1,
-        background: 'rgba(255,255,255,0.05)',   /* slightly lifted from 0.04 */
+        background: 'rgba(60,45,20,0.06)',   /* slightly lifted from 0.04 */
         margin: '1.125rem 0',
       }}
     />
@@ -118,7 +118,7 @@ function ModeCard({ active, icon: Icon, label, sub, onClick }) {
           : `1px solid ${T.border}`,
         background: active
           ? T.goldDim
-          : 'rgba(255,255,255,0.02)',
+          : 'rgba(60,45,20,0.04)',
         cursor: 'pointer', textAlign: 'left',
         transition: 'border-color 0.18s ease, background 0.18s ease',
         position: 'relative',
@@ -136,7 +136,7 @@ function ModeCard({ active, icon: Icon, label, sub, onClick }) {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
         >
-          <Check size={9} style={{ color: '#000' }} strokeWidth={3} />
+          <Check size={9} style={{ color: '#2A2018' }} strokeWidth={3} />
         </div>
       )}
 
@@ -161,7 +161,7 @@ function ModeCard({ active, icon: Icon, label, sub, onClick }) {
       <p
         style={{
           fontSize: '0.75rem',           /* 12px — raised from 11px */
-          color: '#505050',              /* raised from #3a3a3a (near-invisible) */
+          color: '#857358',              /* raised from #3a3a3a (near-invisible) */
           lineHeight: 1.45,
           margin: 0,
         }}
@@ -237,7 +237,7 @@ function ToggleRow({ checked, onChange, label, description }) {
         <p
           style={{
             fontSize: '0.75rem',         /* 12px — raised from 11px */
-            color: '#505050',            /* raised from #3a3a3a (near-invisible) */
+            color: '#857358',            /* raised from #3a3a3a (near-invisible) */
             lineHeight: 1.5,
             margin: 0,
           }}
@@ -326,7 +326,7 @@ function OtpEmailManager({ emails, onChange }) {
             marginLeft: 'auto',
             fontSize: '0.6875rem', fontWeight: 700,
             color: atMax ? T.gold : T.textTertiary,
-            background: atMax ? 'rgba(232,160,32,0.08)' : 'rgba(255,255,255,0.04)',
+            background: atMax ? 'rgba(180,121,30,0.08)' : 'rgba(60,45,20,0.06)',
             border: `1px solid ${atMax ? T.goldBorder : T.border}`,
             borderRadius: '999px', padding: '0.1rem 0.45rem',
             flexShrink: 0,
@@ -359,7 +359,7 @@ function OtpEmailManager({ emails, onChange }) {
             width: 36, height: 36,           /* slightly larger for tap target */
             borderRadius: '0.4rem',
             background: atMax || !draft.trim()
-              ? 'rgba(255,255,255,0.03)'
+              ? 'rgba(60,45,20,0.04)'
               : T.goldDim,
             border: `1px solid ${atMax || !draft.trim()
               ? T.border
@@ -469,7 +469,7 @@ function RefreshCard({ isActive, icon: Icon, label, sub, onClick }) {
         padding: '0.625rem 0.75rem',
         borderRadius: '0.5rem',
         border: isActive ? `1px solid ${T.goldBorder}` : `1px solid ${T.border}`,
-        background: isActive ? T.goldDim : 'rgba(255,255,255,0.02)',
+        background: isActive ? T.goldDim : 'rgba(60,45,20,0.04)',
         cursor: 'pointer', textAlign: 'left',
         transition: 'all 0.18s ease',
         minWidth: 0,
@@ -494,7 +494,7 @@ function RefreshCard({ isActive, icon: Icon, label, sub, onClick }) {
       <p
         style={{
           fontSize: '0.75rem',           /* 12px — raised from 11px */
-          color: '#505050',              /* raised from #3a3a3a */
+          color: '#857358',              /* raised from #3a3a3a */
           lineHeight: 1.4, margin: 0,
         }}
       >
@@ -566,14 +566,14 @@ const RulesPanel = ({ rules, onRulesChange }) => {
             marginBottom: '1.125rem',
             padding: '0.625rem 0.75rem',
             borderRadius: '0.5rem',
-            background: 'rgba(255,255,255,0.02)',
+            background: 'rgba(60,45,20,0.04)',
             border: `1px solid ${T.border}`,
           }}
         >
           <p
             style={{
               fontSize: '0.8125rem',     /* 13px — inline explanatory text */
-              color: '#505050',          /* raised from #303030 */
+              color: '#857358',          /* raised from #303030 */
               lineHeight: 1.55, margin: 0,
             }}
           >

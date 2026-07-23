@@ -3,7 +3,7 @@ import { Upload, File, X, FileText, Image, Film, Music, Archive, Lock } from 'lu
 
 /* ── File type → icon + accent color ── */
 function getFileType(file) {
-  if (!file) return { Icon: File, label: 'File', color: '#555' };
+  if (!file) return { Icon: File, label: 'File', color: '#857358' };
   const t = file.type;
   if (t.startsWith('image/'))  return { Icon: Image,    label: 'Image',    color: '#38BDF8' };
   if (t.startsWith('video/'))  return { Icon: Film,     label: 'Video',    color: '#A78BFA' };
@@ -12,7 +12,7 @@ function getFileType(file) {
   if (t.includes('zip') || t.includes('rar') || t.includes('archive'))
     return { Icon: Archive, label: 'Archive', color: '#FBBF24' };
   if (t.includes('document') || t.includes('word') || t.includes('text'))
-    return { Icon: FileText, label: 'Document', color: '#60A5FA' };
+    return { Icon: FileText, label: 'Document', color: '#2C4A6E' };
   return { Icon: File, label: 'File', color: '#666' };
 }
 
@@ -27,7 +27,7 @@ function fmtSize(bytes) {
 const TYPE_PILLS = [
   { label: 'Images', color: '#38BDF8' },
   { label: 'PDF',    color: '#FB7185' },
-  { label: 'Docs',   color: '#60A5FA' },
+  { label: 'Docs',   color: '#2C4A6E' },
   { label: 'Archives', color: '#FBBF24' },
 ];
 
@@ -79,8 +79,8 @@ const FileUpload = ({ onFileSelect, uploadedFile, onRemove, filePreview }) => {
           padding: '3rem 1.5rem',
           textAlign: 'center',
           userSelect: 'none',
-          borderColor: isDragging ? 'rgba(232,160,32,0.45)' : undefined,
-          background: isDragging ? 'rgba(232,160,32,0.03)' : undefined,
+          borderColor: isDragging ? 'rgba(180,121,30,0.45)' : undefined,
+          background: isDragging ? 'rgba(180,121,30,0.03)' : undefined,
         }}
       >
         <input ref={inputRef} type="file" style={{ display: 'none' }} onChange={handleInput} />
@@ -89,8 +89,8 @@ const FileUpload = ({ onFileSelect, uploadedFile, onRemove, filePreview }) => {
         <div
           style={{
             width: 44, height: 44, borderRadius: '0.625rem',
-            border: `1px solid ${isDragging ? 'rgba(232,160,32,0.35)' : 'rgba(255,255,255,0.07)'}`,
-            background: isDragging ? 'rgba(232,160,32,0.08)' : 'rgba(255,255,255,0.03)',
+            border: `1px solid ${isDragging ? 'rgba(180,121,30,0.35)' : 'rgba(60,45,20,0.16)'}`,
+            background: isDragging ? 'rgba(180,121,30,0.08)' : 'rgba(60,45,20,0.04)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             margin: '0 auto 1rem',
             transition: 'all 0.2s ease',
@@ -99,7 +99,7 @@ const FileUpload = ({ onFileSelect, uploadedFile, onRemove, filePreview }) => {
           <Upload
             size={16}
             style={{
-              color: isDragging ? '#E8A020' : '#3a3a3a',
+              color: isDragging ? '#B4791E' : '#857358',
               transition: 'color 0.2s ease',
             }}
           />
@@ -108,7 +108,7 @@ const FileUpload = ({ onFileSelect, uploadedFile, onRemove, filePreview }) => {
         <p
           style={{
             fontSize: '0.9375rem', fontWeight: 600, letterSpacing: '-0.02em',
-            color: isDragging ? '#E8A020' : '#999',
+            color: isDragging ? '#B4791E' : '#857358',
             marginBottom: '0.3rem', transition: 'color 0.2s ease',
           }}
         >
@@ -116,7 +116,7 @@ const FileUpload = ({ onFileSelect, uploadedFile, onRemove, filePreview }) => {
         </p>
         <p
           style={{
-            fontSize: '0.8125rem', color: '#313131',
+            fontSize: '0.8125rem', color: '#A2916F',
             marginBottom: '1.5rem', letterSpacing: '-0.01em',
           }}
         >
@@ -149,8 +149,8 @@ const FileUpload = ({ onFileSelect, uploadedFile, onRemove, filePreview }) => {
     <div
       style={{
         borderRadius: '0.625rem',
-        border: '1px solid rgba(232,160,32,0.18)',
-        background: 'rgba(232,160,32,0.03)',
+        border: '1px solid rgba(180,121,30,0.18)',
+        background: 'rgba(180,121,30,0.03)',
         overflow: 'hidden',
       }}
     >
@@ -171,14 +171,14 @@ const FileUpload = ({ onFileSelect, uploadedFile, onRemove, filePreview }) => {
         <div style={{ flex: 1, minWidth: 0 }}>
           <p
             style={{
-              fontSize: '0.875rem', fontWeight: 600, color: '#ddd',
+              fontSize: '0.875rem', fontWeight: 600, color: '#2A2018',
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
               letterSpacing: '-0.015em', marginBottom: '0.125rem',
             }}
           >
             {uploadedFile.name}
           </p>
-          <p style={{ fontSize: '0.6875rem', color: '#3a3a3a', fontFamily: "'JetBrains Mono', monospace" }}>
+          <p style={{ fontSize: '0.6875rem', color: '#857358', fontFamily: "'JetBrains Mono', monospace" }}>
             {label} · {fmtSize(uploadedFile.size)}
           </p>
         </div>
@@ -190,8 +190,8 @@ const FileUpload = ({ onFileSelect, uploadedFile, onRemove, filePreview }) => {
           className="btn-icon"
           style={{ width: 28, height: 28 }}
           onMouseOver={e => {
-            e.currentTarget.style.background = 'rgba(239,68,68,0.08)';
-            e.currentTarget.style.borderColor = 'rgba(239,68,68,0.2)';
+            e.currentTarget.style.background = 'rgba(179,58,46,0.08)';
+            e.currentTarget.style.borderColor = 'rgba(179,58,46,0.2)';
             e.currentTarget.style.color = '#f87171';
           }}
           onMouseOut={e => {
@@ -208,20 +208,20 @@ const FileUpload = ({ onFileSelect, uploadedFile, onRemove, filePreview }) => {
       <div
         style={{
           padding: '0.4375rem 1rem',
-          borderTop: '1px solid rgba(232,160,32,0.10)',
+          borderTop: '1px solid rgba(180,121,30,0.10)',
           display: 'flex', alignItems: 'center', gap: '0.5rem',
-          background: 'rgba(232,160,32,0.03)',
+          background: 'rgba(180,121,30,0.03)',
         }}
       >
-        <Lock size={10} style={{ color: '#E8A020', flexShrink: 0 }} />
-        <span style={{ fontSize: '0.6875rem', color: '#3a3a3a', fontWeight: 500, letterSpacing: '-0.01em' }}>
+        <Lock size={10} style={{ color: '#B4791E', flexShrink: 0 }} />
+        <span style={{ fontSize: '0.6875rem', color: '#857358', fontWeight: 500, letterSpacing: '-0.01em' }}>
           Ready to seal — configure rules and encrypt
         </span>
       </div>
 
       {/* Image preview */}
       {(filePreview || localPreview) && (
-        <div style={{ borderTop: '1px solid rgba(232,160,32,0.08)' }}>
+        <div style={{ borderTop: '1px solid rgba(180,121,30,0.08)' }}>
           <img
             src={filePreview || localPreview}
             alt="Preview"

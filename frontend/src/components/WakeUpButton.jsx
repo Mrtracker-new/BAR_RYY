@@ -5,25 +5,25 @@ import { Loader, CheckCircle, XCircle, Power, Clock } from 'lucide-react';
    DESIGN TOKENS — consistent with index.css :root
 ───────────────────────────────────────────────────────────── */
 const T = {
-  green:       '#22C55E',
-  greenDim:    'rgba(34,197,94,0.08)',
-  greenBorder: 'rgba(34,197,94,0.22)',
-  red:         '#EF4444',
-  redDim:      'rgba(239,68,68,0.08)',
-  redBorder:   'rgba(239,68,68,0.22)',
-  gold:        '#E8A020',
-  goldDim:     'rgba(232,160,32,0.08)',
-  goldBorder:  'rgba(232,160,32,0.22)',
+  green:       '#3F7D3A',
+  greenDim:    'rgba(63,125,58,0.08)',
+  greenBorder: 'rgba(63,125,58,0.22)',
+  red:         '#B33A2E',
+  redDim:      'rgba(179,58,46,0.08)',
+  redBorder:   'rgba(179,58,46,0.22)',
+  gold:        '#B4791E',
+  goldDim:     'rgba(180,121,30,0.08)',
+  goldBorder:  'rgba(180,121,30,0.22)',
   /* Text */
-  textPrimary:   '#f0f0f0',
-  textSecondary: '#a0a0a0',
-  textTertiary:  '#636363',
-  textDim:       '#505050',
+  textPrimary:   '#2A2018',
+  textSecondary: '#55483A',
+  textTertiary:  '#857358',
+  textDim:       '#857358',
   /* Surfaces */
-  border:      'rgba(255,255,255,0.07)',
-  borderHover: 'rgba(255,255,255,0.13)',
-  surface1:    'rgba(255,255,255,0.04)',
-  surfaceH:    'rgba(255,255,255,0.07)',
+  border:      'rgba(60,45,20,0.16)',
+  borderHover: 'rgba(60,45,20,0.30)',
+  surface1:    'rgba(60,45,20,0.06)',
+  surfaceH:    'rgba(60,45,20,0.16)',
 };
 
 const STATES = {
@@ -65,8 +65,8 @@ const STATES = {
     pulse:   false,
   },
   cooldown: {
-    bg:      'rgba(255,255,255,0.02)',
-    border:  'rgba(255,255,255,0.05)',
+    bg:      'rgba(60,45,20,0.04)',
+    border:  'rgba(60,45,20,0.06)',
     color:   T.textDim,
     cursor:  'not-allowed',
     icon:    Clock,
@@ -205,7 +205,7 @@ const WakeUpButton = ({ compact = false }) => {
           e.currentTarget.style.color          = T.textPrimary;
         }
         if (!disabled && status === 'error') {
-          e.currentTarget.style.background = 'rgba(239,68,68,0.14)';
+          e.currentTarget.style.background = 'rgba(179,58,46,0.14)';
         }
       }}
       onMouseOut={e => {
@@ -227,7 +227,7 @@ const WakeUpButton = ({ compact = false }) => {
         aria-hidden="true"
         style={{
           position: 'absolute', inset: 0, pointerEvents: 'none',
-          background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, transparent 60%)',
+          background: 'linear-gradient(135deg, rgba(60,45,20,0.06) 0%, transparent 60%)',
           borderRadius: 'inherit',
         }}
       />

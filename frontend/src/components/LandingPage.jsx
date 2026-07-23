@@ -39,25 +39,25 @@ const scaleIn = (delay = 0) => ({
 const FEATURES = [
   {
     icon:        Shield,
-    accentColor: "#22C55E",
+    accentColor: "#3F7D3A",
     title:       "AES-256 Encryption",
     description: "Military-grade symmetric encryption. Your data is sealed before it ever leaves your browser — the server only ever holds ciphertext.",
   },
   {
     icon:        Zap,
-    accentColor: "#E8A020",
+    accentColor: "#B4791E",
     title:       "Self-Destruct",
     description: "Files vanish permanently after the view limit or expiry window is reached. No traces remain on disk or in memory.",
   },
   {
     icon:        Lock,
-    accentColor: "#C8893A",
+    accentColor: "#8F5E16",
     title:       "Zero Knowledge",
     description: "We never see your data. The decryption key lives only with the recipient — we cannot access or recover it.",
   },
   {
     icon:        Clock,
-    accentColor: "#6B7FD4",
+    accentColor: "#2C4A6E",
     title:       "Custom Expiry",
     description: "Define exact time-to-live windows. Minutes, hours, or days — your rules, fully enforced server-side.",
   },
@@ -73,25 +73,25 @@ const FEATURES = [
 const BURN_CHAT_FEATURES = [
   {
     icon:        Flame,
-    accentColor: "#F97316",
+    accentColor: "#C4461A",
     title:       "Auto-Destructs",
     description: "The entire session — messages, participants, history — is permanently erased when the timer hits zero. No recovery, by anyone.",
   },
   {
     icon:        Lock,
-    accentColor: "#22C55E",
+    accentColor: "#3F7D3A",
     title:       "End-to-End Encrypted",
     description: "Messages are encrypted in your browser using AES-GCM-256 before leaving your device. The server only ever relays ciphertext.",
   },
   {
     icon:        Zap,
-    accentColor: "#C8893A",
+    accentColor: "#8F5E16",
     title:       "Real-Time",
     description: "Powered by WebSockets. Messages appear instantly across all participants — no polling, no delay, no missed messages.",
   },
   {
     icon:        Shield,
-    accentColor: "#6B7FD4",
+    accentColor: "#2C4A6E",
     title:       "Key Fingerprint",
     description: "A 6-char session code lets participants verify the encryption key out-of-band. Mismatched codes mean compromised sessions.",
   },
@@ -110,38 +110,42 @@ const TRUST_ITEMS = [
    so the JSX tokens stay in sync with index.css.
 ───────────────────────────────────────────────────────────── */
 const T = {
-  /* text colours — identical to CSS :root */
-  textPrimary:   "#f0f0f0",
-  textSecondary: "#a0a0a0",
-  textTertiary:  "#636363",
-  textDim:       "#424242",
-  textMuted:     "#2a2a2a",
+  /* text — ink on cream */
+  textPrimary:   "#2A2018",
+  textSecondary: "#55483A",
+  textTertiary:  "#857358",
+  textDim:       "#A2916F",
+  textMuted:     "#C3B48F",
 
-  /* gold */
-  gold:        "#E8A020",
-  goldLight:   "#F5BA3A",
-  goldMuted:   "#C8893A",
-  goldBorder:  "rgba(232,160,32,0.22)",
-  goldDim:     "rgba(232,160,32,0.10)",
+  /* gold — wax-seal amber */
+  gold:        "#B4791E",
+  goldLight:   "#CE9530",
+  goldMuted:   "#8F5E16",
+  goldBorder:  "rgba(180,121,30,0.32)",
+  goldDim:     "rgba(180,121,30,0.12)",
 
   /* orange — BurnChat only */
-  orange:       "#F97316",
-  orangeDim:    "rgba(249,115,22,0.09)",
-  orangeBorder: "rgba(249,115,22,0.22)",
-  orangeHover:  "rgba(249,115,22,0.16)",
-  orangeBorderHover: "rgba(249,115,22,0.40)",
+  orange:       "#C4461A",
+  orangeDim:    "rgba(196,70,26,0.09)",
+  orangeBorder: "rgba(196,70,26,0.28)",
+  orangeHover:  "rgba(196,70,26,0.14)",
+  orangeBorderHover: "rgba(196,70,26,0.46)",
 
-  /* surfaces */
-  bg:       "#070707",
-  surface0: "#0e0e0e",
+  /* surfaces — cream paper */
+  bg:       "#EDE3CE",
+  surface0: "#FAF4E6",
 
-  /* borders */
-  border:       "rgba(255,255,255,0.07)",
-  borderStrong: "rgba(255,255,255,0.10)",
+  /* borders — pencil lines */
+  border:       "rgba(60,45,20,0.16)",
+  borderStrong: "rgba(60,45,20,0.24)",
 
   /* navbar */
-  navbarBg:   "rgba(7,7,7,0.92)",
-  navbarBlur: "blur(22px) saturate(160%)",
+  navbarBg:   "rgba(250,244,230,0.92)",
+  navbarBlur: "blur(18px) saturate(150%)",
+
+  /* fonts */
+  hand:  "'Caveat', 'Patrick Hand', cursive",
+  print: "'Patrick Hand', cursive",
 };
 
 /* ─────────────────────────────────────────────────────────────
@@ -199,7 +203,7 @@ function Navbar({ onLaunch }) {
         }
         .lp-nav-link:hover {
           color: ${T.textPrimary};
-          background: rgba(255,255,255,0.06);
+          background: rgba(60,45,20,0.06);
           opacity: 1;
         }
         /* Icon sits at a fixed size; it must not shrink */
@@ -228,26 +232,26 @@ function Navbar({ onLaunch }) {
         /* ── Primary CTA pill — "Launch App" ── */
         .lp-nav-launch {
           display: inline-flex; align-items: center; gap: 0.4rem;
-          /* 36px min-height on mobile, 38px text on desktop via padding */
           min-height: 36px;
           padding: 0.4375rem 1.0625rem;
-          font-family: inherit;
-          font-size: 0.875rem; font-weight: 700; letter-spacing: -0.02em;
-          color: #000;
+          font-family: 'Patrick Hand', cursive;
+          font-size: 1.1rem; font-weight: 400; letter-spacing: 0.01em;
+          color: #FFF8EA;
           background: linear-gradient(160deg, ${T.goldLight} 0%, ${T.gold} 100%);
-          border: none; border-radius: 999px; cursor: pointer;
-          box-shadow: 0 2px 10px rgba(232,160,32,0.25);
-          transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
-          white-space: nowrap;
-          flex-shrink: 0;
+          border: none; border-radius: 10px 12px 11px 13px / 13px 11px 12px 10px;
+          cursor: pointer;
+          box-shadow: 0 2px 10px rgba(180,121,30,0.28), 0 0 0 1.5px rgba(60,40,10,0.25) inset;
+          transition: transform 0.18s ease, box-shadow 0.18s ease;
+          white-space: nowrap; flex-shrink: 0;
+          text-shadow: 0 1px 1px rgba(60,40,10,0.35);
         }
         .lp-nav-launch:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 4px 18px rgba(232,160,32,0.35);
+          transform: translateY(-1px) rotate(-0.4deg);
+          box-shadow: 0 4px 18px rgba(180,121,30,0.38), 0 0 0 1.5px rgba(60,40,10,0.30) inset;
         }
         .lp-nav-launch:active {
-          transform: translateY(0);
-          box-shadow: 0 2px 8px rgba(232,160,32,0.22);
+          transform: translateY(1px) scale(0.985);
+          box-shadow: 0 1px 6px rgba(180,121,30,0.22), 0 0 0 1.5px rgba(60,40,10,0.35) inset;
         }
         /* Hide "Launch App" label below 480px — icon alone is clear enough
            at that breakpoint and prevents label overflow on tiny phones     */
@@ -284,11 +288,12 @@ function Navbar({ onLaunch }) {
             </div>
             <span
               style={{
-                fontSize: "1rem", fontWeight: 700, letterSpacing: "-0.03em",
-                color: T.textPrimary,
+                fontFamily: T.hand,
+                fontSize: "1.5rem", fontWeight: 700, letterSpacing: "0.01em",
+                color: T.textPrimary, lineHeight: 1,
               }}
             >
-              BAR<span style={{ color: T.textDim, fontWeight: 400 }}>.web</span>
+              BAR<span style={{ color: T.gold, fontWeight: 400 }}>.web</span>
             </span>
           </button>
 
@@ -352,7 +357,7 @@ function HeroBadge() {
         style={{
           display: "inline-flex", alignItems: "center", gap: "0.5rem",
           padding: "0.375rem 1rem", borderRadius: "999px",
-          background: "rgba(232,160,32,0.08)", border: `1px solid ${T.goldBorder}`,
+          background: T.goldDim, border: `1px solid ${T.goldBorder}`,
           fontSize: "var(--text-2xs)", fontWeight: 700, letterSpacing: "0.09em",
           textTransform: "uppercase", color: T.goldMuted,
         }}
@@ -360,8 +365,8 @@ function HeroBadge() {
         <span
           style={{
             width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
-            background: "#22C55E",
-            boxShadow: "0 0 6px rgba(34,197,94,0.85)",
+            background: "#3F7D3A",
+            boxShadow: "0 0 6px rgba(63,125,58,0.75)",
             animation: "pulse 2s ease-in-out infinite",
           }}
         />
@@ -394,18 +399,17 @@ function HeroTitle() {
           className="glow-text"
           style={{
             display: "block",
-            background: "linear-gradient(135deg, #F5BA3A 0%, #E8A020 45%, #B87820 100%)",
+            background: "linear-gradient(135deg, #CE9530 0%, #B4791E 45%, #8F5E16 100%)",
             WebkitBackgroundClip: "text", backgroundClip: "text",
             WebkitTextFillColor: "transparent",
           }}
         >
           Burn After
         </span>
-        {/* "Reading" is intentionally dimmed — typographic depth, not body text */}
         <span
           style={{
             display: "block",
-            color: "#3a3a3a",           /* raised from #2e2e2e — still dramatic but not invisible */
+            color: T.textSecondary,
             marginTop: "0.05em",
           }}
         >
@@ -542,7 +546,7 @@ function TrustBar() {
         justifyContent: "center", alignItems: "center",
         gap: "0.5rem 1.5rem",
         marginTop: "3.5rem", paddingTop: "2rem",
-        borderTop: `1px solid rgba(255,255,255,0.06)`,
+        borderTop: `1px solid ${T.border}`,
       }}
     >
       {TRUST_ITEMS.map(({ label, dot }, i) => (
@@ -740,9 +744,9 @@ function BurnChatHighlight({ onBurnChat }) {
       <div
         style={{
           borderRadius: "1.25rem",
-          border: `1px solid rgba(249,115,22,0.20)`,
+          border: `1px solid ${T.orangeBorder}`,
           background: T.surface0,
-          boxShadow: "0 0 0 1px rgba(249,115,22,0.06), 0 16px 48px rgba(249,115,22,0.07)",
+          boxShadow: `0 0 0 1px ${T.orangeDim}, 0 16px 48px rgba(196,70,26,0.07)`,
           overflow: "hidden",
         }}
       >
@@ -751,7 +755,7 @@ function BurnChatHighlight({ onBurnChat }) {
           aria-hidden="true"
           style={{
             height: "1px",
-            background: "linear-gradient(90deg, rgba(249,115,22,0.75) 0%, rgba(249,115,22,0.25) 50%, transparent 100%)",
+            background: `linear-gradient(90deg, ${T.orange}BF 0%, ${T.orange}40 50%, transparent 100%)`,
           }}
         />
 
@@ -774,8 +778,8 @@ function BurnChatHighlight({ onBurnChat }) {
               <div
                 style={{
                   width: 40, height: 40, borderRadius: "0.625rem",
-                  background: "rgba(249,115,22,0.10)",
-                  border: "1px solid rgba(249,115,22,0.25)",
+                  background: T.orangeDim,
+                  border: `1px solid ${T.orangeBorder}`,
                   display: "flex", alignItems: "center", justifyContent: "center",
                   flexShrink: 0,
                 }}
@@ -817,7 +821,7 @@ function BurnChatHighlight({ onBurnChat }) {
               <span
                 style={{
                   display: "block",
-                  background: "linear-gradient(135deg, #FB923C 0%, #F97316 45%, #EA6010 100%)",
+                  background: `linear-gradient(135deg, #D2591F 0%, ${T.orange} 45%, #9A3612 100%)`,
                   WebkitBackgroundClip: "text", backgroundClip: "text",
                   WebkitTextFillColor: "transparent",
                 }}
@@ -861,20 +865,20 @@ function BurnChatHighlight({ onBurnChat }) {
                   padding: "0.75rem 1.75rem",
                   fontSize: "var(--text-base)", fontWeight: 700,
                   letterSpacing: "-0.015em",
-                  color: "#fff",
-                  background: "linear-gradient(160deg, #FB923C 0%, #F97316 50%, #EA6010 100%)",
+                  color: "#FFF8EA",
+                  background: `linear-gradient(160deg, #D2591F 0%, ${T.orange} 50%, #9A3612 100%)`,
                   border: "none", borderRadius: "999px", cursor: "pointer",
-                  boxShadow: "0 4px 20px rgba(249,115,22,0.30)",
+                  boxShadow: "0 4px 20px rgba(196,70,26,0.30)",
                   transition: "transform 0.18s ease, box-shadow 0.18s ease",
                   whiteSpace: "nowrap",
                 }}
                 onMouseOver={e => {
                   e.currentTarget.style.transform = "translateY(-2px)";
-                  e.currentTarget.style.boxShadow = "0 6px 28px rgba(249,115,22,0.40)";
+                  e.currentTarget.style.boxShadow = "0 6px 28px rgba(196,70,26,0.40)";
                 }}
                 onMouseOut={e => {
                   e.currentTarget.style.transform = "";
-                  e.currentTarget.style.boxShadow = "0 4px 20px rgba(249,115,22,0.30)";
+                  e.currentTarget.style.boxShadow = "0 4px 20px rgba(196,70,26,0.30)";
                 }}
               >
                 <Flame size={16} />
@@ -903,20 +907,20 @@ function BurnChatHighlight({ onBurnChat }) {
                   transition={{ duration: 0.5, ease: EASE, delay: i * 0.07 }}
                   style={{
                     padding: "1rem",
-                    borderRadius: "0.875rem",
-                    border: `1px solid rgba(255,255,255,0.07)`,
-                    background: "rgba(255,255,255,0.025)",
+                    borderRadius: "8px 12px 10px 11px / 11px 10px 12px 8px",
+                    border: `1px solid ${T.border}`,
+                    background: "#FFFDF6",
                     display: "flex", flexDirection: "column", gap: "0.625rem",
                     /* Subtle hover lift — pure CSS via transition */
                     transition: "border-color 0.2s ease, background 0.2s ease",
                   }}
                   onMouseEnter={e => {
-                    e.currentTarget.style.borderColor = `${feature.accentColor}35`;
-                    e.currentTarget.style.background = `${feature.accentColor}06`;
+                    e.currentTarget.style.borderColor = `${feature.accentColor}55`;
+                    e.currentTarget.style.background = `${feature.accentColor}0E`;
                   }}
                   onMouseLeave={e => {
-                    e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)";
-                    e.currentTarget.style.background = "rgba(255,255,255,0.025)";
+                    e.currentTarget.style.borderColor = "rgba(60,45,20,0.16)";
+                    e.currentTarget.style.background = "#FFFDF6";
                   }}
                 >
                   {/* Icon box */}
@@ -985,7 +989,7 @@ const LandingPage = () => {
             width: "clamp(320px, 60vw, 800px)",
             height: "clamp(320px, 60vw, 800px)",
             borderRadius: "50%",
-            background: "radial-gradient(circle, rgba(232,160,32,0.07) 0%, transparent 65%)",
+            background: "radial-gradient(circle, rgba(180,121,30,0.07) 0%, transparent 65%)",
             animation: "glow-pulse 7s ease-in-out infinite",
           }}
         />
