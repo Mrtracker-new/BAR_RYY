@@ -11,7 +11,7 @@ from services.file_service import FileService
 from services.encryption_service import EncryptionService
 from api.dependencies import get_file_service_dep, get_encryption_service_dep
 from utils import crypto_utils
-from services import qr_generator
+
 
 logger = logging.getLogger(__name__)
 
@@ -101,14 +101,6 @@ async def seal_container(
                 frontend_base_url=base_url
             )
             
-            # Generate QR code
-            logo_path = os.path.join(os.path.dirname(__file__), "..", "..", "BAR_web.png")
-            try:
-                qr_base64 = qr_generator.generate_themed_qr(server_result["share_url"], logo_path)
-            except Exception as e:
-                logger.warning('Failed to generate themed QR code: %s', e)
-                qr_base64 = qr_generator.generate_simple_qr(server_result["share_url"])
-            
             if request.require_otp:
                 count = len(request.otp_emails or [])
                 logger.info('2FA enabled — OTP will be sent to %d recipient(s)', count)
@@ -118,7 +110,6 @@ async def seal_container(
                 "storage_mode": "server",
                 "access_token": server_result["access_token"],
                 "share_url": server_result["share_url"],
-                "qr_code": qr_base64,
                 "analytics_url": f"/analytics/{server_result['access_token']}",
                 "analytics_key": server_result["analytics_key"],
                 "metadata": bar_result["metadata"],
