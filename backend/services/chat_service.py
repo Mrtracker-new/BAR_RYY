@@ -323,7 +323,12 @@ async def _broadcast(
     payload: dict,
     exclude_ws_id: Optional[str] = None,
 ) -> None:
-    """Send *payload* to every participant, silently removing dead connections."""
+    """Send *payload* to every participant, removing dead connections.
+
+    When a send fails the participant is dropped and a ``system`` message is
+    broadcast so remaining clients see the departure and an up-to-date
+    participant list instead of a silently stale count.
+    """
     dead: list[str] = []
     for ws_id, participant in list(session.participants.items()):
         if ws_id == exclude_ws_id:
@@ -333,8 +338,25 @@ async def _broadcast(
         except Exception:
             dead.append(ws_id)
 
-    for ws_id in dead:
-        session.participants.pop(ws_id, None)
+    # Pop all dead connections first, then announce — so the participant_list
+    # in each notification already excludes every disconnected member.
+    removed = [session.participants.pop(ws_id, None) for ws_id in dead]
+    removed = [p for p in removed if p is not None]
+
+    for participant in removed:
+        participant_list = [
+            {"ws_id": p.ws_id, "name": p.name, "is_creator": p.is_creator}
+            for p in session.participants.values()
+        ]
+        await _broadcast(
+            session,
+            {
+                "type": "system",
+                "text": f"{participant.name} disconnected",
+                "participant_count": len(session.participants),
+                "participant_list": participant_list,
+            },
+        )
 
 
 # ---------------------------------------------------------------------------
