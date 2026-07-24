@@ -831,7 +831,10 @@ async def broadcast_message(
 
 
 async def leave_session(token: str, ws_id: str) -> None:
-    session = _SESSIONS.get(token)
+    # Use get_session (not raw _SESSIONS.get) so an expired-but-not-yet-purged
+    # session returns None here — prevents a "{name} left" broadcast racing
+    # ahead of the "destroyed" event on a session that is already burning.
+    session = get_session(token)
     if session is None:
         return
 
