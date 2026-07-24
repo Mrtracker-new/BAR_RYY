@@ -9,7 +9,7 @@ from models.schemas import SealRequest
 from core import security
 from services.file_service import FileService
 from services.encryption_service import EncryptionService
-from api.dependencies import get_file_service_dep, get_encryption_service_dep
+from api.dependencies import get_file_service_dep, get_encryption_service_dep, get_database
 from utils import crypto_utils
 
 
@@ -155,11 +155,22 @@ async def seal_container(
 
 @router.get("/download/{bar_id}")
 async def download_bar(
+    req: Request,
     bar_id: str,
-    file_service: FileService = Depends(get_file_service_dep)
+    file_service: FileService = Depends(get_file_service_dep),
+    db=Depends(get_database),
 ):
-    """Download the generated .bar file."""
+    """Download the generated .bar file.
+
+    Client-side only. Server-side files (those with a DB row in ``bar_files``)
+    must be served exclusively via ``/share/{token}`` — this endpoint returns
+    404 for them so the on-disk container cannot be fetched directly, bypassing
+    view-count / expiry / password enforcement.
+    """
     try:
+        # Rate-limit callers to prevent bar_id enumeration (matches /info/).
+        security.check_rate_limit(req, limit=30)
+
         # get_bar_file_path validates UUID4 format, constructs the path
         # deterministically, applies a path-traversal containment guard, and
         # confirms the file exists — all before returning.  The secondary
@@ -170,6 +181,13 @@ async def download_bar(
 
         if not bar_file or not os.path.exists(bar_file):
             raise HTTPException(status_code=404, detail="BAR file not found")
+
+        # Server-side files have a bar_files DB row (token == bar_id) and must
+        # only be served via /share/{token}, which enforces view limits, expiry
+        # and password.  If a record exists, refuse the direct download.
+        # Client-side .bar files have no DB row → still downloadable here.
+        if await db.get_file_record(bar_id):
+            raise HTTPException(status_code=404, detail="Not found")
 
         # Derive the human-readable download filename from the BAR container's
         # embedded metadata.  The on-disk filename is a bare UUID ("{bar_id}.bar")
