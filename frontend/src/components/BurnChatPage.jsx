@@ -565,6 +565,27 @@ export default function BurnChatPage({ token }) {
     return () => { cancelled = true; };
   }, [token]);
 
+  /* pre-join re-sync — local countdown drifts if system clock is skewed or
+     the user idles on the join screen, so re-fetch server TTL periodically */
+  useEffect(() => {
+    if (phase !== 'join') return;
+    const id = setInterval(() => {
+      axios.get(`/chat/${token}/info`)
+        .then(({ data }) => {
+          const secs = data.seconds_remaining;
+          setJoinSecsLeft(Number.isFinite(secs) ? Math.max(0, Math.floor(secs)) : null);
+          setJoinParticipants(data.participant_count ?? 0);
+        })
+        .catch(err => {
+          if (err.response?.status === 410) {
+            setInfoState('expired');
+            setPhase('destroyed');
+          }
+        });
+    }, 30000);
+    return () => clearInterval(id);
+  }, [phase, token]);
+
   /* pre-join local countdown — stops when user joins (joinCountRef cleared) */
   useEffect(() => {
     if (joinSecsLeft === null || joinSecsLeft <= 0) return;
