@@ -974,15 +974,6 @@ export default function BurnChatPage({ token }) {
     };
   }
 
-  // Manual reconnect from the "Connection lost" banner — resets the backoff
-  // counter and tries immediately.  Message history lives in component state
-  // and survives, so the user doesn't lose context the way a hard refresh would.
-  const handleManualReconnect = useCallback(() => {
-    clearTimeout(reconnectRef.current.timeoutId);
-    reconnectRef.current.count = 0;
-    setWsError(null);
-    if (reconnectRef.current.name) _connectWs(reconnectRef.current.name, reconnectRef.current.pin);
-  }, []);
 
   // True when crypto is supported but the E2E session key hasn't been
   // established yet — we MUST NOT allow sending in this window.
