@@ -366,7 +366,7 @@ async def run_cleanup_loop() -> None:
 
             # Burn Chat safety-net (sync — purges in-memory sessions whose
             # background asyncio task may have crashed before destroying them).
-            _purged = _chat_service.cleanup_expired_sessions()
+            _purged = await _chat_service.cleanup_expired_sessions()
             if _purged:
                 logger.info(
                     "Safety-net: purged %d stale burn chat session(s)", _purged

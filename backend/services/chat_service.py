@@ -1052,29 +1052,35 @@ async def extend_ttl(token: str, actor_ws_id: str, extra_seconds: int) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def cleanup_expired_sessions() -> int:
+async def cleanup_expired_sessions() -> int:
     """
-    Synchronous safety-net: remove sessions whose TTL has elapsed but whose
+    Async safety-net: destroy sessions whose TTL has elapsed but whose
     background destroy task may have crashed.
+
+    Routes each expired session through ``_destroy_session`` so connected
+    clients still receive ``{"type": "destroyed"}`` and show the burn
+    animation, instead of dying silently when the countdown task crashes.
 
     Also prunes stale PIN rate-limit entries to prevent unbounded memory
     growth in ``_pin_rl._records``.
 
-    Returns the number of sessions purged.  Async broadcast is intentionally
-    skipped here — if the task crashed, WebSocket connections are likely
-    already dead.
+    Returns the number of sessions purged.
     """
     now = datetime.now(timezone.utc)
     expired_tokens = [
         t for t, s in list(_SESSIONS.items()) if now >= s.expires_at
     ]
     for token in expired_tokens:
-        session = _SESSIONS.pop(token, None)
+        # Cancel the (crashed or stalled) background task first so it cannot
+        # race with the destroy we are about to run.
+        session = _SESSIONS.get(token)
         if session and session._destroy_task and not session._destroy_task.done():
             session._destroy_task.cancel()
         logger.warning(
-            "Safety-net cleanup: removed stale chat session %s", token[:8]
+            "Safety-net cleanup: destroying stale chat session %s", token[:8]
         )
+        # Broadcast 'destroyed' + close WebSockets + purge from _SESSIONS.
+        await _destroy_session(token)
 
     # Evict stale PIN rate-limit entries so _pin_rl._records does not grow
     # forever.  Entries with no failures inside the current window are safe
