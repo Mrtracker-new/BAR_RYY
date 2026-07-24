@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Flame, Send, Users, Copy, CheckCircle2, Shield, AlertTriangle, ArrowLeft, Clock, X, Lock, Unlock, PlusCircle } from 'lucide-react';
+import { Flame, Send, Users, Copy, CheckCircle2, Shield, AlertTriangle, ArrowLeft, Clock, X, Lock, Unlock, PlusCircle, RefreshCw } from 'lucide-react';
 import { copyToClipboard } from '../utils/clipboard';
 import axios from '../config/axios';
 import BurningAnimation from './BurningAnimation';
@@ -20,6 +20,15 @@ const T = {
 
 /** Cap in-memory messages to prevent OOM in long-lived sessions. */
 const MAX_MESSAGES = 500;
+
+/**
+ * Reconnect backoff schedule (seconds → ms).  Transient network blips usually
+ * clear within a few seconds; the longer tail keeps retrying through multi-
+ * minute outages instead of giving up after ~7s.  Once exhausted, the UI
+ * surfaces a manual "Reconnect" button rather than forcing a page refresh.
+ */
+const RECONNECT_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 16_000, 30_000];
+const RECONNECT_MAX_ATTEMPTS = RECONNECT_DELAYS_MS.length;
 
 function fmtTime(s) {
   const n = Number.isFinite(s) ? Math.max(0, Math.floor(s)) : 0;
@@ -638,6 +647,21 @@ export default function BurnChatPage({ token }) {
     _connectWs(name, pin);
   }, [token, addSysMsg]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /**
+   * Manual reconnect after auto-retry exhaustion. Resets the attempt counter
+   * and reconnects with the stored name/pin so message history is preserved
+   * (no full page refresh). No-op if we never joined or the name is missing.
+   */
+  const handleManualReconnect = useCallback(() => {
+    const { name, pin } = reconnectRef.current;
+    if (!name) return;
+    clearTimeout(reconnectRef.current.timeoutId);
+    reconnectRef.current.count = 0;
+    setWsError(null);
+    setConnStatus('connecting');
+    _connectWs(name, pin);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   function _connectWs(name, pin) {
     clearInterval(pingRef.current);
     joinedRef.current = false;
@@ -661,7 +685,6 @@ export default function BurnChatPage({ token }) {
     setE2eSessionKey(null);
 
     const PING_INTERVAL_MS    = 20_000;
-    const RECONNECT_DELAYS_MS = [1_000, 2_000, 4_000];
 
     const wsBase = resolveWsUrl();
     const ws     = new WebSocket(`${wsBase}/chat/${token}/ws`);
@@ -941,13 +964,25 @@ export default function BurnChatPage({ token }) {
           }, RECONNECT_DELAYS_MS[attempt]);
           return;
         }
+        // Backoff exhausted — stop auto-retrying but offer a manual path so
+        // the user doesn't have to hard-refresh and lose message history.
         setConnStatus('disconnected');
-        setWsError('Connection lost — please refresh the page to rejoin.');
+        setWsError('Connection lost. Reconnect to rejoin — your visible message history stays.');
       } else {
         setConnStatus('disconnected');
       }
     };
   }
+
+  // Manual reconnect from the "Connection lost" banner — resets the backoff
+  // counter and tries immediately.  Message history lives in component state
+  // and survives, so the user doesn't lose context the way a hard refresh would.
+  const handleManualReconnect = useCallback(() => {
+    clearTimeout(reconnectRef.current.timeoutId);
+    reconnectRef.current.count = 0;
+    setWsError(null);
+    if (reconnectRef.current.name) _connectWs(reconnectRef.current.name, reconnectRef.current.pin);
+  }, []);
 
   // True when crypto is supported but the E2E session key hasn't been
   // established yet — we MUST NOT allow sending in this window.
@@ -1197,15 +1232,32 @@ export default function BurnChatPage({ token }) {
         {connStatus === 'reconnecting' && (
           <div style={{ flexShrink:0, padding:'0.5rem 1rem', background:'rgba(196,70,26,0.07)', borderBottom:'1px solid rgba(196,70,26,0.15)', display:'flex', alignItems:'center', gap:'0.5rem' }}>
             <div style={{ width:7, height:7, borderRadius:'50%', background:T.orange, flexShrink:0, animation:'pulse 1s ease-in-out infinite' }} />
-            <p style={{ fontSize:'0.875rem', color:T.orange }}>Reconnecting… (attempt {reconnectRef.current.count} of 3)</p>
+            <p style={{ fontSize:'0.875rem', color:T.orange }}>Reconnecting… (attempt {reconnectRef.current.count} of {RECONNECT_MAX_ATTEMPTS})</p>
           </div>
         )}
 
-        {/* WS error */}
+        {/* WS error — offers a manual Reconnect button when auto-retry gave up,
+            so the user can recover without a full page refresh (history stays). */}
         {wsError && (
           <div style={{ flexShrink:0, padding:'0.5rem 1rem', background:'rgba(179,58,46,0.07)', borderBottom:'1px solid rgba(179,58,46,0.15)', display:'flex', alignItems:'center', gap:'0.5rem' }}>
             <AlertTriangle size={14} style={{ color:T.red, flexShrink:0 }} />
-            <p style={{ fontSize:'0.875rem', color:'#B33A2E' }}>{wsError}</p>
+            <p style={{ fontSize:'0.875rem', color:'#B33A2E', flex:1 }}>{wsError}</p>
+            {connStatus === 'disconnected' && (
+              <button
+                type="button"
+                onClick={handleManualReconnect}
+                disabled={!reconnectRef.current.name}
+                style={{
+                  display:'inline-flex', alignItems:'center', gap:'0.375rem',
+                  padding:'0.25rem 0.625rem', fontSize:'0.8125rem', fontWeight:500,
+                  borderRadius:'0.375rem', cursor: reconnectRef.current.name ? 'pointer' : 'not-allowed',
+                  background:'rgba(179,58,46,0.1)', border:'1px solid rgba(179,58,46,0.35)',
+                  color:'#B33A2E', flexShrink:0,
+                }}
+              >
+                <RefreshCw size={13} /> Reconnect
+              </button>
+            )}
           </div>
         )}
 
