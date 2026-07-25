@@ -232,6 +232,35 @@ async def share_file(
         is_password_protected = bool(db_metadata.get('password_protected'))
 
         # ------------------------------------------------------------------ #
+        # Expiry gate — runs BEFORE decrypt to avoid wasting PBKDF2 CPU on    #
+        # files whose expiry has already passed.  expires_at is immutable DB  #
+        # metadata (no race risk); the webhook uses db_metadata because       #
+        # decrypted metadata is not yet available.                             #
+        # ------------------------------------------------------------------ #
+        if file_record.get('expires_at'):
+            expires_at_str = file_record['expires_at']
+            if expires_at_str:
+                if isinstance(expires_at_str, str):
+                    if expires_at_str.endswith('Z'):
+                        expires_at_str = expires_at_str[:-1]
+                    expires_at = datetime.fromisoformat(expires_at_str)
+                else:
+                    expires_at = expires_at_str
+
+                if datetime.now(timezone.utc).replace(tzinfo=None) > expires_at:
+                    webhook_url = db_metadata.get("webhook_url")
+                    if webhook_url:
+                        webhook_srv = webhook_service.get_webhook_service()
+                        asyncio.create_task(webhook_srv.send_access_denied_alert(
+                            webhook_url=webhook_url,
+                            filename=db_metadata.get("filename", "unknown"),
+                            reason="File has expired",
+                            ip_address=client_ip
+                        ))
+
+                    raise HTTPException(status_code=403, detail="File has expired")
+
+        # ------------------------------------------------------------------ #
         # Password gate — runs BEFORE decrypt so the brute-force lockout      #
         # fires before any expensive PBKDF2 key derivation is attempted.      #
         # ------------------------------------------------------------------ #
@@ -297,30 +326,6 @@ async def share_file(
         # function and may be stale by the time we reach this point under
         # concurrent load.  Limit enforcement is handled atomically inside
         # atomic_try_increment_view_count() below.
-
-        # Check expiry (immutable metadata — no race risk)
-        if file_record.get('expires_at'):
-            expires_at_str = file_record['expires_at']
-            if expires_at_str:
-                if isinstance(expires_at_str, str):
-                    if expires_at_str.endswith('Z'):
-                        expires_at_str = expires_at_str[:-1]
-                    expires_at = datetime.fromisoformat(expires_at_str)
-                else:
-                    expires_at = expires_at_str
-                
-                if datetime.now(timezone.utc).replace(tzinfo=None) > expires_at:
-                    webhook_url = metadata.get("webhook_url")
-                    if webhook_url:
-                        webhook_srv = webhook_service.get_webhook_service()
-                        asyncio.create_task(webhook_srv.send_access_denied_alert(
-                            webhook_url=webhook_url,
-                            filename=metadata.get("filename", "unknown"),
-                            reason="File has expired",
-                            ip_address=client_ip
-                        ))
-                    
-                    raise HTTPException(status_code=403, detail="File has expired")
         
         logger.info('[%s] Access validation passed', token)
 
@@ -343,17 +348,23 @@ async def share_file(
         city = geo_data.get("city") if geo_data else None
 
         # ------------------------------------------------------------------ #
-        # Atomic view-count increment (C-04 fix)                              #
-        # The guarded UPDATE inside atomic_try_increment_view_count() is the  #
-        # single source of truth for limit enforcement.  If limit_hit is True #
-        # the DB rejected the increment because current_views >= max_views at  #
-        # the moment of the UPDATE — no file content is served.               #
+        # Atomic view-count increment + access logging                         #
+        #                                                                      #
+        # The dedup check, guarded UPDATE, and access-log INSERT all execute   #
+        # inside a single DB transaction.  This eliminates the race window     #
+        # where two concurrent requests could both see "no recent access"      #
+        # and both burn a view within the refresh window.                       #
         # ------------------------------------------------------------------ #
         db_ok, views_remaining, should_destroy, is_new_view, limit_hit = \
             await db.atomic_try_increment_view_count(
                 token,
                 session_fingerprint=session_fingerprint,
                 view_refresh_minutes=view_refresh_minutes,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                country=country,
+                city=city,
+                device_type=device_type,
             )
 
         if not db_ok:
@@ -376,18 +387,6 @@ async def share_file(
                 detail="Maximum views reached — file has been destroyed"
             )
 
-        # Log the access (always log, even if not counted as new view)
-        await db.log_access(
-            token=token,
-            ip_address=ip_address,
-            user_agent=user_agent,
-            country=country,
-            city=city,
-            device_type=device_type,
-            session_fingerprint=session_fingerprint,
-            is_counted_as_view=is_new_view
-        )
-        
         if is_new_view:
             logger.info('[%s] New view counted — %d views remaining', token, views_remaining)
         else:
@@ -487,6 +486,7 @@ async def share_file(
 @router.get("/analytics/{token}")
 async def get_analytics(
     token: str,
+    req: Request,
     db=Depends(get_database),
     analytics_key: str = Header(
         ...,
@@ -521,6 +521,11 @@ async def get_analytics(
     substantially harder for an adversary to recover passively.
     """
     try:
+        # Rate limit — analytics queries hit COUNT(*) + large row fetches;
+        # without a cap an attacker with a valid key could exhaust the DB
+        # connection pool.
+        security.check_rate_limit(req, limit=30)
+
         analytics_data = await db.get_analytics(token, analytics_key)
         
         if analytics_data is None:
