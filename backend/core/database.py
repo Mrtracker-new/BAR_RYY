@@ -1530,8 +1530,8 @@ class Database:
             }
 
         except Exception as e:
-            print(f"❌ Failed to get analytics: {e}")
-            return None
+            _logger.exception("Failed to get analytics for token=%s", token)
+            raise
     
     async def close(self):
         """Close database connections"""
