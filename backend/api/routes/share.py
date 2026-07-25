@@ -171,6 +171,19 @@ async def share_file(
     """Server-side access endpoint - properly enforces view limits and 2FA."""
     password = request.password or ""
     try:
+        # ── Rate limiting (CWE-770) ──────────────────────────────────────
+        # Must precede ALL DB / FS / crypto work — this is the most
+        # expensive endpoint in the pipeline (PBKDF2 + file I/O + geo).
+        # Layer 1: global per-IP limit (30 req/min, matches RATE_LIMITS["/share/"])
+        security.check_rate_limit(req, limit=30)
+
+        # Layer 2: per-token per-IP — prevents a single link from being
+        # hammered even when the global budget is not exhausted.
+        client_ip = analytics.get_client_ip(req)
+        security.check_rate_limit_keyed(
+            f"share:{token}:{client_ip}", limit=15, window_seconds=60
+        )
+
         # Get file record from database
         file_record = await db.get_file_record(token)
         
@@ -217,7 +230,6 @@ async def share_file(
         # ------------------------------------------------------------------ #
         db_metadata = file_record.get('metadata') or {}
         is_password_protected = bool(db_metadata.get('password_protected'))
-        client_ip = analytics.get_client_ip(req)
 
         # ------------------------------------------------------------------ #
         # Password gate — runs BEFORE decrypt so the brute-force lockout      #
