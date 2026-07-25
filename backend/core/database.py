@@ -714,7 +714,7 @@ class Database:
             
             return True
         except Exception as e:
-            print(f"❌ Failed to create file record: {e}")
+            _logger.exception("Failed to create file record")
             return False
     
     async def get_file_record(self, token: str) -> Optional[Dict[str, Any]]:
@@ -741,7 +741,7 @@ class Database:
 
             return None
         except Exception as e:
-            print(f"❌ Failed to get file record: {e}")
+            _logger.exception("Failed to get file record for token=%s", token)
             return None
     
     async def get_recent_access(
@@ -788,7 +788,7 @@ class Database:
                         row = await cursor.fetchone()
                         return dict(row) if row else None
         except Exception as e:
-            print(f"❌ Failed to get recent access: {e}")
+            _logger.exception("Failed to get recent access for token=%s", token)
             return None
     
     async def atomic_try_increment_view_count(
@@ -1086,66 +1086,142 @@ class Database:
                     )
                     await db.commit()
             return True
-        except Exception as e:
-            print(f"❌ Failed to mark as destroyed: {e}")
+        except Exception:
+            _logger.exception("Failed to mark file as destroyed for token=%s", token)
             return False
     
     async def get_expired_files(self) -> list[Dict[str, Any]]:
-        """Get all files that have expired"""
+        """Get files expired by time — returns only token, file_path, filename.
+
+        Sensitive columns (analytics_key_hash, otp_emails) are never loaded
+        since this method is only used by the cleanup service.
+        """
         try:
             now = datetime.now(timezone.utc).isoformat()
             
             if self.is_postgres:
                 async with self.pool.acquire() as conn:
                     rows = await conn.fetch("""
-                        SELECT * FROM bar_files 
+                        SELECT token, file_path, filename FROM bar_files 
                         WHERE expires_at IS NOT NULL 
                         AND expires_at < NOW()
                         AND destroyed = FALSE
                     """)
-                    return [_normalise_file_record(dict(row)) for row in rows]
+                    return [dict(row) for row in rows]
             else:
                 async with aiosqlite.connect(self.db_path) as db:
                     db.row_factory = aiosqlite.Row
                     async with db.execute("""
-                        SELECT * FROM bar_files 
+                        SELECT token, file_path, filename FROM bar_files 
                         WHERE expires_at IS NOT NULL 
                         AND expires_at < ?
                         AND destroyed = 0
                     """, (now,)) as cursor:
                         rows = await cursor.fetchall()
-                        return [_normalise_file_record(dict(row)) for row in rows]
+                        return [dict(row) for row in rows]
             
-        except Exception as e:
-            print(f"❌ Failed to get expired files: {e}")
+        except Exception:
+            _logger.exception("Failed to get expired files")
             return []
     
     async def get_exhausted_files(self) -> list[Dict[str, Any]]:
-        """Get all files that have reached max views"""
+        """Get files that have reached max views — returns only token, file_path, filename.
+
+        Sensitive columns (analytics_key_hash, otp_emails) are never loaded
+        since this method is only used by the cleanup service.
+        """
         try:
             if self.is_postgres:
                 async with self.pool.acquire() as conn:
                     rows = await conn.fetch("""
-                        SELECT * FROM bar_files 
+                        SELECT token, file_path, filename FROM bar_files 
                         WHERE current_views >= max_views
                         AND destroyed = FALSE
                     """)
-                    return [_normalise_file_record(dict(row)) for row in rows]
+                    return [dict(row) for row in rows]
             else:
                 async with aiosqlite.connect(self.db_path) as db:
                     db.row_factory = aiosqlite.Row
                     async with db.execute("""
-                        SELECT * FROM bar_files 
+                        SELECT token, file_path, filename FROM bar_files 
                         WHERE current_views >= max_views
                         AND destroyed = 0
                     """) as cursor:
                         rows = await cursor.fetchall()
-                        return [_normalise_file_record(dict(row)) for row in rows]
+                        return [dict(row) for row in rows]
             
-        except Exception as e:
-            print(f"❌ Failed to get exhausted files: {e}")
+        except Exception:
+            _logger.exception("Failed to get exhausted files")
             return []
     
+    async def get_orphaned_destroyed_files(self) -> list[Dict[str, Any]]:
+        """Get destroyed rows whose payload file may still exist on disk.
+
+        When ``mark_as_destroyed`` succeeds but ``delete_file`` fails
+        afterwards, the DB row is flagged ``destroyed=TRUE`` yet the
+        encrypted blob remains in ``generated/``.  Neither
+        ``get_expired_files`` nor ``get_exhausted_files`` will ever return
+        these rows (they filter ``destroyed = FALSE``), so without this
+        query the orphaned file is never cleaned up.
+        """
+        try:
+            if self.is_postgres:
+                async with self.pool.acquire() as conn:
+                    rows = await conn.fetch("""
+                        SELECT token, file_path, filename FROM bar_files
+                        WHERE destroyed = TRUE
+                    """)
+                    return [dict(row) for row in rows]
+            else:
+                async with aiosqlite.connect(self.db_path) as db:
+                    db.row_factory = aiosqlite.Row
+                    async with db.execute("""
+                        SELECT token, file_path, filename FROM bar_files
+                        WHERE destroyed = 1
+                    """) as cursor:
+                        rows = await cursor.fetchall()
+                        return [dict(row) for row in rows]
+
+        except Exception as e:
+            _logger.exception("Failed to get orphaned destroyed files: %s", e)
+            return []
+
+    async def get_stale_destroyed_records(self, days: int = 7) -> list[Dict[str, Any]]:
+        """Return destroyed rows older than *days* that will be purged.
+
+        The cleanup service calls this **before** ``cleanup_old_records()`` to
+        unlink any remaining files on disk, preventing permanent orphans when
+        the DB row is deleted but the blob still exists.
+        """
+        try:
+            now = datetime.now(timezone.utc)
+            cutoff_dt = now - timedelta(days=days)
+            cutoff_dt_naive = cutoff_dt.replace(tzinfo=None)
+            cutoff_iso = cutoff_dt.isoformat()
+
+            if self.is_postgres:
+                async with self.pool.acquire() as conn:
+                    rows = await conn.fetch("""
+                        SELECT token, file_path FROM bar_files
+                        WHERE destroyed = TRUE
+                        AND created_at < $1
+                    """, cutoff_dt_naive)
+                    return [dict(row) for row in rows]
+            else:
+                async with aiosqlite.connect(self.db_path) as db:
+                    db.row_factory = aiosqlite.Row
+                    async with db.execute("""
+                        SELECT token, file_path FROM bar_files
+                        WHERE destroyed = 1
+                        AND created_at < ?
+                    """, (cutoff_iso,)) as cursor:
+                        rows = await cursor.fetchall()
+                        return [dict(row) for row in rows]
+
+        except Exception:
+            _logger.exception("Failed to get stale destroyed records")
+            return []
+
     async def cleanup_old_records(self, days: int = 7) -> int:
         """Clean up old destroyed records from database"""
         try:
@@ -1157,13 +1233,16 @@ class Database:
             
             if self.is_postgres:
                 async with self.pool.acquire() as conn:
-                    result = await conn.execute("""
+                    tag = await conn.execute("""
                         DELETE FROM bar_files 
                         WHERE destroyed = TRUE 
                         AND created_at < $1
                     """, cutoff_dt_naive)
-                    # Extract count from result
-                    return 0  # asyncpg doesn't easily return count
+                    # asyncpg returns a command-tag string e.g. "DELETE 42"
+                    try:
+                        return int(tag.split()[-1])
+                    except (AttributeError, ValueError, IndexError):
+                        return 0
             else:
                 async with aiosqlite.connect(self.db_path) as db:
                     cursor = await db.execute("""
@@ -1174,8 +1253,8 @@ class Database:
                     await db.commit()
                     return cursor.rowcount
             
-        except Exception as e:
-            print(f"❌ Failed to cleanup old records: {e}")
+        except Exception:
+            _logger.exception("Failed to cleanup old records")
             return 0
     
     async def prune_access_logs(
@@ -1326,8 +1405,8 @@ class Database:
 
                     await db.commit()
 
-        except Exception as exc:
-            print(f"❌ Failed to prune access logs: {exc}")
+        except Exception:
+            _logger.exception("Failed to prune access logs")
             return 0
 
         return deleted
@@ -1437,8 +1516,8 @@ class Database:
                     await db.commit()
 
             return True
-        except Exception as e:
-            print(f"❌ Failed to log access: {e}")
+        except Exception:
+            _logger.exception("Failed to log access for token=%s", token)
             return False
     
     async def get_analytics(self, token: str, analytics_key: str) -> Optional[Dict[str, Any]]:
