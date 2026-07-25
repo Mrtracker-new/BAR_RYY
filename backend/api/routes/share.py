@@ -4,7 +4,7 @@ import json
 import asyncio
 import logging
 import mimetypes
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Request, Form, Depends, HTTPException, Header
 from fastapi.responses import Response
 
@@ -309,7 +309,7 @@ async def share_file(
                 else:
                     expires_at = expires_at_str
                 
-                if datetime.utcnow() > expires_at:
+                if datetime.now(timezone.utc).replace(tzinfo=None) > expires_at:
                     webhook_url = metadata.get("webhook_url")
                     if webhook_url:
                         webhook_srv = webhook_service.get_webhook_service()
@@ -325,7 +325,9 @@ async def share_file(
         logger.info('[%s] Access validation passed', token)
 
         # Generate session fingerprint for view refresh control
-        ip_address = analytics.get_client_ip(req)
+        # Reuse client_ip from the rate-limit block above (line 182) to
+        # avoid a redundant header parse.  The variable is identical.
+        ip_address = client_ip
         user_agent = req.headers.get("User-Agent", "Unknown")
 
         from utils.crypto_utils import generate_session_fingerprint
@@ -439,7 +441,7 @@ async def share_file(
 
         # Return decrypted file
         view_only = metadata.get('view_only', False)
-        filename = metadata['filename']
+        filename = metadata.get('filename', 'decrypted_file')
 
         # Determine MIME type
         if view_only:
