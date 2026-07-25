@@ -191,8 +191,8 @@ def _normalise_file_record(record: Dict[str, Any]) -> Dict[str, Any]:
 _PUBLIC_FILE_COLUMNS: tuple[str, ...] = (
     "token",
     "filename",
-    "bar_filename",
-    "file_path",
+    # "bar_filename",    ← redundant: equals f"{token}.bar"; removed (info-leak)
+    # "file_path",       ← internal server path; removed (info-leak, CWE-200)
     "metadata",
     "current_views",
     "max_views",
@@ -217,6 +217,8 @@ _PUBLIC_FILE_COLUMNS_SQL: str = ", ".join(
 _FORBIDDEN_RESPONSE_FIELDS: frozenset[str] = frozenset({
     "analytics_key_hash",  # SHA-256 digest — still a secret, never expose
     "otp_emails",          # PII — list of recipient email addresses
+    "file_path",           # internal server filesystem path (CWE-200)
+    "bar_filename",        # redundant (== f"{token}.bar") and leaks path info
 })
 
 
