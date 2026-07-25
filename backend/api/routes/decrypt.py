@@ -3,6 +3,7 @@ import os
 import hashlib
 import asyncio
 import logging
+import tempfile
 from fastapi import APIRouter, Request, File, UploadFile, Form, Depends, HTTPException
 from fastapi.responses import Response
 
@@ -26,7 +27,67 @@ router = APIRouter()
 # (guessing + DoS).  10 req/min per IP is more than enough for a legitimate
 # human use-case while making automated dictionary attacks impractical even
 # before the PBKDF2 cost is factored in.
+
 _DECRYPT_RATE_LIMIT = 10  # requests per 60-second window per IP
+
+# ── Per-file lock registry (CWE-362 fix) ─────────────────────────────────────
+# Serialises the read → decrypt → increment → write/destroy cycle for each
+# bar_id so concurrent requests cannot both read the same current_views value
+# and silently lose an increment (or bypass burn-after-read).
+#
+# The registry uses reference counting to safely evict idle locks:
+#   _acquire_file_lock  → increments refcount (or creates lock + sets count=1)
+#   _release_file_lock  → decrements refcount; evicts when count reaches 0
+# Both operations hold _file_locks_guard, so no interleaving can cause a
+# coroutine to acquire a lock that another coroutine is about to evict.
+_file_locks: dict[str, asyncio.Lock] = {}
+_file_lock_refcounts: dict[str, int] = {}
+_file_locks_guard = asyncio.Lock()  # protects both dicts above
+
+
+async def _acquire_file_lock(bar_id: str) -> asyncio.Lock:
+    """Return (and lazily create) the per-file lock, incrementing its refcount."""
+    async with _file_locks_guard:
+        if bar_id not in _file_locks:
+            _file_locks[bar_id] = asyncio.Lock()
+            _file_lock_refcounts[bar_id] = 0
+        _file_lock_refcounts[bar_id] += 1
+        return _file_locks[bar_id]
+
+
+async def _release_file_lock(bar_id: str) -> None:
+    """Decrement the refcount and evict the lock when no waiters remain."""
+    async with _file_locks_guard:
+        count = _file_lock_refcounts.get(bar_id, 0) - 1
+        if count <= 0:
+            _file_locks.pop(bar_id, None)
+            _file_lock_refcounts.pop(bar_id, None)
+        else:
+            _file_lock_refcounts[bar_id] = count
+
+
+def _atomic_write(file_path: str, data: bytes) -> None:
+    """Write *data* to *file_path* atomically via temp-file + os.replace.
+
+    If the process crashes mid-write, *file_path* retains its previous
+    contents (or is absent) — it is never left in a half-written state.
+    """
+    dir_name = os.path.dirname(file_path)
+    fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix=".tmp")
+    try:
+        os.write(fd, data)
+        os.close(fd)
+        fd = -1  # mark as closed so the except branch doesn't double-close
+        os.replace(tmp_path, file_path)
+    except BaseException:
+        if fd >= 0:
+            os.close(fd)
+        # Clean up the temp file on failure; ignore errors (it may not exist).
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
 
 @router.post("/decrypt/{bar_id}")
@@ -171,54 +232,96 @@ async def decrypt_bar(
             logger.info('[%s] Correct password from %s', bar_id, client_ip)
 
         # ------------------------------------------------------------------ #
-        # 7. Update view count and handle destruction                          #
+        # 7. Update view count and handle destruction (CWE-362 fix)           #
         # ------------------------------------------------------------------ #
-        # Pre-compute what current_views WILL be after the increment.  We do
-        # this before touching any bytes on disk so that:
-        #   a) should_destroy is decided atomically with the write decision, and
-        #   b) the response headers below are correct without relying on a
-        #      side-effected metadata dict.
-        # NOTE: metadata["current_views"] is NOT mutated here — the mutation
-        # lives exclusively inside update_bar_view_count, which operates on the
-        # already-parsed on-disk structure.  This removes the hidden aliasing
-        # between the in-memory metadata dict and bar_structure["metadata"].
-        current_views = metadata["current_views"] + 1
+        # The view-count read → increment → write/destroy cycle is a classic
+        # TOCTOU race: two concurrent requests can both read current_views = N,
+        # both compute N+1, and the file silently loses one increment —
+        # breaking the burn-after-read guarantee for max_views files.
+        #
+        # Fix: hold a per-bar_id asyncio.Lock around the entire cycle and
+        # **re-read the file from disk inside the lock** so the current_views
+        # snapshot is authoritative.  We use peek_bar_metadata (JSON parse
+        # only, zero PBKDF2 cost) to obtain the fresh view count.
+        #
+        # The decrypted_data returned to the caller was derived from the
+        # pre-lock read, which is fine — the file content does not change
+        # between views; only the view counter does.
+        max_views = metadata.get("max_views", 0)
+        file_lock = await _acquire_file_lock(bar_id)
+        try:
+            async with file_lock:
+                # ── Re-read the file under the lock ──────────────────────
+                # Another request may have incremented or destroyed the
+                # file between our initial read and the lock acquisition.
+                try:
+                    with open(bar_file, "rb") as f:
+                        fresh_bar_data = f.read()
+                except FileNotFoundError:
+                    # Destroyed by a concurrent request that won the lock
+                    # before us.  The file is gone; report 410.
+                    raise HTTPException(
+                        status_code=410,
+                        detail="File not found or already destroyed"
+                    )
 
-        should_destroy = (
-            metadata.get("max_views", 0) > 0
-            and current_views >= metadata["max_views"]
-        )
+                # Re-derive current_views from the freshly-read bytes.
+                # peek_bar_metadata is a lightweight JSON parse with zero
+                # crypto cost (no PBKDF2, no HMAC, no Fernet) — it reads
+                # the plaintext metadata header that sits outside the
+                # encrypted payload.
+                try:
+                    fresh_metadata = crypto_utils.peek_bar_metadata(
+                        fresh_bar_data
+                    )
+                except (ValueError, KeyError) as parse_err:
+                    # The file is unreadable (corrupted / truncated mid-write
+                    # by a prior crash).  Do NOT fall back to stale metadata:
+                    # that would silently reset the view counter.  Surface a
+                    # 500 so the operator can investigate.
+                    logger.error(
+                        '[%s] Cannot read metadata from on-disk BAR file '
+                        'inside view-count lock: %s',
+                        bar_id, parse_err,
+                    )
+                    raise HTTPException(
+                        status_code=500,
+                        detail=security.OPAQUE_500_DETAIL,
+                    )
 
-        if not should_destroy:
-            # update_bar_view_count is the single authoritative entry point for
-            # persisting a view-count change.  It:
-            #   1. Verifies the existing HMAC before mutating anything.
-            #   2. Increments only metadata["current_views"] inside the
-            #      already-parsed on-disk structure — no ciphertext re-encoding,
-            #      no caller-side parameter threading.
-            #   3. Re-signs with _CANONICAL_JSON_KWARGS, identical to
-            #      pack_bar_file, guaranteeing signed bytes == stored bytes by
-            #      construction rather than by convention.
-            #
-            # ValueError from update_bar_view_count signals a legacy pre-HMAC
-            # file (no signature present).  We cannot safely re-sign it, so we
-            # skip the write — the view count is not persisted — but we still
-            # serve the decrypted content.  A WARNING is emitted so operators
-            # can identify and re-seal affected files.  This is intentionally
-            # NOT a 500: decryption succeeded; only persistence failed.
-            try:
-                updated_bar = crypto_utils.update_bar_view_count(bar_data, key)
-                with open(bar_file, "wb") as f:
-                    f.write(updated_bar)
-            except ValueError as legacy_err:
-                logger.warning(
-                    '[%s] View-count not persisted (legacy unsigned file): %s',
-                    bar_id, legacy_err,
+                current_views = fresh_metadata.get("current_views", 0) + 1
+                should_destroy = (
+                    max_views > 0 and current_views >= max_views
                 )
-        else:
-            # Destroy the file — view limit reached.
-            crypto_utils.delete_file(bar_file)
-            logger.info('[%s] File destroyed after reaching max views', bar_id)
+
+                if not should_destroy:
+                    # update_bar_view_count is the single authoritative
+                    # entry point for persisting a view-count change.
+                    # See its docstring for why pack_bar_file is not
+                    # reused here.
+                    #
+                    # ValueError signals a legacy pre-HMAC file — skip
+                    # the write but still serve the content.
+                    try:
+                        updated_bar = crypto_utils.update_bar_view_count(
+                            fresh_bar_data, key
+                        )
+                        _atomic_write(bar_file, updated_bar)
+                    except ValueError as legacy_err:
+                        logger.warning(
+                            '[%s] View-count not persisted (legacy unsigned '
+                            'file): %s',
+                            bar_id, legacy_err,
+                        )
+                else:
+                    # Destroy the file — view limit reached.
+                    crypto_utils.delete_file(bar_file)
+                    logger.info(
+                        '[%s] File destroyed after reaching max views',
+                        bar_id,
+                    )
+        finally:
+            await _release_file_lock(bar_id)
 
         # ------------------------------------------------------------------ #
         # 8. Return decrypted file                                             #
@@ -380,11 +483,11 @@ async def decrypt_uploaded_bar_file(
             content=decrypted_data,
             media_type="application/octet-stream",
             headers={
-                "Content-Disposition": security.build_content_disposition(metadata['filename'], 'attachment'),
+                "Content-Disposition": security.build_content_disposition(metadata.get('filename', 'decrypted_file'), 'attachment'),
                 "X-BAR-Views-Remaining": "0",
                 "X-BAR-Should-Destroy": "false",
                 "X-BAR-View-Only": str(metadata.get('view_only', False)).lower(),
-                "X-BAR-Filename": security.sanitize_header_value(metadata["filename"]),
+                "X-BAR-Filename": security.sanitize_header_value(metadata.get("filename", "decrypted_file")),
                 # Only allowlisted, non-sensitive fields are included.
                 # Sensitive keys (password_hash, webhook_url, file_hash,
                 # encryption_method) are stripped inside build_safe_metadata_header
