@@ -796,28 +796,40 @@ class Database:
         token: str,
         session_fingerprint: str = None,
         view_refresh_minutes: int = 0,
+        *,
+        ip_address: str = "",
+        user_agent: str = "",
+        country: Optional[str] = None,
+        city: Optional[str] = None,
+        device_type: Optional[str] = None,
     ) -> tuple[bool, int, bool, bool, bool]:
         """
-        Atomically attempt to increment the view count, guarded by the limit.
+        Atomically attempt to increment the view count, guarded by the limit,
+        **and** insert the access-log row — all within a single transaction.
 
-        The core of the fix for C-04 (TOCTOU race condition).  A naive
-        check-then-act pattern allows two concurrent requests to both read
-        ``current_views < max_views`` and both succeed.  Instead, the
-        increment is expressed as a single guarded UPDATE:
+        This is the single entry point for both view counting and access
+        logging on server-side files.  Merging the three operations (dedup
+        check, guarded increment, log insert) into one transaction eliminates
+        the race window where two concurrent requests could both see "no
+        recent access" and both increment the counter.
 
-            UPDATE bar_files
-            SET current_views = current_views + 1
-            WHERE token = $1
-              AND destroyed = FALSE
-              AND current_views < max_views   ← CAS guard
-            RETURNING current_views, max_views
+        PostgreSQL
+        ----------
+        A single CTE statement executes in one implicit transaction:
 
-        If 0 rows are affected the limit was already hit at the DB level —
-        no application-level race is possible regardless of concurrency.
+        1. ``dedup`` — checks access_logs for a recent row with this
+           (token, fingerprint) within the refresh window.
+        2. ``inc``   — conditionally increments current_views only when
+           *dedup found no row* AND current_views < max_views.
+        3. ``log``   — inserts the access-log row, with is_counted_as_view
+           set to TRUE only when ``inc`` actually incremented.
+        4. Final SELECT returns (current_views, max_views, is_new_view).
 
-        PostgreSQL uses a single RETURNING statement (inherently atomic).
-        SQLite uses BEGIN IMMEDIATE which acquires an exclusive write lock
-        for the entire transaction, preventing concurrent interleaving.
+        SQLite
+        ------
+        ``BEGIN IMMEDIATE`` acquires the exclusive write lock, then the
+        dedup check, guarded UPDATE, and log INSERT all run inside the
+        same transaction.  No concurrent writer can interleave.
 
         Args:
             token: File access token.
@@ -825,6 +837,11 @@ class Database:
                 control.  When supplied and ``view_refresh_minutes > 0``, a
                 recent access by the same session skips the increment.
             view_refresh_minutes: Refresh window in minutes (0 = always count).
+            ip_address: Client IP for the access log.
+            user_agent: Client User-Agent for the access log.
+            country: Geolocation country (optional).
+            city: Geolocation city (optional).
+            device_type: Device type string (optional).
 
         Returns:
             5-tuple of ``(db_ok, views_remaining, should_destroy, is_new_view, limit_hit)``:
@@ -840,98 +857,184 @@ class Database:
                                     file content.
         """
         try:
-            # ── View-refresh deduplication ─────────────────────────────────
-            # Check if the same session accessed the file within the refresh
-            # window.  This is still a separate DB round-trip, but the worst
-            # outcome of a race here is that a repeat viewer is counted once
-            # rather than zero times — acceptable and far less severe than
-            # the limit-bypass race we are fixing.
-            is_new_view = True
-            if view_refresh_minutes > 0 and session_fingerprint:
-                recent = await self.get_recent_access(
-                    token, session_fingerprint, view_refresh_minutes
-                )
-                is_new_view = (recent is None)
+            now = datetime.now(timezone.utc)
+            use_dedup = (view_refresh_minutes > 0 and session_fingerprint)
+            cutoff = (now - timedelta(minutes=view_refresh_minutes)) if use_dedup else now
 
-            # ── If not a new view, return current counts without touching DB ─
-            if not is_new_view:
-                file_record = await self.get_file_record(token)
-                if not file_record:
-                    return False, 0, False, False, False
-                current_views = file_record['current_views']
-                max_views    = file_record['max_views']
-                views_remaining = max(0, max_views - current_views)
-                should_destroy  = current_views >= max_views
-                # If should_destroy is True for a refresh-window access it means
-                # the file was already exhausted (legacy data or concurrent race).
-                # Return limit_hit=True so the caller blocks access rather than
-                # serving the file content and deleting it.
-                limit_hit = should_destroy
-                return True, views_remaining, should_destroy, False, limit_hit
-
-            # ── Atomic guarded increment ───────────────────────────────────
             if self.is_postgres:
+                now_naive = now.replace(tzinfo=None)
+                cutoff_naive = cutoff.replace(tzinfo=None)
+
                 async with self.pool.acquire() as conn:
+                    # ── Single-statement CTE: dedup + increment + log ──────
+                    # All three operations execute within one implicit
+                    # transaction.  The dedup CTE checks for a recent access
+                    # row; the inc CTE conditionally increments only when
+                    # dedup found no match; the log CTE inserts the access-log
+                    # row with is_counted_as_view reflecting whether the
+                    # increment fired.  The final SELECT returns the result.
+                    #
+                    # When dedup is disabled (view_refresh_minutes=0), the
+                    # dedup CTE always returns 0 rows, so inc always fires
+                    # (subject to the max_views guard).
                     row = await conn.fetchrow("""
-                        UPDATE bar_files
-                        SET current_views = current_views + 1,
-                            last_accessed_at = NOW()
-                        WHERE token = $1
-                          AND destroyed = FALSE
-                          AND current_views < max_views
-                        RETURNING current_views, max_views
-                    """, token)
+                        WITH dedup AS (
+                            SELECT 1 AS recent
+                            FROM   access_logs
+                            WHERE  token = $1
+                              AND  session_fingerprint = $2
+                              AND  accessed_at > $3
+                              AND  is_counted_as_view = TRUE
+                              AND  $11::boolean  -- dedup enabled flag
+                            LIMIT 1
+                        ),
+                        inc AS (
+                            UPDATE bar_files
+                            SET    current_views   = current_views + 1,
+                                   last_accessed_at = $4
+                            WHERE  token = $1
+                              AND  destroyed = FALSE
+                              AND  current_views < max_views
+                              AND  NOT EXISTS (SELECT 1 FROM dedup)
+                            RETURNING current_views, max_views
+                        ),
+                        log AS (
+                            INSERT INTO access_logs
+                                (token, accessed_at, ip_address, user_agent,
+                                 country, city, device_type,
+                                 session_fingerprint, is_counted_as_view)
+                            SELECT $1, $4, $5, $6, $7, $8, $9, $2,
+                                   EXISTS (SELECT 1 FROM inc)
+                            WHERE EXISTS (SELECT 1 FROM bar_files WHERE token = $1)
+                              AND ($10 = 0
+                               OR (SELECT COUNT(*) FROM access_logs WHERE token = $1) < $10)
+                        )
+                        SELECT inc.current_views,
+                               inc.max_views,
+                               TRUE  AS is_new_view,
+                               FALSE AS is_deduped
+                        FROM   inc
+                        UNION ALL
+                        SELECT bf.current_views,
+                               bf.max_views,
+                               FALSE AS is_new_view,
+                               EXISTS (SELECT 1 FROM dedup) AS is_deduped
+                        FROM   bar_files bf
+                        WHERE  bf.token = $1
+                          AND  NOT EXISTS (SELECT 1 FROM inc)
+                        LIMIT 1
+                    """,
+                        token,                  # $1
+                        session_fingerprint or "",  # $2
+                        cutoff_naive,           # $3
+                        now_naive,              # $4
+                        ip_address,             # $5
+                        user_agent,             # $6
+                        country,                # $7
+                        city,                   # $8
+                        device_type,            # $9
+                        ACCESS_LOG_MAX_ROWS,    # $10  (0 = cap disabled)
+                        bool(use_dedup),        # $11  (dedup enabled flag)
+                    )
 
                     if row is None:
-                        # 0 rows affected — limit already reached (or token
-                        # does not exist / already destroyed).  Treat as
-                        # limit_hit so caller returns 410 without serving data.
-                        # is_new_view=False: no view was counted.
+                        # Token does not exist or already destroyed.
                         return True, 0, False, False, True
 
                     current_views = row['current_views']
                     max_views     = row['max_views']
+                    is_new_view   = row['is_new_view']
+
+                    if not is_new_view:
+                        is_deduped = row['is_deduped']
+                        if not is_deduped:
+                            # Not deduped AND inc didn't fire → limit hit
+                            return True, 0, False, False, True
+                        # Deduped — return current counts without incrementing
+                        views_remaining = max(0, max_views - current_views)
+                        should_destroy = current_views >= max_views
+                        limit_hit = should_destroy
+                        return True, views_remaining, should_destroy, False, limit_hit
 
             else:
-                # SQLite: pass isolation_level=None via connect() kwargs so the
-                # underlying sqlite3 connection starts with manual transaction mode
-                # (no auto-BEGIN before DML statements).  BEGIN IMMEDIATE then
-                # acquires an exclusive write lock, preventing concurrent
-                # interleaving between the UPDATE and SELECT changes().
+                # ── SQLite: BEGIN IMMEDIATE serialises everything ───────────
+                now_iso = now.isoformat()
+                cutoff_iso = cutoff.isoformat()
+
                 async with aiosqlite.connect(self.db_path, isolation_level=None) as db:
                     await db.execute("BEGIN IMMEDIATE")
                     try:
-                        await db.execute("""
-                            UPDATE bar_files
-                            SET current_views = current_views + 1,
-                                last_accessed_at = ?
-                            WHERE token = ?
-                              AND destroyed = 0
-                              AND current_views < max_views
-                        """, (datetime.now(timezone.utc).isoformat(), token))
+                        # 1. Dedup check — inside the write lock, so no
+                        #    concurrent INSERT can sneak in between this
+                        #    SELECT and the UPDATE below.
+                        is_new_view = True
+                        if use_dedup:
+                            async with db.execute("""
+                                SELECT 1 FROM access_logs
+                                WHERE token = ?
+                                  AND session_fingerprint = ?
+                                  AND accessed_at > ?
+                                  AND is_counted_as_view = 1
+                                LIMIT 1
+                            """, (token, session_fingerprint, cutoff_iso)) as cur:
+                                is_new_view = (await cur.fetchone()) is None
 
-                        # changes() returns the number of rows touched by the
-                        # preceding DML statement within this connection.
-                        async with db.execute("SELECT changes()") as cur:
-                            affected = (await cur.fetchone())[0]
+                        if is_new_view:
+                            # 2. Guarded increment
+                            await db.execute("""
+                                UPDATE bar_files
+                                SET current_views = current_views + 1,
+                                    last_accessed_at = ?
+                                WHERE token = ?
+                                  AND destroyed = 0
+                                  AND current_views < max_views
+                            """, (now_iso, token))
 
-                        if affected == 0:
-                            await db.execute("ROLLBACK")
-                            # is_new_view=False: no view was counted.
-                            return True, 0, False, False, True
+                            async with db.execute("SELECT changes()") as cur:
+                                affected = (await cur.fetchone())[0]
 
+                            if affected == 0:
+                                # Limit already reached — still insert the log
+                                # row (is_counted_as_view=0), then return.
+                                if ACCESS_LOG_MAX_ROWS <= 0 or await self._access_log_count(db, token) < ACCESS_LOG_MAX_ROWS:
+                                    await db.execute("""
+                                        INSERT INTO access_logs
+                                        (token, accessed_at, ip_address, user_agent,
+                                         country, city, device_type,
+                                         session_fingerprint, is_counted_as_view)
+                                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+                                    """, (token, now_iso, ip_address, user_agent,
+                                          country, city, device_type,
+                                          session_fingerprint))
+                                await db.execute("COMMIT")
+                                return True, 0, False, False, True
+
+                        # 3. Read current state
                         async with db.execute(
                             "SELECT current_views, max_views FROM bar_files WHERE token = ?",
                             (token,)
                         ) as cur:
                             row = await cur.fetchone()
 
-                        await db.execute("COMMIT")
-
                         if not row:
+                            await db.execute("ROLLBACK")
                             return False, 0, False, False, False
 
                         current_views, max_views = row
+
+                        # 4. Insert access log (inside same txn)
+                        if ACCESS_LOG_MAX_ROWS <= 0 or await self._access_log_count(db, token) < ACCESS_LOG_MAX_ROWS:
+                            await db.execute("""
+                                INSERT INTO access_logs
+                                (token, accessed_at, ip_address, user_agent,
+                                 country, city, device_type,
+                                 session_fingerprint, is_counted_as_view)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """, (token, now_iso, ip_address, user_agent,
+                                  country, city, device_type,
+                                  session_fingerprint, int(is_new_view)))
+
+                        await db.execute("COMMIT")
                     except Exception:
                         await db.execute("ROLLBACK")
                         raise
@@ -945,11 +1048,25 @@ class Database:
             if should_destroy:
                 await self.mark_as_destroyed(token)
 
-            return True, views_remaining, should_destroy, True, False
+            return True, views_remaining, should_destroy, is_new_view, False
 
         except Exception as e:
-            print(f"❌ Failed in atomic_try_increment_view_count: {e}")
+            _logger.exception("Failed in atomic_try_increment_view_count for token=%s", token)
             return False, 0, False, False, False
+
+
+    @staticmethod
+    async def _access_log_count(db, token: str) -> int:
+        """Return the number of access_log rows for *token* (SQLite only).
+
+        This is a lightweight helper intended to be called **inside** an
+        existing ``BEGIN IMMEDIATE`` transaction so the count is consistent
+        with any concurrent INSERT/DELETE.
+        """
+        async with db.execute(
+            "SELECT COUNT(*) FROM access_logs WHERE token = ?", (token,)
+        ) as cur:
+            return (await cur.fetchone())[0]
 
     
     async def mark_as_destroyed(self, token: str) -> bool:
