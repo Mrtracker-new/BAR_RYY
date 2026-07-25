@@ -320,6 +320,48 @@ async def cleanup_expired_bar_files() -> None:
                     "Failed to clean exhausted file token=%s…", token[:8], exc_info=True
                 )
 
+        # Orphaned blobs — destroyed in DB but file still on disk.
+        # This happens when mark_as_destroyed() succeeds in share_file()
+        # but the subsequent delete_file() raises an exception.
+        orphaned_files = await database.db.get_orphaned_destroyed_files()
+        for file_record in orphaned_files:
+            file_path = file_record["file_path"]
+            token = file_record["token"]
+            if os.path.exists(file_path):
+                try:
+                    crypto_utils.delete_file(file_path)
+                    logger.info(
+                        "Deleted orphaned file for destroyed record: %s (token: %s…)",
+                        file_record.get("filename", "unknown"),
+                        token[:8],
+                    )
+                    cleaned += 1
+                except Exception:
+                    logger.warning(
+                        "Failed to clean orphaned file token=%s…", token[:8], exc_info=True
+                    )
+
+        # Last-chance file cleanup before DB rows are purged.
+        # If a destroyed row still has a file on disk (e.g. orphan cleanup
+        # failed on prior cycles), delete it now — once the DB row is gone,
+        # the file_path reference is lost and the blob becomes permanent.
+        stale_records = await database.db.get_stale_destroyed_records(days=7)
+        for rec in stale_records:
+            stale_path = rec["file_path"]
+            if os.path.exists(stale_path):
+                try:
+                    crypto_utils.delete_file(stale_path)
+                    logger.info(
+                        "Deleted file for stale destroyed record (token: %s…)",
+                        rec["token"][:8],
+                    )
+                    cleaned += 1
+                except Exception:
+                    logger.warning(
+                        "Failed to delete file for stale record token=%s…",
+                        rec["token"][:8], exc_info=True,
+                    )
+
         # Purge old destroyed DB records.
         old_records_cleaned = await database.db.cleanup_old_records(days=7)
         if old_records_cleaned > 0:
