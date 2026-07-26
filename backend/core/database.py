@@ -228,6 +228,7 @@ class Database:
     def __init__(self):
         self.db_path = "bar_files.db"
         self.pool = None
+        self._sqlite_conn: Optional[aiosqlite.Connection] = None
         self.is_postgres = IS_POSTGRES and HAS_POSTGRES
         
     async def init_db(self):
@@ -237,9 +238,28 @@ class Database:
         else:
             await self._init_sqlite()
     
+    @asynccontextmanager
+    async def _sqlite(self):
+        """Yield the persistent SQLite connection (opened once at init).
+
+        Replaces the per-call ``aiosqlite.connect()`` pattern.  A single
+        long-lived connection with WAL mode and autocommit eliminates
+        connection setup/teardown overhead and enables concurrent readers.
+        """
+        if self._sqlite_conn is None:
+            raise RuntimeError(
+                "SQLite connection not initialised \u2014 call init_db() first."
+            )
+        yield self._sqlite_conn
+
     async def _init_sqlite(self):
-        """Initialize SQLite database"""
-        async with aiosqlite.connect(self.db_path) as db:
+        """Initialize SQLite database with persistent connection and WAL mode."""
+        self._sqlite_conn = await aiosqlite.connect(
+            self.db_path, isolation_level=None,
+        )
+        await self._sqlite_conn.execute("PRAGMA journal_mode=WAL")
+        await self._sqlite_conn.execute("PRAGMA busy_timeout=5000")
+        async with self._sqlite() as db:
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS bar_files (
                     token TEXT PRIMARY KEY,
@@ -700,7 +720,7 @@ class Database:
                        json.dumps(metadata), max_views, expires_at_dt, created_at_dt, require_otp, otp_emails_json,
                        analytics_key_hash)
             else:
-                async with aiosqlite.connect(self.db_path) as db:
+                async with self._sqlite() as db:
                     await db.execute("""
                         INSERT INTO bar_files 
                         (token, filename, bar_filename, file_path, metadata, 
@@ -729,7 +749,7 @@ class Database:
                     if row:
                         return _normalise_file_record(dict(row))
             else:
-                async with aiosqlite.connect(self.db_path) as db:
+                async with self._sqlite() as db:
                     db.row_factory = aiosqlite.Row
                     async with db.execute(
                         "SELECT * FROM bar_files WHERE token = ? AND destroyed = 0",
@@ -774,7 +794,7 @@ class Database:
                     """, token, session_fingerprint, cutoff_naive)
                     return dict(row) if row else None
             else:
-                async with aiosqlite.connect(self.db_path) as db:
+                async with self._sqlite() as db:
                     db.row_factory = aiosqlite.Row
                     async with db.execute("""
                         SELECT * FROM access_logs
@@ -961,7 +981,7 @@ class Database:
                 now_iso = now.isoformat()
                 cutoff_iso = cutoff.isoformat()
 
-                async with aiosqlite.connect(self.db_path, isolation_level=None) as db:
+                async with self._sqlite() as db:
                     await db.execute("BEGIN IMMEDIATE")
                     try:
                         # 1. Dedup check — inside the write lock, so no
@@ -1079,7 +1099,7 @@ class Database:
                         token
                     )
             else:
-                async with aiosqlite.connect(self.db_path) as db:
+                async with self._sqlite() as db:
                     await db.execute(
                         "UPDATE bar_files SET destroyed = 1 WHERE token = ?",
                         (token,)
@@ -1109,7 +1129,7 @@ class Database:
                     """)
                     return [dict(row) for row in rows]
             else:
-                async with aiosqlite.connect(self.db_path) as db:
+                async with self._sqlite() as db:
                     db.row_factory = aiosqlite.Row
                     async with db.execute("""
                         SELECT token, file_path, filename FROM bar_files 
@@ -1140,7 +1160,7 @@ class Database:
                     """)
                     return [dict(row) for row in rows]
             else:
-                async with aiosqlite.connect(self.db_path) as db:
+                async with self._sqlite() as db:
                     db.row_factory = aiosqlite.Row
                     async with db.execute("""
                         SELECT token, file_path, filename FROM bar_files 
@@ -1173,7 +1193,7 @@ class Database:
                     """)
                     return [dict(row) for row in rows]
             else:
-                async with aiosqlite.connect(self.db_path) as db:
+                async with self._sqlite() as db:
                     db.row_factory = aiosqlite.Row
                     async with db.execute("""
                         SELECT token, file_path, filename FROM bar_files
@@ -1208,7 +1228,7 @@ class Database:
                     """, cutoff_dt_naive)
                     return [dict(row) for row in rows]
             else:
-                async with aiosqlite.connect(self.db_path) as db:
+                async with self._sqlite() as db:
                     db.row_factory = aiosqlite.Row
                     async with db.execute("""
                         SELECT token, file_path FROM bar_files
@@ -1244,7 +1264,7 @@ class Database:
                     except (AttributeError, ValueError, IndexError):
                         return 0
             else:
-                async with aiosqlite.connect(self.db_path) as db:
+                async with self._sqlite() as db:
                     cursor = await db.execute("""
                         DELETE FROM bar_files 
                         WHERE destroyed = 1 
@@ -1338,7 +1358,7 @@ class Database:
                 sqlite_ver = tuple(
                     int(x) for x in _sqlite3.sqlite_version.split(".")
                 )
-                async with aiosqlite.connect(self.db_path) as db:
+                async with self._sqlite() as db:
                     if token is not None:
                         # Per-token: LIMIT -1 OFFSET works on all SQLite versions.
                         cur = await db.execute(
@@ -1484,7 +1504,7 @@ class Database:
                         )
 
             else:
-                async with aiosqlite.connect(self.db_path) as db:
+                async with self._sqlite() as db:
                     if ACCESS_LOG_MAX_ROWS > 0:
                         # Count check before insert.  Safe under SQLite's
                         # single-writer model; the prune job corrects any rare
@@ -1614,7 +1634,7 @@ class Database:
                     logs = [dict(row) for row in log_rows]
 
             else:
-                async with aiosqlite.connect(self.db_path) as db:
+                async with self._sqlite() as db:
                     db.row_factory = aiosqlite.Row
 
                     # ── Layer 1a: validate key with a minimal, targeted query ──
@@ -1733,6 +1753,9 @@ class Database:
         """Close database connections"""
         if self.is_postgres and self.pool:
             await self.pool.close()
+        if self._sqlite_conn is not None:
+            await self._sqlite_conn.close()
+            self._sqlite_conn = None
 
 
 # Global database instance
