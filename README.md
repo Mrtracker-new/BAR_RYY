@@ -1,150 +1,134 @@
-# 🔥 BAR — Burn After Reading
+# BAR — Burn After Reading (⌐■_■)
 
 <div align="center">
 
 ![BAR Web Demo](BAR_web.gif)
 
-**Mission Impossible-style file sharing. It self-destructs. No drama.**
+**Highly Secure, Ephemeral File Sharing and Messaging System.**
+*Upload. Encrypt. Share. Destroy. [>_<]*
 
-*Upload. Encrypt. Share. Poof. 💨*
-
-[![Live Demo](https://img.shields.io/badge/🌐_Live_Demo-Try_It_Now-success?style=for-the-badge)](https://bar-rnr.vercel.app/)
+[![Live Demo](https://img.shields.io/badge/Live_Demo-Try_It_Now-success?style=for-the-badge)](https://bar-rnr.vercel.app/)
 [![GitHub](https://img.shields.io/badge/GitHub-Stars_Welcome-black?style=for-the-badge&logo=github)](https://github.com/Mrtracker-new/BAR_RYY)
 
 </div>
 
 ---
 
-## 🤔 What is this thing?
+## Overview 
 
-Think **Snapchat for files**, but actually secure.
+**BAR (Burn After Reading)** is a production-ready, zero-knowledge file sharing and ephemeral messaging platform. Designed with stringent security protocols, it allows users to securely transmit sensitive information that self-destructs after viewing. 
 
-You drop a file in. It gets encrypted. You get a link. The other person opens it, reads it, and — depending on what you set — it's gone forever. No copy. No trace. No drama.
-
-Now also with **Burn Chat** — ephemeral real-time messaging that self-destructs when the timer runs out.
-
-Great for:
-- 🤐 Sharing passwords without leaving an email trail
-- 💼 Sending contracts that shouldn't stick around
-- 💬 Having a conversation that disappears on its own
-- 🕵️ Feeling like a spy on a completely normal Tuesday
-- 🍪 Hiding cookie recipes from grandma (hey, no judgment)
+Whether sharing passwords, sensitive contracts, or engaging in confidential discussions, BAR ensures that your data leaves no trace once the conditions are met. (o_O)
 
 ---
 
-## ✨ What it can do
+## Core Capabilities [-_-]
 
-### 📦 Sealed File Containers
+### Sealed File Containers
 
 | Feature | Details |
 |---|---|
-| 🔒 AES-256 Encryption | Same stuff banks use |
-| 🔑 Zero-Knowledge | We literally can't read your files |
-| 💣 Auto-Destruct | Timer-based or view-count based |
-| 💾 Two Share Modes | Client-side `.bar` file *or* server-side link |
-| 🔄 Smart Refresh Control | Stops accidental view-count burns |
-| 🔔 Webhooks | Discord/Slack ping when someone opens it |
-| 📧 Email OTP | 2FA before the file is revealed |
-| 🛡️ Brute-Force Lockout | 5 wrong passwords = 60-minute timeout |
-| 🎨 Rich File Preview | View 50+ file types without downloading |
+| **[x] AES-256 Encryption** | Industry-standard encryption securing your files. |
+| **[x] Zero-Knowledge Architecture** | The server cannot access or decrypt your data. |
+| **[x] Auto-Destruction Mechanism** | Configurable timer-based or view-count based deletion. |
+| **[x] Dual Share Modes** | Client-side `.bar` file or a secure server-side link. |
+| **[x] Smart Refresh Control** | Prevents accidental consumption of view-based limits. |
+| **[x] Webhook Integrations** | Real-time notifications (Discord/Slack) upon access. |
+| **[x] Email OTP Verification** | Secondary authentication layer before file decryption. |
+| **[x] Brute-Force Protection** | Automatic lockout after successive incorrect password attempts. |
+| **[x] Rich File Preview** | Securely view over 50 file types directly in the browser. |
 
-### 🔥 Burn Chat *(New!)*
+### Burn Chat
 
 | Feature | Details |
 |---|---|
-| 🔐 End-to-End Encrypted | Messages encrypted in-browser with **AES-GCM-256** before leaving your device. Server only sees ciphertext |
-| 🤝 ECDH Key Exchange | Each session uses **ECDH P-256** key agreement — no shared secret ever touches the server |
-| 🔏 Session Fingerprint | 6-char code derived from the shared key. Verify it matches across all participants to detect MITM |
-| 💬 Ephemeral Messaging | Real-time chat over WebSockets — nothing stored server-side |
-| ⏱️ Self-Destruct Timer | Set 5 min → 24 hr. When it hits zero, it's all gone |
-| 👑 Creator PIN | Claim the moderator role with a one-time PIN |
-| 🚫 Zero Persistence | Messages exist only in server memory — no disk, no DB |
-| 🔗 Shareable Session Link | Send the link to anyone. They join, you chat, it burns |
-| ⚡ Instant Destroy | All participants see the burn animation simultaneously |
+| **[x] End-to-End Encryption** | Messages encrypted in-browser via **AES-GCM-256** prior to transmission. |
+| **[x] ECDH Key Exchange** | Sessions utilize **ECDH P-256** key agreement; shared secrets never reach the server. |
+| **[x] Session Fingerprint** | 6-character verification code to prevent Man-in-the-Middle (MITM) attacks. |
+| **[x] Ephemeral Messaging** | Real-time WebSocket communication with zero server-side persistence. |
+| **[x] Self-Destruct Timer** | Configurable lifespan from 5 minutes up to 24 hours. |
+| **[x] Creator PIN** | Secure moderator role assignment via one-time PIN. |
+| **[x] Instant Destruction** | Synchronized deletion sequence for all participants. |
 
 ---
 
-## 🚀 Get started in 60 seconds
+## Quick Start Guide (^-^)
 
-### Option A — Just use it online
-👉 **[bar-rnr.vercel.app](https://bar-rnr.vercel.app/)**
+### Option A: Online Platform
 
-> ⏰ **Heads up:** The backend sleeps when idle. Hit **"Wake Server"** and wait ~50s on first load. This applies to both file sealing and Burn Chat.
+Access the live environment directly:
+-> **[bar-rnr.vercel.app](https://bar-rnr.vercel.app/)**
 
----
+> **Note:** The backend sleeps during periods of inactivity. Please initialize the "Wake Server" function and allow approximately 50 seconds for the initial cold start. (T_T)
 
-### Option B — Run it yourself (Windows)
+### Option B: Local Deployment (Windows)
+
+For developers and self-hosted environments:
 
 ```bash
 git clone https://github.com/Mrtracker-new/BAR_RYY.git
 cd BAR_RYY
-setup.bat    # installs everything
-start.bat    # fires up both servers
+setup.bat    # Initializes dependencies
+start.bat    # Launches frontend and backend servers
 ```
 
-Then open → **http://localhost:5173** 🎉
+Once running, navigate to **http://localhost:5173** in your browser. \o/
 
 ---
 
-## 🗺️ Page Routes
+## Application Architecture & Routes
 
-| Route | What it does |
+| Route | Function |
 |---|---|
-| `/` | Landing page — choose Seal or Burn Chat |
-| `/app` | File sealing workspace |
-| `/burn-chat` | Create a Burn Chat session |
-| `/chat/:token` | Join an active Burn Chat room |
-| `/share/:token` | Open a sealed file container |
+| `/` | Application landing page |
+| `/app` | Primary file sealing workspace |
+| `/burn-chat` | Session creation interface for Burn Chat |
+| `/chat/:token` | Active Burn Chat session room |
+| `/share/:token` | Interface for accessing a sealed file container |
 
 ---
 
-## 🔐 Security in plain English
+## Security Implementation Specifications {-_-}
 
 ### File Containers
-**AES-256** encryption. **PBKDF2** key derivation with 100,000 iterations. **HMAC-SHA256** tamper detection.
+BAR employs **AES-256** encryption combined with **PBKDF2** key derivation (100,000 iterations) and **HMAC-SHA256** for tamper detection. Decryption keys are strictly client-side, ensuring complete zero-knowledge privacy.
 
-> Even if someone hacks the server, steals the database, or threatens us with strongly-worded emails — they still can't read your files. The key lives only in your head (and in the URL you share).
+### Burn Chat Protocol
+The Burn Chat module enforces true end-to-end encryption:
 
-### Burn Chat
-Burn Chat goes further with **true end-to-end encryption**:
-
-- **Key agreement:** `ECDH P-256` — each participant generates a keypair in their browser. Private keys never leave the device (`extractable: false`).
-- **Session key:** Creator generates a random `AES-GCM-256` key, wraps it per-peer using the ECDH shared secret, and delivers it via the server (as opaque ciphertext the server cannot read).
-- **Message encryption:** Every message is encrypted client-side with a fresh 12-byte random IV before it's sent. The server relays ciphertext only.
-- **Session fingerprint:** A 6-character hex code derived from `SHA-256(raw session key)[0:3]`. All participants can compare it verbally to confirm no key substitution occurred.
-- **Zero server residue:** The server never holds plaintext, session keys, or private keys — only relays opaque base64 blobs.
-- **Degradation:** If the page is served over plain HTTP (`crypto.subtle` unavailable), a warning banner is shown and messages fall back to TLS-only protection.
+- **Key Agreement:** `ECDH P-256`. Client devices generate keypairs; private keys remain non-extractable.
+- **Session Key:** Encrypted per-peer with the ECDH shared secret using `AES-GCM-256`, securely relayed through the server.
+- **Message Integrity:** Each message uses a newly generated 12-byte random IV.
+- **Session Fingerprint:** Derived from `SHA-256(raw session key)[0:3]`, allowing participants to verbally confirm connection integrity.
+- **Data Degradation:** If accessed via non-TLS environments (`crypto.subtle` unavailable), the system falls back to TLS-only protection with an active warning banner.
 
 ---
 
-## 🤝 Want to contribute?
+## Contributing \^_^/
 
-Found a bug? Have a brilliant idea? Pull requests are very welcome.
+Contributions are welcome for enhancing system security, improving documentation, or adding core features.
 
-1. Fork it
-2. Make your changes
-3. Test them (please 🙏)
-4. PR with a decent description (and maybe a funny commit message)
+1. Fork the repository
+2. Implement and test your modifications
+3. Submit a comprehensive Pull Request detailing the changes
 
-Bonus points for: `🧪 tests` · `📝 docs` · `🔒 security catches` · `🎨 UI magic`
+Priority is given to security enhancements, comprehensive test coverage, and documentation improvements. :-)
 
 ---
 
-## 📜 License
+## License
 
-**MIT** — do whatever you want with it.
+Licensed under the **MIT License**.
 
-✅ Use it · ✅ Modify it · ✅ Deploy it  
-❌ Blame us if it breaks · ❌ Use it for evil *(or at least be subtle)*
+- Use it, modify it, and deploy it.
+- Provided "as is", without warranty of any kind.
 
 ---
 
 <div align="center">
 
-**Made with ☕, paranoia, and questionable late-night energy**
-
-*"Because some files deserve to disappear."*
-
-🔥 **Burn After Reading** 🔥
+**Burn After Reading**  
+*Secure, Ephemeral, Uncompromising.*  
+(⌐■_■)
 
 </div>
