@@ -6,7 +6,7 @@ import logging
 import mimetypes
 from datetime import datetime, timezone
 from fastapi import APIRouter, Request, Form, Depends, HTTPException, Header
-from fastapi.responses import Response
+from fastapi.responses import StreamingResponse
 
 from models.schemas import DecryptRequest, OTPEmailRequest
 from core import security
@@ -16,6 +16,7 @@ from utils import crypto_utils
 from core import database
 from services import analytics
 from services import webhook_service
+from core.concurrency import decrypt_semaphore, iter_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -293,26 +294,31 @@ async def share_file(
         # ------------------------------------------------------------------ #
         # Decrypt BAR file — password correctness validated inside via        #
         # PBKDF2 key derivation + HMAC signature check.                       #
+        #                                                                      #
+        # Guarded by decrypt_semaphore: Fernet decrypt holds ~2× file_size   #
+        # in RAM (encrypted + decrypted buffers).  The semaphore caps how     #
+        # many run in parallel to prevent OOM under concurrent load.          #
         # ------------------------------------------------------------------ #
-        try:
-            decrypted_data, metadata, key, _enc, _salt = encryption_service.decrypt_bar_file(
-                bar_data, password_to_use
-            )
-        except HTTPException as e:
-            if e.status_code == 403:
-                if is_password_protected:
-                    # Wrong password — advance the brute-force counter
-                    security.record_password_attempt(client_ip, False, token)
-                webhook_url = db_metadata.get("webhook_url")
-                if webhook_url:
-                    webhook_srv = webhook_service.get_webhook_service()
-                    asyncio.create_task(webhook_srv.send_access_denied_alert(
-                        webhook_url=webhook_url,
-                        filename=db_metadata.get("filename", "unknown"),
-                        reason=str(e.detail),
-                        ip_address=client_ip,
-                    ))
-            raise
+        async with decrypt_semaphore:
+            try:
+                decrypted_data, metadata, key, _enc, _salt = encryption_service.decrypt_bar_file(
+                    bar_data, password_to_use
+                )
+            except HTTPException as e:
+                if e.status_code == 403:
+                    if is_password_protected:
+                        # Wrong password — advance the brute-force counter
+                        security.record_password_attempt(client_ip, False, token)
+                    webhook_url = db_metadata.get("webhook_url")
+                    if webhook_url:
+                        webhook_srv = webhook_service.get_webhook_service()
+                        asyncio.create_task(webhook_srv.send_access_denied_alert(
+                            webhook_url=webhook_url,
+                            filename=db_metadata.get("filename", "unknown"),
+                            reason=str(e.detail),
+                            ip_address=client_ip,
+                        ))
+                raise
 
 
         # ------------------------------------------------------------------ #
@@ -469,8 +475,8 @@ async def share_file(
         if view_only:
             response_headers["Content-Security-Policy"] = "sandbox; default-src 'none';"
 
-        return Response(
-            content=decrypted_data,
+        return StreamingResponse(
+            iter_bytes(decrypted_data),
             media_type=mime_type,
             headers=response_headers
         )
