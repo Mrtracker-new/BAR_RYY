@@ -378,6 +378,37 @@ async def cleanup_expired_bar_files() -> None:
                 database.ACCESS_LOG_MAX_ROWS,
             )
 
+        # Sweep stale .bar.tmp files left behind by interrupted atomic writes.
+        # encryption_service.create_bar_file() writes to "<path>.tmp" then
+        # os.replace() to the final path.  If the process is SIGKILL'd between
+        # those two steps, the .tmp file is orphaned.  Normal failures are
+        # handled by the except-BaseException cleanup in create_bar_file(),
+        # but SIGKILL is uncatchable — this sweep is the safety net.
+        # Any .bar.tmp older than 5 minutes is certainly orphaned.
+        _TMP_STALE_SECONDS = 300  # 5 minutes
+        try:
+            for entry in os.scandir(GENERATED_DIR):
+                if not entry.is_file() or not entry.name.endswith(".bar.tmp"):
+                    continue
+                try:
+                    age = (datetime.now(timezone.utc)
+                           - datetime.fromtimestamp(entry.stat().st_mtime, tz=timezone.utc))
+                    if age > timedelta(seconds=_TMP_STALE_SECONDS):
+                        os.unlink(entry.path)
+                        logger.info(
+                            "Removed stale .bar.tmp: %s (age: %ds)",
+                            entry.name, age.total_seconds(),
+                        )
+                        cleaned += 1
+                except OSError:
+                    logger.warning(
+                        "Failed to remove stale .bar.tmp: %s",
+                        entry.name, exc_info=True,
+                    )
+        except OSError:
+            # GENERATED_DIR missing / inaccessible — already guarded above.
+            pass
+
     except Exception:
         logger.exception("Database cleanup error")
 
