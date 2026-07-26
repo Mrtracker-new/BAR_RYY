@@ -5,7 +5,7 @@
 ![BAR Web Demo](BAR_web.gif)
 
 **Highly Secure, Ephemeral File Sharing and Messaging System.**
-*Upload. Encrypt. Share. Destroy. [>_<]*
+*Upload. Encrypt. Share. Destroy. ( ‾́ ◡ ‾́ )*
 
 [![Live Demo](https://img.shields.io/badge/Live_Demo-Try_It_Now-success?style=for-the-badge)](https://bar-rnr.vercel.app/)
 [![GitHub](https://img.shields.io/badge/GitHub-Stars_Welcome-black?style=for-the-badge&logo=github)](https://github.com/Mrtracker-new/BAR_RYY)
@@ -22,33 +22,33 @@ Whether sharing passwords, sensitive contracts, or engaging in confidential disc
 
 ---
 
-## Core Capabilities [-_-]
+## Core Capabilities
 
-### Sealed File Containers
-
-| Feature | Details |
-|---|---|
-| **[x] AES-256 Encryption** | Industry-standard encryption securing your files. |
-| **[x] Zero-Knowledge Architecture** | The server cannot access or decrypt your data. |
-| **[x] Auto-Destruction Mechanism** | Configurable timer-based or view-count based deletion. |
-| **[x] Dual Share Modes** | Client-side `.bar` file or a secure server-side link. |
-| **[x] Smart Refresh Control** | Prevents accidental consumption of view-based limits. |
-| **[x] Webhook Integrations** | Real-time notifications (Discord/Slack) upon access. |
-| **[x] Email OTP Verification** | Secondary authentication layer before file decryption. |
-| **[x] Brute-Force Protection** | Automatic lockout after successive incorrect password attempts. |
-| **[x] Rich File Preview** | Securely view over 50 file types directly in the browser. |
-
-### Burn Chat
+### Sealed File Containers [-_-]
 
 | Feature | Details |
 |---|---|
-| **[x] End-to-End Encryption** | Messages encrypted in-browser via **AES-GCM-256** prior to transmission. |
-| **[x] ECDH Key Exchange** | Sessions utilize **ECDH P-256** key agreement; shared secrets never reach the server. |
-| **[x] Session Fingerprint** | 6-character verification code to prevent Man-in-the-Middle (MITM) attacks. |
-| **[x] Ephemeral Messaging** | Real-time WebSocket communication with zero server-side persistence. |
-| **[x] Self-Destruct Timer** | Configurable lifespan from 5 minutes up to 24 hours. |
-| **[x] Creator PIN** | Secure moderator role assignment via one-time PIN. |
-| **[x] Instant Destruction** | Synchronized deletion sequence for all participants. |
+| **AES-256 Encryption** | Industry-standard encryption securing your files. |
+| **Zero-Knowledge Architecture** | The server cannot access or decrypt your data. |
+| **Auto-Destruction Mechanism** | Configurable timer-based or view-count based deletion. |
+| **Dual Share Modes** | Client-side `.bar` file or a secure server-side link. |
+| **Smart Refresh Control** | Prevents accidental consumption of view-based limits. |
+| **Webhook Integrations** | Real-time notifications (Discord/Slack) upon access. |
+| **Email OTP Verification** | Secondary authentication layer before file decryption. |
+| **Brute-Force Protection** | Automatic lockout after successive incorrect password attempts. |
+| **Rich File Preview** | Securely view over 50 file types directly in the browser. |
+
+### Burn Chat [>_<]
+
+| Feature | Details |
+|---|---|
+| **End-to-End Encryption** | Messages encrypted in-browser via **AES-GCM-256** prior to transmission. |
+| **ECDH Key Exchange** | Sessions utilize **ECDH P-256** key agreement; shared secrets never reach the server. |
+| **Session Fingerprint** | 6-character verification code to prevent Man-in-the-Middle (MITM) attacks. |
+| **Ephemeral Messaging** | Real-time WebSocket communication with zero server-side persistence. |
+| **Self-Destruct Timer** | Configurable lifespan from 5 minutes up to 24 hours. |
+| **Creator PIN** | Secure moderator role assignment via one-time PIN. |
+| **Instant Destruction** | Synchronized deletion sequence for all participants. |
 
 ---
 
@@ -57,9 +57,9 @@ Whether sharing passwords, sensitive contracts, or engaging in confidential disc
 ### Option A: Online Platform
 
 Access the live environment directly:
--> **[bar-rnr.vercel.app](https://bar-rnr.vercel.app/)**
+👉 **[bar-rnr.vercel.app](https://bar-rnr.vercel.app/)**
 
-> **Note:** The backend sleeps during periods of inactivity. Please initialize the "Wake Server" function and allow approximately 50 seconds for the initial cold start. (T_T)
+> **Note:** The backend sleeps during periods of inactivity. Please initialize the "Wake Server" function and allow approximately 50 seconds for the initial cold start.
 
 ### Option B: Local Deployment (Windows)
 
@@ -104,7 +104,7 @@ The Burn Chat module enforces true end-to-end encryption:
 
 ---
 
-## Contributing \^_^/
+## Contributing ヽ(•‿•)ノ
 
 Contributions are welcome for enhancing system security, improving documentation, or adding core features.
 
@@ -112,7 +112,7 @@ Contributions are welcome for enhancing system security, improving documentation
 2. Implement and test your modifications
 3. Submit a comprehensive Pull Request detailing the changes
 
-Priority is given to security enhancements, comprehensive test coverage, and documentation improvements. :-)
+Priority is given to security enhancements, comprehensive test coverage, and documentation improvements.
 
 ---
 
