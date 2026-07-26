@@ -5,7 +5,7 @@ import asyncio
 import logging
 import tempfile
 from fastapi import APIRouter, Request, File, UploadFile, Form, Depends, HTTPException
-from fastapi.responses import Response
+from fastapi.responses import StreamingResponse
 
 from models.schemas import DecryptRequest
 from core import security
@@ -16,6 +16,7 @@ from utils import crypto_utils
 from storage import client_storage
 from services import analytics
 from services import webhook_service
+from core.concurrency import decrypt_semaphore, iter_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -164,10 +165,11 @@ async def decrypt_bar(
             raise
 
         # ------------------------------------------------------------------ #
-        # 5. Decrypt                                                           #
+        # 5. Decrypt (guarded by semaphore to cap concurrent memory usage)     #
         # ------------------------------------------------------------------ #
         password_to_use = request.password if request.password and request.password.strip() else None
 
+        await decrypt_semaphore.acquire()
         try:
             decrypted_data, metadata, key, _enc, _salt = encryption_service.decrypt_bar_file(bar_data, password_to_use)
         except HTTPException as decrypt_exc:
@@ -223,6 +225,9 @@ async def decrypt_bar(
                 status_code=403,
                 detail="File integrity check failed — possible tampering detected"
             )
+
+        finally:
+            decrypt_semaphore.release()
 
         # ------------------------------------------------------------------ #
         # 6. Successful decryption — clear brute-force counter                #
@@ -329,8 +334,8 @@ async def decrypt_bar(
         original_filename = metadata.get("filename", "decrypted_file")
         views_remaining = max(0, metadata.get("max_views", 0) - current_views)
 
-        response = Response(
-            content=decrypted_data,
+        response = StreamingResponse(
+            iter_bytes(decrypted_data),
             media_type="application/octet-stream",
             headers={
                 "Content-Disposition": security.build_content_disposition(original_filename, 'attachment'),
@@ -413,9 +418,10 @@ async def decrypt_uploaded_bar_file(
             logger.warning('IP %s is locked out for file token %s', client_ip, file_token)
             raise
         
-        # Decrypt BAR file
+        # Decrypt BAR file (guarded by semaphore to cap concurrent memory)
         password_to_use = password if password and password.strip() else None
         
+        await decrypt_semaphore.acquire()
         try:
             decrypted_data, metadata, key, _enc, _salt = encryption_service.decrypt_bar_file(bar_data, password_to_use)
         except HTTPException as e:
@@ -452,6 +458,8 @@ async def decrypt_uploaded_bar_file(
                 except Exception:
                     pass  # Never let webhook failures mask the auth error
             raise
+        finally:
+            decrypt_semaphore.release()
         
         # Validate access — expiry and presence of password string only.
         # NOTE: crypto_utils.unpack_bar_file() (called inside decrypt_bar_file)
@@ -478,9 +486,9 @@ async def decrypt_uploaded_bar_file(
         
         logger.info('Access granted (client-side — view limits NOT enforced)')
         
-        # Return file data
-        return Response(
-            content=decrypted_data,
+        # Return file data (streamed in chunks for backpressure)
+        return StreamingResponse(
+            iter_bytes(decrypted_data),
             media_type="application/octet-stream",
             headers={
                 "Content-Disposition": security.build_content_disposition(metadata.get('filename', 'decrypted_file'), 'attachment'),
