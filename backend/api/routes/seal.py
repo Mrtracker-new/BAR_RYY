@@ -11,6 +11,7 @@ from services.file_service import FileService
 from services.encryption_service import EncryptionService
 from api.dependencies import get_file_service_dep, get_encryption_service_dep, get_database
 from utils import crypto_utils
+from core.concurrency import decrypt_semaphore
 
 
 logger = logging.getLogger(__name__)
@@ -47,25 +48,29 @@ async def seal_container(
         # Format: "<uuid4>__<safe_filename>"  (produced by save_uploaded_file)
         display_filename = request.temp_filename.split('__', 1)[1]
         
-        # Read file data
-        with open(uploaded_file, "rb") as f:
-            file_data = f.read()
-        
-        # Create BAR file
-        bar_result = await encryption_service.create_bar_file(
-            file_data=file_data,
-            filename=display_filename,
-            max_views=request.max_views,
-            expiry_minutes=request.expiry_minutes,
-            password=request.password,
-            webhook_url=request.webhook_url,
-            view_only=request.view_only,
-            storage_mode=request.storage_mode,
-            require_otp=request.require_otp,
-            otp_emails=request.otp_emails,
-            view_refresh_minutes=request.view_refresh_minutes,
-            auto_refresh_seconds=request.auto_refresh_seconds
-        )
+        # Read file data + create BAR file under concurrency semaphore.
+        # Encryption holds ~2× file_size in RAM (plaintext + encrypted).
+        await decrypt_semaphore.acquire()
+        try:
+            with open(uploaded_file, "rb") as f:
+                file_data = f.read()
+            
+            bar_result = await encryption_service.create_bar_file(
+                file_data=file_data,
+                filename=display_filename,
+                max_views=request.max_views,
+                expiry_minutes=request.expiry_minutes,
+                password=request.password,
+                webhook_url=request.webhook_url,
+                view_only=request.view_only,
+                storage_mode=request.storage_mode,
+                require_otp=request.require_otp,
+                otp_emails=request.otp_emails,
+                view_refresh_minutes=request.view_refresh_minutes,
+                auto_refresh_seconds=request.auto_refresh_seconds
+            )
+        finally:
+            decrypt_semaphore.release()
         
         # Remove the plaintext temp upload — AES-256 is the protection layer,
         # not overwriting (ineffective on SSDs / cloud block storage).
