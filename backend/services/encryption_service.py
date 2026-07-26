@@ -116,9 +116,26 @@ class EncryptionService:
         bar_filename = f"{bar_id}.bar"
         bar_path = os.path.join(self.generated_dir, bar_filename)
 
-        # Save .bar file
-        with open(bar_path, "wb") as f:
-            f.write(bar_data)
+        # Save .bar file atomically: write to a temporary file first, then
+        # rename into place.  This prevents a half-written .bar from appearing
+        # at bar_path if the process is killed, the disk fills, or the write
+        # raises mid-way.  os.replace() is atomic on both POSIX and NTFS (same
+        # volume), so concurrent readers never see a partial file.
+        tmp_path = bar_path + ".tmp"
+        try:
+            with open(tmp_path, "wb") as f:
+                f.write(bar_data)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, bar_path)
+        except BaseException:
+            # Clean up the temp file on ANY failure (including KeyboardInterrupt
+            # and SystemExit) so no partial artefacts linger on disk.
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
         
         return {
             "bar_id": bar_id,
