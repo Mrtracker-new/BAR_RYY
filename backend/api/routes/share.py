@@ -7,6 +7,7 @@ import mimetypes
 from datetime import datetime, timezone
 from fastapi import APIRouter, Request, Form, Depends, HTTPException, Header
 from fastapi.responses import StreamingResponse
+from starlette.background import BackgroundTask
 
 from models.schemas import DecryptRequest, OTPEmailRequest
 from core import security
@@ -347,11 +348,9 @@ async def share_file(
         # Get view refresh setting from metadata
         view_refresh_minutes = metadata.get("view_refresh_minutes", 0)
 
-        # Get device and geolocation for analytics
+        # Get device type for analytics (geolocation is resolved in the
+        # background to avoid blocking the download response — see below).
         device_type = analytics.get_device_type(user_agent)
-        geo_data = await analytics.get_geolocation(ip_address)
-        country = geo_data.get("country") if geo_data else None
-        city = geo_data.get("city") if geo_data else None
 
         # ------------------------------------------------------------------ #
         # Atomic view-count increment + access logging                         #
@@ -360,6 +359,10 @@ async def share_file(
         # inside a single DB transaction.  This eliminates the race window     #
         # where two concurrent requests could both see "no recent access"      #
         # and both burn a view within the refresh window.                       #
+        #                                                                      #
+        # country/city are NULL here — resolved asynchronously by the          #
+        # backfill task below so the response is never blocked by the          #
+        # external geolocation API call.                                        #
         # ------------------------------------------------------------------ #
         db_ok, views_remaining, should_destroy, is_new_view, limit_hit = \
             await db.atomic_try_increment_view_count(
@@ -368,13 +371,24 @@ async def share_file(
                 view_refresh_minutes=view_refresh_minutes,
                 ip_address=ip_address,
                 user_agent=user_agent,
-                country=country,
-                city=city,
+                country=None,
+                city=None,
                 device_type=device_type,
             )
 
         if not db_ok:
             raise HTTPException(status_code=500, detail="Failed to update view count")
+
+        # Deferred background task: backfill geolocation after the response
+        # is sent.  Attached to the StreamingResponse below so Starlette
+        # manages its lifecycle (proper exception logging, no orphaned tasks).
+        # The access log row already exists with NULL geo fields; this task
+        # resolves the IP and UPDATEs the row.  Cache hits make this nearly
+        # instant for repeat visitors.  On failure the row simply retains
+        # NULL country/city — acceptable degradation.
+        _geo_bg_task = BackgroundTask(
+            analytics.backfill_geolocation, db, token, ip_address
+        )
 
         if limit_hit:
             # Atomic guard fired: another concurrent request already exhausted
@@ -478,7 +492,8 @@ async def share_file(
         return StreamingResponse(
             iter_bytes(decrypted_data),
             media_type=mime_type,
-            headers=response_headers
+            headers=response_headers,
+            background=_geo_bg_task,
         )
 
     except HTTPException:
