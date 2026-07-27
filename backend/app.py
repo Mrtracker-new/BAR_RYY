@@ -23,6 +23,7 @@ from core import security
 # Import utilities
 from core import database
 from services import cleanup
+from services import analytics
 
 # Import API routes
 from api.routes import upload, seal, decrypt, share, chat
@@ -173,6 +174,11 @@ async def startup_event():
     asyncio.create_task(cleanup.run_cleanup_loop())
     print("✅ Cleanup task started")
 
+    # Initialise the managed httpx client used by geolocation lookups.
+    # Must happen after the event loop is running (hence in startup, not at
+    # module-import time) so the client binds to the correct loop.
+    await analytics.init_httpx_client()
+
     print(f"🚀 {settings.app_name} is ready to serve requests")
 
 
@@ -180,6 +186,9 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     """Clean up on shutdown."""
+    # Close the geolocation httpx client first (may still reference the DB
+    # connection pool indirectly via pending backfill tasks).
+    await analytics.close_httpx_client()
     await database.close_database()
     print(f"👋 {settings.app_name} shutting down")
 
