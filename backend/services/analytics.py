@@ -4,11 +4,17 @@ Handles device detection and geolocation
 """
 from __future__ import annotations
 
+import asyncio as _asyncio
 import ipaddress
+import logging
 import os
+import time as _time
+from collections import OrderedDict as _OrderedDict
 from typing import Optional, Dict, List
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -64,7 +70,7 @@ def _load_trusted_networks() -> List[ipaddress.IPv4Network | ipaddress.IPv6Netwo
         try:
             networks.append(ipaddress.ip_network(cidr, strict=False))
         except ValueError:
-            print(f"⚠️ [TrustedProxy] Invalid CIDR ignored: {cidr!r}")
+            logger.warning("Invalid CIDR ignored: %r", cidr)
     return networks
 
 
@@ -179,27 +185,239 @@ def get_device_type(user_agent: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Geolocation
+# Geolocation — cached, non-blocking, feature-gated
+# ---------------------------------------------------------------------------
+# Key design decisions:
+#   1. LRU + TTL cache with negative caching:  IP->geo is nearly static;
+#      caching avoids burning the ipapi.co free-tier quota (~1 k/day) on
+#      repeat visitors.  Failed lookups are cached with a shorter TTL to
+#      prevent hammering ipapi.co for consistently-failing IPs.
+#   2. Managed httpx client:  connection pooling + keep-alive.  Lifecycle
+#      is tied to FastAPI startup/shutdown via init/close helpers.
+#   3. Feature flag:  ENABLE_GEOLOCATION=false skips the HTTP call entirely.
+#   4. backfill_geolocation():  designed for Starlette BackgroundTask so
+#      geolocation never blocks the download response.
+#   5. ipaddress module:  proper RFC-compliant IP classification instead of
+#      error-prone string prefix matching.
+# ---------------------------------------------------------------------------
+
+_GEO_CACHE_MAX: int = 2048         # max entries (LRU eviction)
+_GEO_CACHE_TTL: int = 86_400       # 24 hours in seconds (success)
+_GEO_NEG_CACHE_TTL: int = 300      # 5 minutes (failed lookups)
+_geo_cache: _OrderedDict[str, Dict] = _OrderedDict()
+_geo_lock: _asyncio.Lock = _asyncio.Lock()
+
+# Managed httpx client — created at startup, closed at shutdown.
+_httpx_client: Optional[httpx.AsyncClient] = None
+
+_LOCAL_GEO: Dict[str, str] = {"country": "Local", "city": "Localhost"}
+_UNKNOWN_GEO: Dict[str, str] = {"country": "Unknown", "city": "Unknown"}
+
+
+# ---------------------------------------------------------------------------
+# httpx lifecycle — called from app.py startup / shutdown
+# ---------------------------------------------------------------------------
+
+async def init_httpx_client() -> None:
+    """Create the module-level httpx.AsyncClient.
+
+    Must be called once during application startup (e.g. FastAPI's
+    ``on_event("startup")``).  Calling it more than once is a no-op.
+    """
+    global _httpx_client
+    if _httpx_client is None:
+        _httpx_client = httpx.AsyncClient(timeout=3.0)
+        logger.info("Geolocation httpx client initialised")
+
+
+async def close_httpx_client() -> None:
+    """Gracefully close the module-level httpx.AsyncClient.
+
+    Must be called during application shutdown so that the underlying
+    connection pool is drained and TCP sockets are released cleanly.
+    """
+    global _httpx_client
+    if _httpx_client is not None:
+        await _httpx_client.aclose()
+        _httpx_client = None
+        logger.info("Geolocation httpx client closed")
+
+
+def _get_httpx_client() -> httpx.AsyncClient:
+    """Return the module-level httpx.AsyncClient.
+
+    Raises ``RuntimeError`` if ``init_httpx_client()`` was never called,
+    making lifecycle misuse immediately obvious instead of silently
+    creating an unmanaged client.
+    """
+    if _httpx_client is None:
+        raise RuntimeError(
+            "Geolocation httpx client not initialised — "
+            "call analytics.init_httpx_client() during app startup"
+        )
+    return _httpx_client
+
+
+# ---------------------------------------------------------------------------
+# IP classification — using stdlib ipaddress for RFC-compliant checks
+# ---------------------------------------------------------------------------
+
+def _is_non_routable_ip(ip: str) -> bool:
+    """Return True for IPs that should never be sent to an external geo API.
+
+    Uses the ``ipaddress`` module's built-in RFC-compliant properties:
+    ``is_private``, ``is_loopback``, ``is_reserved``, ``is_link_local``,
+    and ``is_unspecified`` — covering all of RFC 1918, RFC 4193, RFC 5737,
+    RFC 3927, and IPv6 equivalents.  This replaces error-prone manual
+    prefix matching.
+    """
+    if not ip or ip == "Unknown":
+        return True
+    try:
+        addr = ipaddress.ip_address(ip)
+        return (
+            addr.is_private
+            or addr.is_loopback
+            or addr.is_reserved
+            or addr.is_link_local
+            or addr.is_unspecified
+        )
+    except ValueError:
+        # Malformed IP string — treat as non-routable (don't send to API)
+        logger.debug("Malformed IP treated as non-routable: %r", ip)
+        return True
+
+
+# ---------------------------------------------------------------------------
+# Cache helpers
+# ---------------------------------------------------------------------------
+
+async def _cache_get(ip: str) -> Optional[Dict[str, str]]:
+    """Look up *ip* in the geo cache.
+
+    Returns the cached dict on a valid hit, ``_UNKNOWN_GEO`` copy on a
+    negative-cache hit, or ``None`` on a miss (including TTL-expired
+    entries which are evicted inline).
+    """
+    async with _geo_lock:
+        entry = _geo_cache.get(ip)
+        if entry is None:
+            return None  # true miss
+
+        age = _time.monotonic() - entry["_ts"]
+
+        # Negative-cache entry (short TTL)
+        if entry.get("_neg"):
+            if age < _GEO_NEG_CACHE_TTL:
+                _geo_cache.move_to_end(ip)
+                return _UNKNOWN_GEO.copy()
+            del _geo_cache[ip]
+            return None
+
+        # Positive-cache entry (long TTL)
+        if age < _GEO_CACHE_TTL:
+            _geo_cache.move_to_end(ip)
+            return {"country": entry["country"], "city": entry["city"]}
+
+        # TTL expired — evict
+        del _geo_cache[ip]
+        return None
+
+
+async def _cache_put(ip: str, geo: Dict[str, str], *, negative: bool = False) -> None:
+    """Insert or update an entry in the geo cache with LRU eviction."""
+    async with _geo_lock:
+        if negative:
+            _geo_cache[ip] = {"_neg": True, "_ts": _time.monotonic()}
+        else:
+            _geo_cache[ip] = {
+                "country": geo["country"],
+                "city": geo["city"],
+                "_ts": _time.monotonic(),
+            }
+        _geo_cache.move_to_end(ip)
+        # LRU eviction
+        while len(_geo_cache) > _GEO_CACHE_MAX:
+            _geo_cache.popitem(last=False)
+
+
+# ---------------------------------------------------------------------------
+# Public geolocation API
 # ---------------------------------------------------------------------------
 
 async def get_geolocation(ip_address: str) -> Optional[Dict[str, str]]:
     """
     Get geolocation data from IP address using ipapi.co (free tier).
-    Returns dict with country and city, or None if failed.
+
+    Returns dict with ``country`` and ``city`` keys, or the "Unknown"
+    fallback if the lookup fails or is disabled.
+
+    Performance characteristics
+    ---------------------------
+    * **Cache hit (common case):** ~0 ms — no I/O at all.
+    * **Negative cache hit:** ~0 ms — avoids re-hammering failed IPs for 5 min.
+    * **Cache miss:** single HTTP GET with a 3 s timeout.
+    * **Feature disabled:** immediate return, no HTTP call.
     """
-    if not ip_address or ip_address in ("Unknown", "127.0.0.1") or ip_address.startswith("192.168."):
-        return {"country": "Local", "city": "Localhost"}
+    # --- Feature flag guard ------------------------------------------------
+    from core.config import settings
+    if not settings.enable_geolocation:
+        return _UNKNOWN_GEO.copy()
 
+    # --- Non-routable IPs — no point querying the API ---------------------
+    if _is_non_routable_ip(ip_address):
+        return _LOCAL_GEO.copy()
+
+    # --- Cache lookup (handles both positive and negative entries) ---------
+    cached = await _cache_get(ip_address)
+    if cached is not None:
+        return cached
+
+    # --- Cache miss — call ipapi.co ----------------------------------------
     try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            response = await client.get(f"https://ipapi.co/{ip_address}/json/")
-            if response.status_code == 200:
-                data = response.json()
-                return {
-                    "country": data.get("country_name", "Unknown"),
-                    "city": data.get("city", "Unknown"),
-                }
-    except Exception as exc:
-        print(f"⚠️ Geolocation lookup failed for {ip_address}: {exc}")
+        client = _get_httpx_client()
+        response = await client.get(f"https://ipapi.co/{ip_address}/json/")
+        if response.status_code == 200:
+            data = response.json()
+            result: Dict[str, str] = {
+                "country": data.get("country_name", "Unknown"),
+                "city": data.get("city", "Unknown"),
+            }
+            await _cache_put(ip_address, result)
+            return result
+        else:
+            # Non-200 (rate-limited, invalid IP, etc.) — negative cache
+            logger.warning(
+                "Geolocation API returned %d for %s",
+                response.status_code, ip_address,
+            )
+            await _cache_put(ip_address, _UNKNOWN_GEO, negative=True)
+    except Exception:
+        logger.warning("Geolocation lookup failed for %s", ip_address, exc_info=True)
+        await _cache_put(ip_address, _UNKNOWN_GEO, negative=True)
 
-    return {"country": "Unknown", "city": "Unknown"}
+    return _UNKNOWN_GEO.copy()
+
+
+async def backfill_geolocation(db, token: str, ip_address: str) -> None:
+    """Resolve geolocation and update the access log row.
+
+    Designed to run as a ``starlette.background.BackgroundTask`` attached
+    to the ``StreamingResponse`` by the share endpoint.  This ensures:
+
+    * The task lifecycle is managed by Starlette (proper cancellation on
+      client disconnect, structured exception logging).
+    * No orphaned ``asyncio.Task`` objects that could be garbage-collected
+      before completion.
+
+    If the lookup or DB update fails, the access log row simply retains its
+    ``NULL`` country/city — acceptable degradation.
+    """
+    try:
+        geo = await get_geolocation(ip_address)
+        if geo and geo.get("country") not in (None, "Unknown"):
+            await db.update_access_log_geo(token, ip_address, geo)
+    except Exception:
+        # Swallow — this is best-effort background work.  The access log row
+        # already exists; it just won't have geo data.
+        logger.warning("Geo backfill failed for token=%s", token, exc_info=True)
