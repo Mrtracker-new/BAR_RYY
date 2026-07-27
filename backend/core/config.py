@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     
     # 2FA
     require_2fa: bool = os.getenv("REQUIRE_2FA", "false").lower() == "true"
+
+    # Geolocation
+    # Set ENABLE_GEOLOCATION=false to fully disable IP geolocation lookups
+    # (saves external API quota on low-budget or self-hosted deployments).
+    enable_geolocation: bool = os.getenv("ENABLE_GEOLOCATION", "true").lower() == "true"
     
     @property
     def allowed_origins_dev(self) -> List[str]:
