@@ -1277,6 +1277,62 @@ class Database:
             _logger.exception("Failed to cleanup old records")
             return 0
     
+    async def update_access_log_geo(
+        self,
+        token: str,
+        ip_address: str,
+        geo: Dict[str, str],
+    ) -> None:
+        """Backfill geolocation data on the most recent access log row.
+
+        Called from the fire-and-forget ``backfill_geolocation()`` task in
+        ``services.analytics``.  Only touches rows where ``country IS NULL``
+        to avoid overwriting previously-resolved data.
+
+        The UPDATE targets a single row (the newest matching access log entry
+        with NULL geo data) so it is cheap and safe to run concurrently.
+        """
+        country = geo.get("country")
+        city = geo.get("city")
+        if not country and not city:
+            return  # Nothing to backfill
+
+        try:
+            if self.is_postgres and self.pool:
+                async with self.pool.acquire() as conn:
+                    await conn.execute("""
+                        UPDATE access_logs
+                        SET country = $1, city = $2
+                        WHERE id = (
+                            SELECT id FROM access_logs
+                            WHERE token = $3
+                              AND ip_address = $4
+                              AND country IS NULL
+                            ORDER BY accessed_at DESC
+                            LIMIT 1
+                        )
+                    """, country, city, token, ip_address)
+            else:
+                async with aiosqlite.connect(self.db_path) as db:
+                    await db.execute("""
+                        UPDATE access_logs
+                        SET country = ?, city = ?
+                        WHERE id = (
+                            SELECT id FROM access_logs
+                            WHERE token = ?
+                              AND ip_address = ?
+                              AND country IS NULL
+                            ORDER BY accessed_at DESC
+                            LIMIT 1
+                        )
+                    """, (country, city, token, ip_address))
+                    await db.commit()
+        except Exception:
+            _logger.exception(
+                "Failed to backfill geo data for token=%s ip=%s",
+                token, ip_address,
+            )
+
     async def prune_access_logs(
         self,
         token: Optional[str] = None,
