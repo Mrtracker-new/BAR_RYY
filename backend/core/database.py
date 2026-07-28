@@ -32,7 +32,7 @@ if IS_POSTGRES:
         HAS_POSTGRES = True
     except ImportError:
         HAS_POSTGRES = False
-        print("⚠️ asyncpg not installed - PostgreSQL support disabled")
+        _logger.warning("asyncpg not installed - PostgreSQL support disabled")
 else:
     HAS_POSTGRES = False
 
@@ -409,7 +409,7 @@ class Database:
             try:
                 await db.execute("ALTER TABLE bar_files ADD COLUMN analytics_key_hash TEXT")
                 await db.commit()
-                print("✅ Migration: added analytics_key_hash column")
+                _logger.info("Migration: added analytics_key_hash column")
             except Exception:
                 pass  # Column already exists — safe to ignore
 
@@ -455,14 +455,14 @@ class Database:
                             "ALTER TABLE bar_files DROP COLUMN analytics_key"
                         )
                         await db.commit()
-                        print("✅ Migration: dropped plaintext analytics_key column")
+                        _logger.info("Migration: dropped plaintext analytics_key column")
                 except Exception as _exc:
-                    print(f"⚠️ Could not drop analytics_key column: {_exc}")
+                    _logger.warning("Could not drop analytics_key column: %s", _exc)
             else:
-                print(
-                    "⚠️  SQLite < 3.35 detected: plaintext analytics_key column "
+                _logger.warning(
+                    "SQLite < 3.35 detected: plaintext analytics_key column "
                     "cannot be auto-dropped — it will be retained but is no longer "
-                    "used. Upgrade SQLite to ≥ 3.35 to remove it."
+                    "used. Upgrade SQLite to >= 3.35 to remove it."
                 )
 
             # ── Migration: otp_email (single TEXT) → otp_emails (JSON array TEXT) ──
@@ -490,7 +490,7 @@ class Database:
                     WHERE otp_emails IS NULL
                 """)
                 await db.commit()
-                print("✅ Migration: back-filled otp_emails from otp_email")
+                _logger.info("Migration: back-filled otp_emails from otp_email")
 
                 # Drop the old single-email column (requires SQLite 3.35+).
                 if _sqlite_version >= (3, 35, 0):
@@ -499,13 +499,13 @@ class Database:
                             "ALTER TABLE bar_files DROP COLUMN otp_email"
                         )
                         await db.commit()
-                        print("✅ Migration: dropped otp_email column")
+                        _logger.info("Migration: dropped otp_email column")
                     except Exception as _exc:
-                        print(f"⚠️ Could not drop otp_email column: {_exc}")
+                        _logger.warning("Could not drop otp_email column: %s", _exc)
                 else:
-                    print(
-                        "⚠️  SQLite < 3.35: otp_email column retained (unused). "
-                        "Upgrade SQLite to ≥ 3.35 to auto-drop it."
+                    _logger.warning(
+                        "SQLite < 3.35: otp_email column retained (unused). "
+                        "Upgrade SQLite to >= 3.35 to auto-drop it."
                     )
 
             elif "otp_emails" not in _all_cols:
@@ -515,10 +515,10 @@ class Database:
                     "ALTER TABLE bar_files ADD COLUMN otp_emails TEXT"
                 )
                 await db.commit()
-                print("✅ Migration: added otp_emails column to fresh schema")
+                _logger.info("Migration: added otp_emails column to fresh schema")
             # else: otp_emails already present — no-op.
 
-            print("✅ SQLite database initialized")
+            _logger.info("SQLite database initialized")
     
     async def _init_postgres(self):
         """Initialize PostgreSQL database"""
@@ -648,7 +648,7 @@ class Database:
                         WHERE  analytics_key      IS NOT NULL
                           AND  analytics_key_hash IS NULL
                     """)
-                    print("✅ Migration: back-filled analytics_key_hash from plaintext column")
+                    _logger.info("Migration: back-filled analytics_key_hash from plaintext column")
 
                     # Phase 3 — drop the old plaintext column now that every row
                     # has a hash.  DROP COLUMN IF EXISTS is a no-op if it was
@@ -657,7 +657,7 @@ class Database:
                         ALTER TABLE bar_files
                         DROP COLUMN IF EXISTS analytics_key
                     """)
-                    print("✅ Migration: dropped plaintext analytics_key column")
+                    _logger.info("Migration: dropped plaintext analytics_key column")
                 # If legacy_col_exists is False the table was created fresh with
                 # only analytics_key_hash — no migration work needed.
 
@@ -696,24 +696,23 @@ class Database:
                         END
                         WHERE otp_emails IS NULL
                     """)
-                    print("✅ Migration: back-filled otp_emails from otp_email (PostgreSQL)")
+                    _logger.info("Migration: back-filled otp_emails from otp_email (PostgreSQL)")
                     # Drop the obsolete single-email column.
                     await conn.execute("""
                         ALTER TABLE bar_files DROP COLUMN IF EXISTS otp_email
                     """)
-                    print("✅ Migration: dropped otp_email column (PostgreSQL)")
+                    _logger.info("Migration: dropped otp_email column (PostgreSQL)")
                 elif not new_emails_col_exists:
                     # Fresh table missing the new column — add it.
                     await conn.execute("""
                         ALTER TABLE bar_files ADD COLUMN IF NOT EXISTS otp_emails TEXT
                     """)
-                    print("✅ Migration: added otp_emails column (PostgreSQL)")
+                    _logger.info("Migration: added otp_emails column (PostgreSQL)")
                 # else: otp_emails already present — no-op.
 
-            print("✅ PostgreSQL database initialized")
+            _logger.info("PostgreSQL database initialized")
         except Exception as e:
-            print(f"⚠️ PostgreSQL init failed: {e}")
-            print("   Falling back to SQLite...")
+            _logger.warning("PostgreSQL init failed: %s — falling back to SQLite...", e)
             self.is_postgres = False
             await self._init_sqlite()
     
