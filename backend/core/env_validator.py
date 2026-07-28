@@ -4,7 +4,10 @@ Validates required environment variables on startup to prevent runtime failures
 """
 import os
 import sys
+import logging
 from typing import List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 # Define required secrets based on features
@@ -32,13 +35,12 @@ def validate_env() -> tuple[bool, List[str]]:
     require_2fa = os.getenv("REQUIRE_2FA", "").lower() == "true"
     
     if require_2fa:
-        print("🔒 2FA is enabled - validating email service secrets...")
+        logger.info("2FA is enabled - validating email service secrets...")
         for secret in REQUIRED_SECRETS["2FA"]:
             if not os.getenv(secret):
                 missing_vars.append(secret)
     else:
-        print("ℹ️  2FA is disabled - skipping email service validation")
-        print("   Set REQUIRE_2FA=true to enable 2FA validation")
+        logger.info("2FA is disabled - skipping email service validation")
     
     # Check recommended variables (warnings only)
     for var in RECOMMENDED_VARS:
@@ -47,8 +49,10 @@ def validate_env() -> tuple[bool, List[str]]:
     
     # Display warnings for recommended vars
     if warnings:
-        print(f"⚠️  Recommended environment variables not set: {', '.join(warnings)}")
-        print("   The application will use defaults, but setting these is recommended for production")
+        logger.warning(
+            "Recommended environment variables not set: %s (app will use defaults)",
+            ", ".join(warnings)
+        )
     
     return len(missing_vars) == 0, missing_vars
 
@@ -58,35 +62,23 @@ def validate_and_exit_on_error():
     Validate environment variables and exit if critical ones are missing.
     Only enforces validation if REQUIRE_2FA is enabled.
     """
-    print("\n" + "="*60)
-    print("🔍 Environment Variable Validation")
-    print("="*60)
+    logger.info("Validating environment configuration")
     
     is_valid, missing = validate_env()
     
     if not is_valid:
-        print("\n❌ CRITICAL: Missing required environment variables!")
-        print("="*60)
-        print("\nThe following secrets are required when 2FA is enabled:")
-        for var in missing:
-            print(f"  ❌ {var}")
-        
-        print("\n💡 To fix this:")
-        print("  1. Create a .env file in the backend directory")
-        print("  2. Add the missing variables with appropriate values")
-        print("  3. See .env.example for reference")
-        print("\nAlternatively, disable 2FA by removing or setting REQUIRE_2FA=false")
-        print("="*60)
+        logger.error(
+            "CRITICAL: Missing required environment variables when 2FA is enabled: %s",
+            ", ".join(missing)
+        )
         
         # Exit with error code if in production or if REQUIRE_2FA is explicitly set
         if os.getenv("IS_PRODUCTION") or os.getenv("REQUIRE_2FA"):
             sys.exit(1)
         else:
-            print("\n⚠️  Running in development mode - continuing with warnings")
+            logger.warning("Running in development mode - continuing with warnings")
     else:
-        print("\n✅ All required environment variables are set")
-    
-    print("="*60 + "\n")
+        logger.info("All required environment variables are set")
 
 
 def get_validation_status() -> dict:
