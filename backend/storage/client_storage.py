@@ -12,7 +12,7 @@ What we CAN do:
 That's about it for client-side files!
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 
 
@@ -24,11 +24,12 @@ def create_client_metadata(
     view_only: bool = False
 ) -> dict:
     """Create metadata for a client-side .bar file (the downloadable kind!)"""
-    created_at = datetime.utcnow().isoformat() + 'Z'
+    now = datetime.now(timezone.utc)
+    created_at = now.isoformat().replace('+00:00', 'Z')
     expires_at = None
     
     if expiry_minutes > 0:
-        expires_at = (datetime.utcnow() + timedelta(minutes=expiry_minutes)).isoformat() + 'Z'
+        expires_at = (now + timedelta(minutes=expiry_minutes)).isoformat().replace('+00:00', 'Z')
     
     # NOTE: `encryption_method` is intentionally absent from this dict.
     # The authoritative `encryption_method` field is written at the *top level*
@@ -70,10 +71,18 @@ def validate_client_access(metadata: dict, password: Optional[str] = None) -> Tu
     # Hey, did this file expire? Let's check!
     if metadata.get("expires_at"):
         expires_at_str = metadata["expires_at"]
-        if expires_at_str.endswith('Z'):
-            expires_at_str = expires_at_str[:-1]  # Remove the Z suffix
-        expires_at = datetime.fromisoformat(expires_at_str)
-        if datetime.utcnow() > expires_at:
+        if isinstance(expires_at_str, str):
+            if expires_at_str.endswith('Z'):
+                expires_at_str = expires_at_str[:-1] + '+00:00'
+            expires_at = datetime.fromisoformat(expires_at_str)
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+        else:
+            expires_at = expires_at_str
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+        if datetime.now(timezone.utc) > expires_at:
             errors.append("File has expired")  # Too late, buddy!
     
     # Is there a password? Did they give it to us?
