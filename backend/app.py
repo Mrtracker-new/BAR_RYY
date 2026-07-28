@@ -5,6 +5,7 @@ Secure file sharing with encryption, view limits, and 2FA.
 import os
 import sys
 import asyncio
+import logging
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -12,6 +13,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from dotenv import load_dotenv
 from core.csrf import CSRFGuard
+
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
@@ -61,9 +64,9 @@ if _raw_cidrs.lower() != "none":
 
 if _trusted_hosts:
     app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=_trusted_hosts)
-    print(f"🔒 ProxyHeadersMiddleware enabled — trusted_hosts={_trusted_hosts}")
+    logger.info("ProxyHeadersMiddleware enabled — trusted_hosts=%s", _trusted_hosts)
 else:
-    print("🔒 ProxyHeadersMiddleware disabled (TRUSTED_PROXY_CIDRS=none)")
+    logger.info("ProxyHeadersMiddleware disabled (TRUSTED_PROXY_CIDRS=none)")
 
 
 # ---------------------------------------------------------------------------
@@ -91,7 +94,7 @@ else:
 # (no localhost) when IS_PRODUCTION=true, and the full dev list otherwise.
 # See core/config.py for details.
 # ---------------------------------------------------------------------------
-print(f"🔒 CORS allowed origins: {settings.allowed_origins}")
+logger.info("CORS allowed origins: %s", settings.allowed_origins)
 
 app.add_middleware(
     CORSMiddleware,
@@ -141,7 +144,7 @@ app.add_middleware(
 #   • /health and / are always exempt.
 # ---------------------------------------------------------------------------
 app.add_middleware(CSRFGuard, allowed_origins=settings.allowed_origins)
-print("🔒 CSRFGuard middleware enabled")
+logger.info("CSRFGuard middleware enabled")
 
 
 # Add security headers middleware
@@ -156,7 +159,7 @@ async def add_security_headers_middleware(request: Request, call_next):
 @app.on_event("startup")
 async def startup_event():
     """Initialize app on startup — must complete before requests are served."""
-    print(f"🚀 {settings.app_name} starting...")
+    logger.info("%s starting...", settings.app_name)
 
     # Initialize database synchronously so we're ready before the first request.
     # Previously this ran in a background task, causing a race condition: requests
@@ -164,22 +167,21 @@ async def startup_event():
     # find the DB uninitialized and fail/hang silently.
     try:
         await database.init_database()
-        print("✅ Database initialized")
+        logger.info("Database initialized")
     except Exception as e:
         # Log clearly — don't silently swallow DB init failures.
-        print(f"❌ Database initialization failed: {e}")
-        print("   Continuing with limited functionality (some endpoints may fail).")
+        logger.error("Database initialization failed: %s (continuing with limited functionality)", e)
 
     # Start the background cleanup loop after DB is confirmed ready.
     asyncio.create_task(cleanup.run_cleanup_loop())
-    print("✅ Cleanup task started")
+    logger.info("Cleanup task started")
 
     # Initialise the managed httpx client used by geolocation lookups.
     # Must happen after the event loop is running (hence in startup, not at
     # module-import time) so the client binds to the correct loop.
     await analytics.init_httpx_client()
 
-    print(f"🚀 {settings.app_name} is ready to serve requests")
+    logger.info("%s is ready to serve requests", settings.app_name)
 
 
 # Shutdown event
@@ -190,7 +192,7 @@ async def shutdown_event():
     # connection pool indirectly via pending backfill tasks).
     await analytics.close_httpx_client()
     await database.close_database()
-    print(f"👋 {settings.app_name} shutting down")
+    logger.info("%s shutting down", settings.app_name)
 
 
 # Register routers
