@@ -142,10 +142,10 @@ class FileService:
                 return preview_data
             elif content_type.startswith('video/'):
                 # Video preview - skip for now to avoid heavy dependencies
-                print(f"Video upload detected - thumbnail generation skipped")
+                logger.debug("Video upload detected — thumbnail generation skipped")
                 return None
         except Exception as e:
-            print(f"Preview generation failed: {e}")
+            logger.warning("Preview generation failed: %s", e)
             return None
 
         return None
