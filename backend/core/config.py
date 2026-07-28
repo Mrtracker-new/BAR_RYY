@@ -1,11 +1,38 @@
 """Application configuration management."""
 import os
 from typing import List
-from pydantic_settings import BaseSettings
+try:
+    from pydantic_settings import BaseSettings
+except ImportError:
+    from pydantic.v1 import BaseSettings
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+
+
+# Base directory (backend root)
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def resolve_sqlite_db_path(database_url: str, base_dir: str = BASE_DIR) -> str:
+    """
+    Derive an absolute filesystem path for a SQLite database URL.
+
+    Anchors relative paths (e.g. 'sqlite:///bar_files.db' or 'sqlite:///./bar_files.db')
+    against base_dir (default: backend/ root directory) to ensure deterministic
+    on-disk database locations regardless of launch working directory.
+    """
+    if database_url.startswith("sqlite:///"):
+        raw_path = database_url[10:]
+    elif database_url.startswith("sqlite://"):
+        raw_path = database_url[9:]
+    else:
+        raw_path = "bar_files.db"
+
+    if os.path.isabs(raw_path):
+        return os.path.abspath(raw_path)
+    return os.path.abspath(os.path.join(base_dir, raw_path))
 
 
 class Settings(BaseSettings):
@@ -39,6 +66,11 @@ class Settings(BaseSettings):
     
     # Database
     database_url: str = os.getenv("DATABASE_URL", "sqlite:///./bar_files.db")
+
+    @property
+    def sqlite_db_path(self) -> str:
+        """Return absolute filesystem path for the SQLite database."""
+        return resolve_sqlite_db_path(self.database_url)
     
     # 2FA
     require_2fa: bool = os.getenv("REQUIRE_2FA", "false").lower() == "true"
@@ -73,7 +105,7 @@ class Settings(BaseSettings):
 
         Cookie / CORS policy reminder
         ------------------------------
-        If cookies are ever introduced, set:
+        If cookies are ever added:
             SameSite=Strict; Secure; HttpOnly
         on every Set-Cookie response, and only set allow_credentials=True in
         CORSMiddleware if cross-origin cookie sharing is a hard requirement.
