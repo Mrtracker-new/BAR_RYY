@@ -3,9 +3,12 @@ import os
 import uuid
 import base64
 import secrets
+import logging
 from typing import Optional, Tuple, Dict, Any, List
 from datetime import datetime
 from fastapi import HTTPException
+
+logger = logging.getLogger(__name__)
 
 from utils import crypto_utils
 from storage import client_storage
@@ -194,7 +197,7 @@ class EncryptionService:
             analytics_key_hash=analytics_key_hash,
         )
         
-        print(f"✅ Server-side file created: {access_token}")
+        logger.info("Server-side file created token=%.8s…", access_token)
         
         # Generate shareable link
         share_link = f"{frontend_base_url.rstrip('/')}/share/{access_token}"
