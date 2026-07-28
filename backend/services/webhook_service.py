@@ -16,7 +16,7 @@ import asyncio
 import logging
 import socket
 import ipaddress
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from urllib.parse import urlparse
 import json
@@ -148,7 +148,7 @@ class WebhookService:
             # Prepare the payload
             payload = {
                 "event": event_type,
-                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
                 "service": "BAR Web",
                 **data
             }
@@ -235,7 +235,7 @@ class WebhookService:
                 "footer": {
                     "text": "BAR Web Security Alert System"
                 },
-                "timestamp": datetime.utcnow().isoformat() + "Z"
+                "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
             }]
         }
     
