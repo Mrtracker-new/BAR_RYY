@@ -382,8 +382,15 @@ class _Participant:
     """State for a single WebSocket connection within a chat session."""
 
     ws: WebSocket
-    ws_id: str      # stable UUID assigned at join time — never re-uses memory addresses
-    name: str
+    ws_id: str              # stable UUID assigned at join time
+    participant_id: str     # cryptographically secure unique participant ID (UUIDv4)
+    participant_token: str  # secure token for participant auth/identity
+    session_id: str         # session/room token
+    display_name: str       # cosmetic display name
+    name: str               # alias for display_name
+    joined_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    last_seen: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    role: str = "participant"
     is_creator: bool = False
 
     # ECDH public key received via 'pubkey' message (base64 JWK).
@@ -416,6 +423,23 @@ class _Participant:
     _key_window_start: datetime = field(
         default_factory=lambda: datetime.now(timezone.utc), repr=False
     )
+
+
+def _make_participant_list(session: _ChatSession) -> list[dict]:
+    """Helper to build consistent participant_list metadata dictionaries."""
+    return [
+        {
+            "participant_id": p.participant_id,
+            "participant_token": p.participant_token,
+            "ws_id": p.ws_id,
+            "display_name": p.display_name,
+            "name": p.display_name,
+            "role": p.role,
+            "is_creator": p.is_creator,
+            "public_key": p.public_key,
+        }
+        for p in session.participants.values()
+    ]
 
 
 @dataclass
@@ -467,15 +491,12 @@ async def _broadcast(
     removed = [p for p in removed if p is not None]
 
     for participant in removed:
-        participant_list = [
-            {"ws_id": p.ws_id, "name": p.name, "is_creator": p.is_creator}
-            for p in session.participants.values()
-        ]
+        participant_list = _make_participant_list(session)
         await _broadcast(
             session,
             {
                 "type": "system",
-                "text": f"{participant.name} disconnected",
+                "text": f"{participant.display_name} disconnected",
                 "participant_count": len(session.participants),
                 "participant_list": participant_list,
             },
@@ -676,23 +697,26 @@ async def join_session(
         return None, JoinStatus.LOCKED
 
     safe_name = _safe_text(display_name, MAX_NAME_LENGTH) or "Anonymous"
-    ws_id = str(uuid.uuid4())
-    participant = _Participant(ws=ws, ws_id=ws_id, name=safe_name, is_creator=is_creator)
-    session.participants[ws_id] = participant
-
+    pid = str(uuid.uuid4())
+    ptoken = secrets.token_urlsafe(32)
     role_label = "creator" if is_creator else "participant"
-    participant_list = [
-        {
-            "ws_id": p.ws_id,
-            "name": p.name,
-            "is_creator": p.is_creator,
-            # Include each participant's ECDH public key if available.
-            # Participants who have not yet sent a 'pubkey' message will have
-            # None here — the client ignores null public_key entries gracefully.
-            "public_key": p.public_key,
-        }
-        for p in session.participants.values()
-    ]
+    now = datetime.now(timezone.utc)
+    participant = _Participant(
+        ws=ws,
+        ws_id=pid,
+        participant_id=pid,
+        participant_token=ptoken,
+        session_id=token,
+        display_name=safe_name,
+        name=safe_name,
+        joined_at=now,
+        last_seen=now,
+        role=role_label,
+        is_creator=is_creator,
+    )
+    session.participants[pid] = participant
+
+    participant_list = _make_participant_list(session)
     await _broadcast(
         session,
         {
@@ -701,15 +725,17 @@ async def join_session(
             "participant_count": len(session.participants),
             "participant_list": participant_list,
         },
-        exclude_ws_id=ws_id,
+        exclude_ws_id=pid,
     )
 
-    now = datetime.now(timezone.utc)
     remaining = max(0, int((session.expires_at - now).total_seconds()))
     await ws.send_json(
         {
             "type": "joined",
-            "ws_id": ws_id,           # client's own stable identity for E2E addressing
+            "participant_id": pid,
+            "participant_token": ptoken,
+            "ws_id": pid,           # client's own stable identity for E2E addressing
+            "display_name": safe_name,
             "token": token,
             "is_creator": is_creator,
             "seconds_remaining": remaining,
@@ -805,7 +831,9 @@ async def broadcast_message(
         payload = {
             "type": "message",
             "id": str(uuid.uuid4()),
-            "sender_name": participant.name,
+            "sender_id": participant.participant_id,
+            "participant_id": participant.participant_id,
+            "sender_name": participant.display_name,
             "sent_at": now.isoformat(),
             "is_creator": participant.is_creator,
             # E2E fields — opaque to the server.
@@ -820,7 +848,9 @@ async def broadcast_message(
         payload = {
             "type": "message",
             "id": str(uuid.uuid4()),
-            "sender_name": participant.name,
+            "sender_id": participant.participant_id,
+            "participant_id": participant.participant_id,
+            "sender_name": participant.display_name,
             "text": safe_text,
             "sent_at": now.isoformat(),
             "is_creator": participant.is_creator,
@@ -840,15 +870,12 @@ async def leave_session(token: str, ws_id: str) -> None:
 
     participant = session.participants.pop(ws_id, None)
     if participant:
-        participant_list = [
-            {"ws_id": p.ws_id, "name": p.name, "is_creator": p.is_creator}
-            for p in session.participants.values()
-        ]
+        participant_list = _make_participant_list(session)
         await _broadcast(
             session,
             {
                 "type": "system",
-                "text": f"{participant.name} left",
+                "text": f"{participant.display_name} left",
                 "participant_count": len(session.participants),
                 "participant_list": participant_list,
             },
@@ -976,15 +1003,12 @@ async def kick_participant(token: str, actor_ws_id: str, target_ws_id: str) -> b
     except Exception:
         pass
 
-    participant_list = [
-        {"ws_id": p.ws_id, "name": p.name, "is_creator": p.is_creator}
-        for p in session.participants.values()
-    ]
+    participant_list = _make_participant_list(session)
     await _broadcast(
         session,
         {
             "type": "system",
-            "text": f"{target.name} was removed by the creator",
+            "text": f"{target.display_name} was removed by the creator",
             "participant_count": len(session.participants),
             "participant_list": participant_list,
         },
