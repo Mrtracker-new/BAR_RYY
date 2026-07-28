@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 
 from models.schemas import DecryptRequest
 from core import security
+from core.config import settings
 from services.file_service import FileService
 from services.encryption_service import EncryptionService
 from api.dependencies import get_file_service_dep, get_encryption_service_dep
@@ -389,7 +390,7 @@ async def decrypt_uploaded_bar_file(
             raise HTTPException(status_code=400, detail="Only .bar files are accepted")
         
         # Streaming size validation (prevents memory exhaustion)
-        file_size = await security.validate_file_size_streaming(file, security.MAX_FILE_SIZE)
+        file_size = await security.validate_file_size_streaming(file, settings.max_file_size)
         logger.info('File size validated: %.2f MB', file_size / (1024 * 1024))
         
         # Now safe to read entire file
