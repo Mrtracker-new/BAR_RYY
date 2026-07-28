@@ -241,15 +241,18 @@ async def share_file(
         # ------------------------------------------------------------------ #
         if file_record.get('expires_at'):
             expires_at_str = file_record['expires_at']
-            if expires_at_str:
-                if isinstance(expires_at_str, str):
-                    if expires_at_str.endswith('Z'):
-                        expires_at_str = expires_at_str[:-1]
-                    expires_at = datetime.fromisoformat(expires_at_str)
-                else:
-                    expires_at = expires_at_str
+            if isinstance(expires_at_str, str):
+                if expires_at_str.endswith('Z'):
+                    expires_at_str = expires_at_str[:-1] + '+00:00'
+                expires_at = datetime.fromisoformat(expires_at_str)
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=timezone.utc)
+            else:
+                expires_at = expires_at_str
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=timezone.utc)
 
-                if datetime.now(timezone.utc).replace(tzinfo=None) > expires_at:
+            if datetime.now(timezone.utc) > expires_at:
                     webhook_url = db_metadata.get("webhook_url")
                     if webhook_url:
                         webhook_srv = webhook_service.get_webhook_service()
