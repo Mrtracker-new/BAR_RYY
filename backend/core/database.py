@@ -222,13 +222,79 @@ _FORBIDDEN_RESPONSE_FIELDS: frozenset[str] = frozenset({
 })
 
 
+class SQLitePool:
+    """Connection pool for aiosqlite connections with WAL mode and autocommit."""
+
+    def __init__(self, db_path: str, max_size: int = 10, timeout: float = 30.0):
+        self.db_path = db_path
+        self.max_size = max(2, max_size)  # Clamp pool size to a minimum of 2
+        self.timeout = timeout
+        self._pool: Optional[asyncio.Queue] = None
+        self._all_conns: List[aiosqlite.Connection] = []
+        self._closed = False
+
+    async def init(self):
+        """Initialize connections in the pool."""
+        self._pool = asyncio.Queue(maxsize=self.max_size)
+        for _ in range(self.max_size):
+            conn = await aiosqlite.connect(self.db_path, isolation_level=None)
+            conn.row_factory = aiosqlite.Row
+            await conn.execute("PRAGMA journal_mode=WAL")
+            await conn.execute("PRAGMA synchronous=NORMAL")
+            await conn.execute("PRAGMA busy_timeout=30000")
+            await conn.execute("PRAGMA foreign_keys=ON")
+            self._all_conns.append(conn)
+            await self._pool.put(conn)
+
+    @asynccontextmanager
+    async def acquire(self, timeout: Optional[float] = None):
+        """Acquire a connection from the pool within *timeout* seconds."""
+        if self._closed or self._pool is None:
+            raise RuntimeError("SQLite database pool is closed or not initialized")
+        acquire_timeout = timeout if timeout is not None else self.timeout
+        try:
+            conn = await asyncio.wait_for(self._pool.get(), timeout=acquire_timeout)
+        except asyncio.TimeoutError:
+            raise TimeoutError(
+                f"Timed out after {acquire_timeout}s waiting to acquire SQLite connection from pool"
+            )
+        try:
+            yield conn
+        finally:
+            if not self._closed and self._pool is not None:
+                try:
+                    await conn.rollback()
+                except Exception:
+                    pass
+                await self._pool.put(conn)
+
+    async def close(self):
+        """Close all connections in the pool."""
+        if self._closed:
+            return
+        self._closed = True
+        if self._pool is not None:
+            while not self._pool.empty():
+                try:
+                    self._pool.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+        for conn in self._all_conns:
+            try:
+                await conn.close()
+            except Exception:
+                pass
+        self._all_conns.clear()
+        self._pool = None
+
+
 class Database:
     """Unified database interface for SQLite and PostgreSQL"""
     
     def __init__(self):
-        self.db_path = "bar_files.db"
+        self.db_path = DATABASE_URL.replace("sqlite:///", "") if DATABASE_URL.startswith("sqlite:///") else "bar_files.db"
         self.pool = None
-        self._sqlite_conn: Optional[aiosqlite.Connection] = None
+        self._sqlite_pool: Optional[SQLitePool] = None
         self.is_postgres = IS_POSTGRES and HAS_POSTGRES
         
     async def init_db(self):
@@ -240,25 +306,26 @@ class Database:
     
     @asynccontextmanager
     async def _sqlite(self):
-        """Yield the persistent SQLite connection (opened once at init).
+        """Yield a connection from the SQLite connection pool.
 
-        Replaces the per-call ``aiosqlite.connect()`` pattern.  A single
-        long-lived connection with WAL mode and autocommit eliminates
-        connection setup/teardown overhead and enables concurrent readers.
+        Uses long-lived connections configured with WAL mode, autocommit
+        (isolation_level=None), and PRAGMA synchronous=NORMAL to eliminate write
+        contention and connection setup/teardown overhead under high load.
         """
-        if self._sqlite_conn is None:
+        if self._sqlite_pool is None:
             raise RuntimeError(
-                "SQLite connection not initialised \u2014 call init_db() first."
+                "SQLite connection pool not initialised — call init_db() first."
             )
-        yield self._sqlite_conn
+        async with self._sqlite_pool.acquire() as conn:
+            yield conn
 
     async def _init_sqlite(self):
-        """Initialize SQLite database with persistent connection and WAL mode."""
-        self._sqlite_conn = await aiosqlite.connect(
-            self.db_path, isolation_level=None,
-        )
-        await self._sqlite_conn.execute("PRAGMA journal_mode=WAL")
-        await self._sqlite_conn.execute("PRAGMA busy_timeout=5000")
+        """Initialize SQLite database with connection pool and WAL mode."""
+        if self._sqlite_pool is None:
+            pool_size = max(2, int(os.getenv("SQLITE_POOL_SIZE", "10")))
+            self._sqlite_pool = SQLitePool(self.db_path, max_size=pool_size)
+            await self._sqlite_pool.init()
+
         async with self._sqlite() as db:
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS bar_files (
@@ -1313,7 +1380,7 @@ class Database:
                         )
                     """, country, city, token, ip_address)
             else:
-                async with aiosqlite.connect(self.db_path) as db:
+                async with self._sqlite() as db:
                     await db.execute("""
                         UPDATE access_logs
                         SET country = ?, city = ?
@@ -1809,9 +1876,10 @@ class Database:
         """Close database connections"""
         if self.is_postgres and self.pool:
             await self.pool.close()
-        if self._sqlite_conn is not None:
-            await self._sqlite_conn.close()
-            self._sqlite_conn = None
+            self.pool = None
+        if self._sqlite_pool is not None:
+            await self._sqlite_pool.close()
+            self._sqlite_pool = None
 
 
 # Global database instance
