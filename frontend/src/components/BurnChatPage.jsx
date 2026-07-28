@@ -237,7 +237,7 @@ function DestroyedScreen() {
  * When sessionKey changes (creator reconnect, late key delivery) the effect
  * re-runs for every mounted bubble that holds an undecrypted ciphertext.
  */
-function Bubble({ msg, myName, sessionKey }) {
+function Bubble({ msg, myName, myWsId, sessionKey }) {
   // null  = not yet attempted / pending key
   // false = decryption failed
   // string = decrypted plaintext
@@ -269,7 +269,8 @@ function Bubble({ msg, myName, sessionKey }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionKey]);
 
-  const isMe = msg.sender_name === myName;
+  const senderId = msg.sender_id || msg.participant_id;
+  const isMe = senderId ? senderId === myWsId : msg.sender_name === myName;
 
   if (msg.type === 'system') return (
     <div style={{ textAlign:'center', padding:'0.25rem 0' }}>
@@ -394,15 +395,18 @@ function ParticipantPanel({ participantList, myWsId, isCreator, roomLocked, onKi
 
       {/* Participant list */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0.5rem 0' }}>
-        {participantList.map(p => (
-          <div
-            key={p.ws_id}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '0.5rem',
-              padding: '0.375rem 0.875rem',
-              background: p.ws_id === myWsId ? 'rgba(196,70,26,0.05)' : 'transparent',
-            }}
-          >
+        {participantList.map(p => {
+          const pid = p.participant_id || p.ws_id;
+          const isCurrent = pid === myWsId;
+          return (
+            <div
+              key={pid}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '0.5rem',
+                padding: '0.375rem 0.875rem',
+                background: isCurrent ? 'rgba(196,70,26,0.05)' : 'transparent',
+              }}
+            >
             {/* Avatar initial */}
             <div style={{
               width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
@@ -430,9 +434,9 @@ function ParticipantPanel({ participantList, myWsId, isCreator, roomLocked, onKi
             </div>
 
             {/* Kick button — creator sees it on everyone except themselves */}
-            {isCreator && p.ws_id !== myWsId && (
+            {isCreator && !isCurrent && (
               <button
-                onClick={() => onKick(p.ws_id)}
+                onClick={() => onKick(pid)}
                 title={`Remove ${p.name}`}
                 style={{
                   width: 20, height: 20, borderRadius: 4,
@@ -449,7 +453,8 @@ function ParticipantPanel({ participantList, myWsId, isCreator, roomLocked, onKi
               </button>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -538,15 +543,8 @@ export default function BurnChatPage({ token }) {
     pendingSessionKeys: new Map(),  // fromWsId → wrappedKey — held during pubkey race
   });
 
-  // Share URL — routes through the server-rendered OG preview page so
-  // WhatsApp / Telegram / Twitter crawlers see Burn Chat-specific meta tags
-  // (og:title, og:image, og:description) instead of the generic SPA defaults.
-  //
-  // Real browsers follow the 0-second meta-refresh on the OG page and land on
-  // /chat/:token with no visible delay. Social bots stop at the meta tags.
-  //
-  // Direct SPA URL (if OG preview is not needed): /chat/${token}
-  const shareUrl = `${window.location.origin}/og/chat/${token}`;
+  // Direct SPA URL for user-facing share links: /chat/:token
+  const shareUrl = `${window.location.origin}/chat/${token}`;
 
   /* auto-scroll */
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:'smooth' }); }, [messages]);
@@ -703,7 +701,7 @@ export default function BurnChatPage({ token }) {
 
         case 'joined': {
           joinedRef.current     = true;
-          myWsIdRef.current     = data.ws_id ?? null;
+          myWsIdRef.current     = data.participant_id ?? data.ws_id ?? null;
           reconnectRef.current.count = 0;
           setConnStatus('connected');
           setIsCreator(data.is_creator);
@@ -1268,6 +1266,7 @@ export default function BurnChatPage({ token }) {
                 key={m.id}
                 msg={m}
                 myName={myName}
+                myWsId={myWsIdRef.current}
                 sessionKey={e2eSessionKey}
               />
             ))}

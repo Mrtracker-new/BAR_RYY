@@ -35,7 +35,7 @@
  * -------
  * vercel.json rewrite: /og/chat/:token → /api/og/chat/:token
  * This stays within the same Vercel deployment — no external host needed.
- * BurnChatPage.jsx and BurnChatCreate.jsx generate /og/chat/:token share URLs.
+ * User-facing components (BurnChatPage, BurnChatCreate, BurnChatLandingPage) generate /chat/:token share URLs.
  */
 
 const OG_SITE        = 'https://bar-rnr.vercel.app';

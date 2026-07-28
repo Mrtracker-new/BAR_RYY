@@ -327,10 +327,8 @@ function ResultCard({ result, ttlSeconds }) {
   const [copyFailed, setCopyFailed] = useState(false);
   const [pinVisible, setPinVisible] = useState(true);
   const pinTimerRef                 = useRef(null);
-  // Route through the server-rendered OG page so WhatsApp / Telegram /
-  // Twitter crawlers receive Burn Chat-specific og:* meta tags.
-  // Real browsers follow the 0-second meta-refresh to /chat/:token.
-  const shareUrl = `${window.location.origin}/og/chat/${result.token}`;
+  // Direct SPA URL for user-facing share links: /chat/:token
+  const shareUrl = `${window.location.origin}/chat/${result.token}`;
 
   /* Auto-hide PIN after 30 s */
   useEffect(() => {

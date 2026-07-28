@@ -51,11 +51,9 @@ export default function BurnChatCreate({ onCreated }) {
     }
   };
 
-  // Route through the server-rendered OG page so WhatsApp / Telegram /
-  // Twitter crawlers receive Burn Chat-specific og:* meta tags.
-  // Real browsers follow the 0-second meta-refresh to /chat/:token.
+  // Direct SPA URL for user-facing share links: /chat/:token
   const shareUrl = result
-    ? `${window.location.origin}/og/chat/${result.token}`
+    ? `${window.location.origin}/chat/${result.token}`
     : '';
 
   /* ── Result screen ─────────────────────────────────────── */
