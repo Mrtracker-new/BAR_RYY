@@ -221,8 +221,18 @@ def cleanup_rate_limit_storage(max_age_seconds: int = _RATE_LIMIT_STALE_AGE) -> 
     cutoff = datetime.now(timezone.utc) - timedelta(seconds=max_age_seconds)
 
     def _evict(store: dict) -> int:
-        stale = [k for k, timestamps in list(store.items())
-                 if timestamps and timestamps[-1] < cutoff]
+        stale = []
+        for k, items in list(store.items()):
+            if not items:
+                stale.append(k)
+                continue
+            last_item = items[-1]
+            ts = last_item.get("timestamp") if isinstance(last_item, dict) else last_item
+            if ts and isinstance(ts, datetime):
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+                if ts < cutoff:
+                    stale.append(k)
         for k in stale:
             del store[k]
         return len(stale)
