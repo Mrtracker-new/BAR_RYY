@@ -3,7 +3,7 @@ Security utilities and middleware for BAR Web API
 """
 from fastapi import Request, HTTPException
 from fastapi.responses import Response
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 from typing import Dict
 from urllib.parse import quote, urlparse
@@ -141,7 +141,7 @@ def check_rate_limit_keyed(key: str, limit: int = 60, window_seconds: int = 60) 
     Raises:
         HTTPException 429 if the bucket is exhausted.
     """
-    current_time = datetime.now()
+    current_time = datetime.now(timezone.utc)
     cutoff_time = current_time - timedelta(seconds=window_seconds)
 
     # Evict timestamps outside the current window.
@@ -186,7 +186,7 @@ def check_ws_rate_limit(
         return True
 
     key = f"ws_connect:{client_ip}"
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     cutoff = now - timedelta(seconds=window_seconds)
     rate_limit_storage[key] = [ts for ts in rate_limit_storage[key] if ts > cutoff]
 
@@ -217,7 +217,7 @@ def cleanup_rate_limit_storage(max_age_seconds: int = _RATE_LIMIT_STALE_AGE) -> 
     Returns a dict with ``{"rate_limit": n, "password_attempts": m}`` — the
     number of keys removed from each store — so the caller can log the result.
     """
-    cutoff = datetime.now() - timedelta(seconds=max_age_seconds)
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=max_age_seconds)
 
     def _evict(store: dict) -> int:
         stale = [k for k, timestamps in list(store.items())
@@ -247,7 +247,7 @@ def check_password_brute_force(client_ip: str, resource_id: str = None) -> tuple
         HTTPException: If client is locked out (429 Too Many Requests)
     """
     key = f"{client_ip}:{resource_id}" if resource_id else client_ip
-    current_time = datetime.now()
+    current_time = datetime.now(timezone.utc)
     lockout_cutoff = current_time - timedelta(minutes=LOCKOUT_DURATION_MINUTES)
     
     # Clean up old attempts (older than lockout duration)
@@ -297,7 +297,7 @@ def record_password_attempt(client_ip: str, success: bool, resource_id: str = No
     key = f"{client_ip}:{resource_id}" if resource_id else client_ip
     
     password_attempts[key].append({
-        "timestamp": datetime.now(),
+        "timestamp": datetime.now(timezone.utc),
         "success": success
     })
     
