@@ -18,11 +18,12 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any, List
 import aiosqlite
 from contextlib import asynccontextmanager
+from core.config import settings, resolve_sqlite_db_path
 
 _logger = logging.getLogger(__name__)
 
 # Database configuration
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///bar_files.db")
+DATABASE_URL = settings.database_url
 IS_POSTGRES = DATABASE_URL.startswith("postgresql://")
 
 # For production PostgreSQL (Render/cloud), we'll need asyncpg
@@ -292,7 +293,7 @@ class Database:
     """Unified database interface for SQLite and PostgreSQL"""
     
     def __init__(self):
-        self.db_path = DATABASE_URL.replace("sqlite:///", "") if DATABASE_URL.startswith("sqlite:///") else "bar_files.db"
+        self.db_path = resolve_sqlite_db_path(DATABASE_URL)
         self.pool = None
         self._sqlite_pool: Optional[SQLitePool] = None
         self.is_postgres = IS_POSTGRES and HAS_POSTGRES
