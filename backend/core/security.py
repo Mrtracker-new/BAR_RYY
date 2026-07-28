@@ -14,6 +14,8 @@ import unicodedata
 import socket
 import ipaddress
 import logging
+from typing import Dict, Optional
+from core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +32,6 @@ LOCKOUT_DURATION_MINUTES = 60  # Lockout duration in minutes
 PROGRESSIVE_DELAY_ENABLED = True  # Enable progressive delays
 
 # Security constants
-MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
 MAX_FILENAME_LENGTH = 255
 ALLOWED_FILE_EXTENSIONS = {
     # Documents
@@ -365,7 +366,7 @@ async def check_and_delay_password_attempt(client_ip: str, resource_id: str = No
     return failed_count
 
 
-async def validate_file_size_streaming(file, max_size: int) -> int:
+async def validate_file_size_streaming(file, max_size: Optional[int] = None) -> int:
     """
     Validate uploaded file size by streaming it in chunks.
 
@@ -374,7 +375,7 @@ async def validate_file_size_streaming(file, max_size: int) -> int:
 
     Args:
         file: FastAPI ``UploadFile`` object (must be seekable or freshly opened).
-        max_size: Maximum allowed size in bytes.
+        max_size: Maximum allowed size in bytes (defaults to settings.max_file_size).
 
     Returns:
         Total file size in bytes.
@@ -382,6 +383,9 @@ async def validate_file_size_streaming(file, max_size: int) -> int:
     Raises:
         HTTPException 413 if the file exceeds ``max_size``.
     """
+    if max_size is None:
+        max_size = settings.max_file_size
+
     total = 0
     chunk_size = 64 * 1024  # 64 KB chunks
     while True:
