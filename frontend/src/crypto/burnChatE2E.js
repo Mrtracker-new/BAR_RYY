@@ -58,10 +58,10 @@ function _toB64(buf) {
 }
 
 /**
- * Decode a standard base64 string to an ArrayBuffer.
+ * Decode a standard base64 string to a Uint8Array.
  *
  * @param   {string} b64
- * @returns {ArrayBuffer}
+ * @returns {Uint8Array}
  */
 function _fromB64(b64) {
   const binary = atob(b64);
@@ -69,7 +69,7 @@ function _fromB64(b64) {
   for (let i = 0; i < binary.length; i++) {
     buf[i] = binary.charCodeAt(i);
   }
-  return buf.buffer;
+  return buf;
 }
 
 /**
@@ -272,7 +272,7 @@ export async function wrapSessionKey(sessionKey, wrapKey) {
   const combined = new Uint8Array(iv.byteLength + wrapped.byteLength);
   combined.set(iv, 0);
   combined.set(new Uint8Array(wrapped), iv.byteLength);
-  return _toB64(combined.buffer);
+  return _toB64(combined);
 }
 
 /**
@@ -288,18 +288,18 @@ export async function wrapSessionKey(sessionKey, wrapKey) {
  * @throws  {Error|DOMException}  On length mismatch or authentication failure
  */
 export async function unwrapSessionKey(b64, wrapKey) {
-  const raw = new Uint8Array(_fromB64(b64));
+  const raw = _fromB64(b64);
   let iv;
   let ciphertext;
 
   if (raw.byteLength === 60) {
     // Modern v2: 12-byte random IV + 32-byte key + 16-byte GCM tag
     iv = raw.slice(0, 12);
-    ciphertext = raw.slice(12).buffer;
+    ciphertext = raw.slice(12);
   } else if (raw.byteLength === 48) {
     // Legacy: 32-byte key + 16-byte GCM tag, zero IV
     iv = _WRAP_IV;
-    ciphertext = raw.buffer;
+    ciphertext = raw;
   } else {
     throw new Error(`Unexpected wrapped key length: ${raw.byteLength}`);
   }
