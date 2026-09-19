@@ -59,6 +59,9 @@ const proxyConfig = {
 
   // ── Generic API namespace ─────────────────────────────────────────────
   '/api': { target: backendUrl, changeOrigin: true },
+
+  // ── Health check ───────────────────────────────────────────────────────
+  '/health': { target: backendUrl, changeOrigin: true },
 };
 
 export default defineConfig({

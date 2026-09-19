@@ -46,7 +46,7 @@ const OG_SITE_NAME   = 'BAR by Rolan';
 // Backend base URL — reads from the Vercel environment variable set in the
 // project dashboard.  Falls back to the known Render service URL.
 // Update VITE_BACKEND_URL in Vercel → Project Settings → Environment Variables.
-const BACKEND_BASE   = process.env.VITE_BACKEND_URL || 'https://bar-rnr-api.onrender.com';
+const BACKEND_BASE   = process.env.VITE_BACKEND_URL || 'https://bar-web-backend-139d.onrender.com';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
