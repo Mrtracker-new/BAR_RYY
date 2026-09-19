@@ -28,9 +28,9 @@ Whether sharing passwords, sensitive contracts, or engaging in confidential disc
 
 | Feature | Details |
 |---|---|
-| **AES-256 Encryption** | Industry-standard encryption securing your files. |
-| **Zero-Knowledge Architecture** | The server cannot access or decrypt your data. |
-| **Auto-Destruction Mechanism** | Configurable timer-based or view-count based deletion. |
+| **AES-256 Encryption** | Industry-standard AES-256 encryption securing your files. |
+| **Ephemeral Auto-Destruction** | Configurable timer-based or view-count based permanent deletion (SEAD). |
+| **True E2EE Burn Chat** | Zero-knowledge client-side encryption — the server cannot read chat messages. |
 | **Dual Share Modes** | Client-side `.bar` file or a secure server-side link. |
 | **Smart Refresh Control** | Prevents accidental consumption of view-based limits. |
 | **Webhook Integrations** | Real-time notifications (Discord/Slack) upon access. |
@@ -91,15 +91,15 @@ Once running, navigate to **http://localhost:5173** in your browser. \o/
 ## Security Implementation Specifications {-_-}
 
 ### File Containers
-BAR employs **AES-256** encryption combined with **PBKDF2** key derivation (100,000 iterations) and **HMAC-SHA256** for tamper detection. Decryption keys are strictly client-side, ensuring complete zero-knowledge privacy.
+BAR employs **AES-256** encryption combined with **PBKDF2** key derivation (600,000 iterations) and **HMAC-SHA256** for tamper detection. Files are encrypted at rest and automatically wiped from disk and database upon expiry or reaching the configured view limit.
 
 ### Burn Chat Protocol
-The Burn Chat module enforces true end-to-end encryption:
+The Burn Chat module enforces true zero-knowledge end-to-end encryption:
 
 - **Key Agreement:** `ECDH P-256`. Client devices generate keypairs; private keys remain non-extractable.
-- **Session Key:** Encrypted per-peer with the ECDH shared secret using `AES-GCM-256`, securely relayed through the server.
+- **Session Key:** Encrypted per-peer with the ECDH shared secret using HKDF-SHA256 (`BAR-BurnChat-WrapKey-v1`) and `AES-GCM-256` with random IV, securely relayed through the server.
 - **Message Integrity:** Each message uses a newly generated 12-byte random IV.
-- **Session Fingerprint:** Derived from `SHA-256(raw session key)[0:3]`, allowing participants to verbally confirm connection integrity.
+- **Session Fingerprint:** 64-bit fingerprint derived from `SHA-256(raw session key)[0:8]` (16 uppercase hex chars), allowing participants to confirm connection integrity.
 - **Data Degradation:** If accessed via non-TLS environments (`crypto.subtle` unavailable), the system falls back to TLS-only protection with an active warning banner.
 
 ---

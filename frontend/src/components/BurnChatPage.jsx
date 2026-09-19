@@ -101,7 +101,7 @@ function JoinScreen({ token, onJoin, error, infoState, joinSecsLeft, joinPartici
         title="Join Burn Chat — Encrypted Ephemeral Session | BAR Web"
         description="You've been invited to a Burn Chat — end-to-end encrypted, ephemeral messaging that permanently self-destructs when the timer expires. No logs, no history, no traces."
         keywords="burn chat, join burn chat, encrypted chat, ephemeral chat, self-destruct chat, e2e encrypted messaging, BAR burn chat, secure chat room, disappearing messages"
-        url={`https://bar-rnr.vercel.app/chat/${token}`}
+        url={typeof window !== 'undefined' ? `${window.location.origin}/chat/${token}` : (import.meta.env.VITE_SITE_URL ? `${import.meta.env.VITE_SITE_URL}/chat/${token}` : `https://bar-rnr.vercel.app/chat/${token}`)}
         type="article"
         ogImageAlt="Burn Chat — End-to-End Encrypted Ephemeral Chat | BAR Web"
         noIndex={true}
@@ -510,7 +510,7 @@ export default function BurnChatPage({ token }) {
 
   // ── E2E encryption state ─────────────────────────────────────────────────
   const [e2eReady, setE2eReady]               = useState(false);   // session key held + fingerprint set
-  const [e2eFingerprint, setE2eFingerprint]   = useState(null);    // '2FA3C1' — 6 uppercase hex chars
+  const [e2eFingerprint, setE2eFingerprint]   = useState(null);    // 16 uppercase hex chars (64 bits)
   const [cryptoAvailable, setCryptoAvailable] = useState(true);    // false → insecure context banner
   const [e2eSessionKey, setE2eSessionKey]     = useState(null);    // mirrors e2eRef.sessionKey for re-renders
 
@@ -1073,7 +1073,7 @@ export default function BurnChatPage({ token }) {
         title="Burn Chat — Encrypted Ephemeral Session | BAR Web"
         description="You've been invited to a Burn Chat session — end-to-end encrypted, ephemeral messaging that permanently self-destructs when the timer expires. No logs, no history, no traces."
         keywords="burn chat, encrypted chat, ephemeral chat, self-destruct chat, e2e encrypted messaging, BAR burn chat, secure chat room, disappearing messages"
-        url={`https://bar-rnr.vercel.app/chat/${token}`}
+        url={typeof window !== 'undefined' ? `${window.location.origin}/chat/${token}` : (import.meta.env.VITE_SITE_URL ? `${import.meta.env.VITE_SITE_URL}/chat/${token}` : `https://bar-rnr.vercel.app/chat/${token}`)}
         type="article"
         ogImageAlt="Burn Chat — End-to-End Encrypted Ephemeral Chat | BAR Web"
         noIndex={true}
@@ -1121,7 +1121,7 @@ export default function BurnChatPage({ token }) {
                   transition:'opacity 0.3s ease',
                 }}
               >
-                🔐 {e2eFingerprint}
+                🔐 {e2eFingerprint.match(/.{1,4}/g)?.join('-') || e2eFingerprint}
               </span>
             ) : (
               <span

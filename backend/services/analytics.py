@@ -134,15 +134,25 @@ def get_client_ip(request) -> str:
         # but handle raw header access as a belt-and-braces fallback.
         xff = request.headers.get("X-Forwarded-For", "")
         if xff:
-            # XFF is a comma-separated list; the *first* non-proxy IP is the
-            # client.  After Uvicorn's middleware strips its own entry the
-            # first entry should be the real client IP.
-            candidate = xff.split(",")[0].strip()
-            try:
-                ipaddress.ip_address(candidate)  # Validate it's a real IP
-                return candidate
-            except ValueError:
-                pass  # Malformed entry — fall through to peer_host
+            # Parse right-to-left to find the first untrusted IP address.
+            # An attacker can prepend arbitrary values to XFF, but reverse proxies
+            # (Render/Cloudflare/AWS) append the actual TCP peer to the right.
+            raw_ips = [ip.strip() for ip in xff.split(",") if ip.strip()]
+            for ip in reversed(raw_ips):
+                try:
+                    addr = ipaddress.ip_address(ip)
+                    # If this IP is not in our trusted networks, it is the real client IP.
+                    if not any(addr in net for net in _TRUSTED_NETWORKS):
+                        return ip
+                except ValueError:
+                    continue
+            # Fallback to the leftmost entry only if all entries are trusted proxies
+            if raw_ips:
+                try:
+                    ipaddress.ip_address(raw_ips[0])
+                    return raw_ips[0]
+                except ValueError:
+                    pass
 
         real_ip = request.headers.get("X-Real-IP", "").strip()
         if real_ip:

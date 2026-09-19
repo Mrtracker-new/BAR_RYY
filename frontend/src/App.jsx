@@ -410,7 +410,7 @@ function SealButton({ onClick, disabled, isSealing }) {
             letterSpacing: "0.01em",
           }}
         >
-          {disabled ? "Upload a file to continue" : "End-to-end encrypted · Zero-knowledge"}
+          {disabled ? "Upload a file to continue" : "Encrypted at rest · Ephemeral auto-destruction"}
         </p>
       )}
     </div>

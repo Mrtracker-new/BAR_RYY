@@ -75,6 +75,20 @@ _CANONICAL_JSON_KWARGS: _CanonicalJsonKwargs = {"sort_keys": True, "separators":
 _BAR_HEADER: bytes = b"BAR_FILE_V1\n"
 
 
+class BarKey(bytes):
+    """
+    Subclass of bytes holding a Fernet key (URL-safe base64 bytes)
+    along with an associated HMAC key (raw 32 bytes) for domain-separated integrity.
+    Behaves as a regular bytes object for Fernet and all standard byte operations.
+    """
+    hmac_key: bytes
+
+    def __new__(cls, fernet_key: bytes, hmac_key: bytes = None):
+        obj = super().__new__(cls, fernet_key)
+        obj.hmac_key = hmac_key if hmac_key is not None else fernet_key
+        return obj
+
+
 class TamperDetectedException(Exception):
     """Exception raised when BAR file tampering is detected"""
     pass
@@ -85,17 +99,45 @@ def generate_key():
     return Fernet.generate_key()
 
 
-def derive_key_from_password(password: str, salt: bytes) -> bytes:
-    """Derive encryption key from password using PBKDF2"""
+def derive_key_from_password(
+    password: str,
+    salt: bytes,
+    iterations: int = 600000,
+) -> BarKey:
+    """
+    Derive 64 bytes via PBKDF2-HMAC-SHA256 (600,000 iterations per OWASP).
+    Returns a BarKey where:
+      - Fernet key: first 32 bytes URL-safe base64-encoded for Fernet.
+      - HMAC key: second 32 bytes raw for HMAC-SHA256 integrity signing.
+    """
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=64,
+        salt=salt,
+        iterations=iterations,
+        backend=default_backend()
+    )
+    raw_key = kdf.derive(password.encode())
+    fernet_key = base64.urlsafe_b64encode(raw_key[:32])
+    hmac_key = raw_key[32:]
+    return BarKey(fernet_key, hmac_key)
+
+
+def derive_legacy_key_from_password(
+    password: str,
+    salt: bytes,
+    iterations: int = 100000,
+) -> BarKey:
+    """Legacy derivation (32 bytes urlsafe_b64encode used for both Fernet and HMAC)."""
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
         salt=salt,
-        iterations=100000,
+        iterations=iterations,
         backend=default_backend()
     )
     key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
-    return key
+    return BarKey(key, key)
 
 
 def encrypt_file(file_data: bytes, key: bytes) -> bytes:
@@ -151,7 +193,7 @@ def generate_hmac_signature(data: bytes, key: bytes) -> str:
 
     Args:
         data: The data to sign (should be the entire BAR structure minus signature).
-        key: The HMAC key — in practice the Fernet encryption key bytes.
+        key: The HMAC key — in practice raw 32 bytes or Fernet key bytes.
 
     Returns:
         Hex-encoded HMAC-SHA256 signature string.
@@ -278,13 +320,13 @@ def encrypt_and_pack_with_password(file_data: bytes, metadata: dict, password: s
         Tuple of (bar_data, salt, key) where:
         - bar_data: Complete .BAR file data ready to save
         - salt: The salt used (for reference)
-        - key: The derived encryption key (for reference)
+        - key: The derived BarKey (Fernet + HMAC keys)
     """
     # Generate random salt
     salt = os.urandom(32)
     
-    # Derive key from password and salt
-    key = derive_key_from_password(password, salt)
+    # Derive key from password and salt (600,000 iterations, split Fernet + HMAC)
+    key = derive_key_from_password(password, salt, iterations=600000)
     
     # Encrypt file data
     encrypted_data = encrypt_file(file_data, key)
@@ -302,7 +344,7 @@ def pack_bar_file(encrypted_data: bytes, metadata: dict, key: bytes, password: s
     Args:
         encrypted_data: The encrypted file data (must be encrypted with the provided key)
         metadata: File metadata dictionary
-        key: Encryption key (used for encryption)
+        key: Encryption key (used for encryption, or BarKey)
         password: Optional password for password-derived encryption
         salt: Optional salt (required if password is provided)
 
@@ -314,22 +356,6 @@ def pack_bar_file(encrypted_data: bytes, metadata: dict, key: bytes, password: s
           Only the salt is stored; the key must be re-derived from the password on
           every access.
         - If password is None: Stores key in file (backward compatible, less secure).
-
-    HMAC canonical form
-    -------------------
-    The HMAC is computed over the compact JSON representation of the BAR structure
-    **before** the ``hmac_signature`` field is added, using ``_CANONICAL_JSON_KWARGS``.
-    The same compact representation is then stored on disk (after the signature is
-    appended).  This means:
-
-        signed_bytes == stored_json_bytes_minus_signature_field
-
-    Any code that reconstructs the signed form for verification MUST use the same
-    ``_CANONICAL_JSON_KWARGS`` — see :func:`unpack_bar_file`.
-
-    Note:
-        For password-protected files, prefer :func:`encrypt_and_pack_with_password`.
-        This function is lower-level and requires you to manage salt/key derivation.
     """
     # Build the core BAR structure (without signature).
     bar_structure = {
@@ -339,44 +365,26 @@ def pack_bar_file(encrypted_data: bytes, metadata: dict, key: bytes, password: s
 
     # Determine encryption method based on password.
     if password:
-        # Password-derived encryption: store only the salt, NOT the key.
-        # This is true zero-knowledge encryption — the key never touches disk.
         if salt is None:
             raise ValueError("Salt is required when password is provided")
 
         bar_structure["encryption_method"] = "password_derived"
         bar_structure["salt"] = base64.b64encode(salt).decode('utf-8')
+        bar_structure["kdf_iterations"] = 600000
     else:
         # Legacy mode: key stored directly in file (backward compatible).
         bar_structure["encryption_method"] = "key_stored"
         bar_structure["encryption_key"] = base64.b64encode(key).decode('utf-8')
 
     # --- HMAC signing ------------------------------------------------------ #
-    # Produce the canonical JSON for the structure *before* adding the         #
-    # signature field.  This is the byte sequence that will be signed and,     #
-    # after the signature is appended, stored verbatim on disk.  Using the     #
-    # named constant _CANONICAL_JSON_KWARGS ensures sign and verify always use #
-    # exactly the same serialisation.                                          #
-    # ----------------------------------------------------------------------- #
+    signing_key = getattr(key, "hmac_key", key)
     canonical_json = json.dumps(bar_structure, **_CANONICAL_JSON_KWARGS)
-    signature = generate_hmac_signature(canonical_json.encode('utf-8'), key)
+    signature = generate_hmac_signature(canonical_json.encode('utf-8'), signing_key)
     bar_structure["hmac_signature"] = signature
 
-    # Serialise the final structure (with signature) using the SAME canonical
-    # kwargs.  This guarantees that the bytes stored on disk can be audited
-    # out-of-band: strip the hmac_signature key, re-sort, and the HMAC must
-    # match.  Using a different serialisation here (e.g. indent=2) would create
-    # an invisible divergence between the stored form and the canonical form.
     bar_json = json.dumps(bar_structure, **_CANONICAL_JSON_KWARGS)
     bar_bytes = bar_json.encode('utf-8')
 
-    # Base64-encode the canonical JSON so the binary .bar container is
-    # byte-stream-safe for filesystem storage and HTTP transfer.  This is a
-    # *transport encoding only* — it provides no confidentiality.  The
-    # confidentiality guarantee comes from Fernet encryption of the file
-    # content stored in ``encrypted_data``, and integrity is guaranteed by
-    # the HMAC-SHA256 signature appended above.  _BAR_HEADER is the
-    # module-level constant; do not repeat the literal here.
     encoded_payload = base64.b64encode(bar_bytes)
     return _BAR_HEADER + encoded_payload
 
@@ -384,90 +392,17 @@ def pack_bar_file(encrypted_data: bytes, metadata: dict, key: bytes, password: s
 def update_bar_view_count(bar_data: bytes, key: bytes) -> bytes:
     """
     Increment ``metadata["current_views"]`` in a packed BAR file and re-sign.
-
-    This is the **only correct** entry point for persisting a view-count change
-    on a client-side BAR file.  It exists to decouple the "update one mutable
-    counter" operation from the full :func:`pack_bar_file` seal pipeline.
-
-    Why not call ``pack_bar_file`` directly?
-    ----------------------------------------
-    ``pack_bar_file`` is designed for *creating* BAR files — it accepts
-    ``encrypted_data``, ``metadata``, ``key``, ``password``, and ``salt`` as
-    independent parameters and rebuilds the entire ``bar_structure`` dict from
-    scratch.  Reusing it for a view-count update introduces two failure modes:
-
-    1. **Parameter drift** — the caller must thread ``encrypted_data``,
-       ``salt``, and the stripped ``password`` through the route handler just to
-       write a single integer.  Any mismatch (e.g. passing ``request.password``
-       instead of the stripped ``password_to_use``) produces an HMAC signed
-       with a different key, causing ``TamperDetectedException`` on every
-       subsequent read.
-
-    2. **Structural drift** — if ``pack_bar_file`` is ever extended (new top-
-       level key, different ordering), calling it after an update changes the
-       canonical form of files it touches, invalidating signatures written by
-       the old version.  This function works directly on the *already-parsed
-       on-disk structure* and only touches the one key that changed.
-
-    Algorithm
-    ---------
-    1. Decode the BAR bytes (strip header → base64-decode → JSON-parse).
-    2. **Verify** the existing HMAC before mutating anything — if the file is
-       already tampered with, refuse to re-sign and legitimise the corruption.
-    3. Increment ``bar_structure["metadata"]["current_views"]`` in-place.
-    4. Remove the stale ``hmac_signature`` key.
-    5. Produce a fresh canonical JSON (same ``_CANONICAL_JSON_KWARGS`` as
-       :func:`pack_bar_file`) and sign it with ``key``.
-    6. Re-append ``hmac_signature`` and serialise once more with the same kwargs.
-    7. Return ``_BAR_HEADER + base64(new_json_bytes)``.
-
-    The signed bytes and the stored bytes are therefore **identical by
-    construction** — not by convention — for every file this function writes.
-
-    Legacy files (no ``hmac_signature``)
-    -------------------------------------
-    Files written before HMAC support was added contain no signature.  This
-    function **refuses** to update them.  Updating an unauthenticated file is
-    semantically equivalent to silently corrupting it: we cannot verify that
-    the view count (or any other field) has not already been tampered with
-    before applying our mutation.  A ``UserWarning`` is emitted so operators
-    can identify and re-seal affected files.
-
-    Args:
-        bar_data: The current raw BAR file bytes (as read from disk).
-        key:      The Fernet encryption key (bytes, URL-safe base64 encoded).
-                  Used exclusively for HMAC signing/verification; the
-                  ciphertext is not touched.
-
-    Returns:
-        New BAR file bytes with the incremented view count and a fresh,
-        valid HMAC signature.  The caller is responsible for writing these
-        bytes to disk atomically (i.e. open → write → close in one pass).
-
-    Raises:
-        ValueError: If the BAR file is malformed, missing required fields, or
-            is a legacy pre-HMAC file (update refused for safety).
-        TamperDetectedException: If the existing HMAC does not match ``key``,
-            indicating tampering or key mismatch before this call.
     """
     if not bar_data.startswith(_BAR_HEADER):
         raise ValueError("Invalid BAR file format")
 
-    # ── 1. Decode ─────────────────────────────────────────────────────────── #
-    # Strip the fixed header to isolate the Base64-encoded JSON payload, then
-    # decode it.  Base64 here is purely a transport encoding (see module-level
-    # format comment); all security properties come from Fernet and HMAC below.
     encoded_payload = bar_data[len(_BAR_HEADER):]
     bar_structure: dict = json.loads(base64.b64decode(encoded_payload).decode("utf-8"))
 
-    # ── 2. Guard: refuse legacy unsigned files ────────────────────────────── #
     if "hmac_signature" not in bar_structure:
         warnings.warn(
             "update_bar_view_count: BAR file has no HMAC signature (pre-HMAC "
-            "legacy format).  View-count update refused — the file's integrity "
-            "cannot be verified before mutation.  Re-seal the file with the "
-            "current version to gain integrity protection and view-count "
-            "persistence.",
+            "legacy format). View-count update refused.",
             UserWarning,
             stacklevel=2,
         )
@@ -476,41 +411,28 @@ def update_bar_view_count(bar_data: bytes, key: bytes) -> bytes:
             "Re-seal the file to enable view-count persistence."
         )
 
-    # ── 3. Verify existing signature before mutating anything ─────────────── #
-    # If the file has been tampered with we must not re-sign it — doing so
-    # would legitimise the corruption.  Raises TamperDetectedException on
-    # mismatch; let it propagate so the caller can surface it as a 403.
+    signing_key = getattr(key, "hmac_key", key)
     stored_sig = bar_structure["hmac_signature"]
     structure_for_verification = {
         k: v for k, v in bar_structure.items() if k != "hmac_signature"
     }
     verification_json = json.dumps(structure_for_verification, **_CANONICAL_JSON_KWARGS)
-    verify_hmac_signature(verification_json.encode("utf-8"), key, stored_sig)
+    verify_hmac_signature(verification_json.encode("utf-8"), signing_key, stored_sig)
 
-    # ── 4. Mutate only the view count ─────────────────────────────────────── #
     metadata = bar_structure.get("metadata")
     if metadata is None:
         raise ValueError("BAR file is missing 'metadata' field")
     if "current_views" not in metadata:
         raise ValueError("BAR file metadata is missing 'current_views' field")
 
-    # Direct in-place increment — bar_structure["metadata"] IS this dict.
     metadata["current_views"] += 1
 
-    # ── 5. Re-sign ────────────────────────────────────────────────────────── #
-    # Remove the stale signature so it is NOT included in the canonical bytes
-    # that are fed to the HMAC.  This mirrors the signing step in pack_bar_file
-    # exactly: sign(structure_without_signature) → append signature.
     bar_structure.pop("hmac_signature", None)
     canonical_json = json.dumps(bar_structure, **_CANONICAL_JSON_KWARGS)
     bar_structure["hmac_signature"] = generate_hmac_signature(
-        canonical_json.encode("utf-8"), key
+        canonical_json.encode("utf-8"), signing_key
     )
 
-    # ── 6. Re-encode ──────────────────────────────────────────────────────── #
-    # Serialise with _CANONICAL_JSON_KWARGS — identical to pack_bar_file.
-    # The stored bytes and the signed bytes therefore differ only by the
-    # presence of the hmac_signature key, which is the defined invariant.
     final_json = json.dumps(bar_structure, **_CANONICAL_JSON_KWARGS)
     return _BAR_HEADER + base64.b64encode(final_json.encode("utf-8"))
 
@@ -519,110 +441,51 @@ def unpack_bar_file(bar_data: bytes, password: str = None) -> tuple:
     """
     Unpack BAR file into components.
 
-    Args:
-        bar_data: Raw BAR file data
-        password: Optional password for password-derived encryption
-
     Returns:
         4-tuple of ``(encrypted_data, metadata, key, salt)`` where:
-
-        * ``encrypted_data`` – the raw Fernet ciphertext as stored on disk.
-          Callers that need to re-pack the file (e.g. after updating the view
-          count) **must** reuse this blob verbatim so that the HMAC computed
-          by :func:`pack_bar_file` matches on the next read.
-        * ``metadata`` – the plaintext metadata dict.
-        * ``key`` – the Fernet key (bytes, URL-safe base64 encoded).
-        * ``salt`` – the PBKDF2 salt bytes for ``password_derived`` files, or
-          ``None`` for ``key_stored`` (legacy) files.  Required by
-          :func:`pack_bar_file` when re-packing a password-protected file.
-
-    Security:
-        - For password_derived files: Derives key from password and stored salt
-        - For key_stored files: Extracts key from file (backward compatible)
-
-    Raises:
-        ValueError: If file format is invalid
-        ValueError: If password is required but not provided
-        TamperDetectedException: If the HMAC signature does not match
+        - key is BarKey (or bytes for legacy key_stored files)
     """
-    # Validate the magic header then strip it.  Both the sentinel and the
-    # slice offset are derived from _BAR_HEADER so they stay in sync
-    # automatically if the constant is ever updated.
     if not bar_data.startswith(_BAR_HEADER):
         raise ValueError("Invalid BAR file format")
 
-    # Strip the fixed header to isolate the Base64-encoded JSON payload.
-    # Base64 is a transport encoding (not a security layer) — see the
-    # module-level format comment for the full security architecture.
     encoded_payload = bar_data[len(_BAR_HEADER):]
-
-    # Decode the Base64 transport encoding to recover the canonical JSON bytes.
     bar_json = base64.b64decode(encoded_payload)
     bar_structure = json.loads(bar_json.decode('utf-8'))
 
     metadata = bar_structure["metadata"]
     encrypted_data = base64.b64decode(bar_structure["encrypted_data"])
 
-    # Determine encryption method
-    encryption_method = bar_structure.get("encryption_method", "key_stored")  # Default to legacy
-
-    salt: bytes | None = None  # Will be populated for password_derived files
+    encryption_method = bar_structure.get("encryption_method", "key_stored")
+    salt: bytes | None = None
 
     if encryption_method == "password_derived":
-        # Password-derived encryption: Must derive key from password
         if not password:
             raise ValueError("Password required for decryption")
 
-        # NOTE: password correctness is NOT pre-checked via a stored hash here.
-        # A password_hash field may still exist in legacy .bar files — it is
-        # intentionally ignored.  Password verification happens implicitly:
-        #   1. PBKDF2-HMAC-SHA256 (100 000 iterations) derives the key.
-        #   2. The HMAC signature over the entire BAR structure is verified.
-        # A wrong password → wrong key → HMAC mismatch → TamperDetectedException.
-        # Callers (EncryptionService.decrypt_bar_file) must catch that exception
-        # and, when a password was supplied, re-raise it as HTTPException(403).
-
-        # Get salt from file — kept so callers can re-pack without changing it
         salt = base64.b64decode(bar_structure["salt"])
-
-        # Derive key from password and salt
-        key = derive_key_from_password(password, salt)
+        iterations = bar_structure.get("kdf_iterations")
+        if iterations is not None:
+            key = derive_key_from_password(password, salt, iterations=int(iterations))
+        else:
+            # Legacy file without kdf_iterations (100,000 iterations, single key)
+            key = derive_legacy_key_from_password(password, salt, iterations=100000)
 
     else:
         # Legacy mode: Key is stored in file
         key = base64.b64decode(bar_structure["encryption_key"])
 
-    # --- HMAC verification ------------------------------------------------- #
-    # Reconstruct the canonical JSON from the *parsed* structure with the      #
-    # hmac_signature key removed, then re-serialise using _CANONICAL_JSON_KWARGS. #
-    # This is intentionally symmetric with the signing step in pack_bar_file:  #
-    # both sides independently produce the same byte sequence from the same    #
-    # dict contents.  Raises TamperDetectedException on mismatch.              #
-    # ----------------------------------------------------------------------- #
     if "hmac_signature" in bar_structure:
         stored_signature = bar_structure["hmac_signature"]
-
         structure_for_verification = {
             k: v for k, v in bar_structure.items() if k != "hmac_signature"
         }
-        # MUST use _CANONICAL_JSON_KWARGS — identical to the kwargs used in
-        # pack_bar_file during signing.  Any deviation here would cause every
-        # valid file to fail verification.
         verification_json = json.dumps(structure_for_verification, **_CANONICAL_JSON_KWARGS)
-
-        # Raises TamperDetectedException if signature does not match.
-        verify_hmac_signature(verification_json.encode('utf-8'), key, stored_signature)
+        signing_key = getattr(key, "hmac_key", key)
+        verify_hmac_signature(verification_json.encode('utf-8'), signing_key, stored_signature)
     else:
-        # No signature present — old file format (pre-HMAC).
-        # Allow for backward compatibility but warn the operator.
-        #
-        # stacklevel=2 points the warning at the *caller* of unpack_bar_file,
-        # not at this internal helper.  That makes the source location
-        # actionable in logs and in -W error / pytest -W error environments.
         warnings.warn(
             "BAR file does not contain an HMAC signature (pre-HMAC legacy format). "
-            "File integrity cannot be verified — tampering cannot be detected. "
-            "Re-encrypt the file with the current version to gain integrity protection.",
+            "File integrity cannot be verified — tampering cannot be detected.",
             UserWarning,
             stacklevel=2,
         )

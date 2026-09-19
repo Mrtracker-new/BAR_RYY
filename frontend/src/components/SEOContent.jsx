@@ -130,14 +130,13 @@ const SEOContent = () => {
             files that self-destruct after viewing, or open a <strong style={{ color: "#1A140D", fontWeight: 700 }}>Burn Chat</strong> session
             whose messages are permanently erased the moment its countdown expires. Whether you
             need to transmit confidential business documents or hold a sensitive conversation with
-            no stored record, BAR applies AES-256 encryption for files and end-to-end AES-GCM-256
-            with ECDH P-256 key exchange for chat — under a strict zero-knowledge, zero-log
-            architecture.
+            no stored record, BAR applies AES-256 encryption for files and true zero-knowledge end-to-end
+            AES-GCM-256 with ECDH P-256 key exchange for chat.
           </p>
           <p style={{ fontSize: "1rem", fontWeight: 500, color: "#1A140D", lineHeight: 1.85, marginBottom: 0 }}>
             Unlike conventional file transfer or messaging services, BAR is purpose-built for{" "}
             <strong style={{ color: "#1A140D", fontWeight: 700 }}>temporary, self-destructing data</strong>. Configure view limits, add password
-            protection with PBKDF2 key derivation, and set time-based expiry for files. Or spin up
+            protection with PBKDF2 key derivation (600,000 iterations), and set time-based expiry for files. Or spin up
             a Burn Chat room whose entire history — messages, keys, participants — is wiped clean
             the instant the timer reaches zero. No accounts required. No logs kept. Nothing
             recoverable after destruction.
@@ -520,9 +519,9 @@ const FEATURES = [
     accentColor: "#B4791E",
     accentDim:   "rgba(180,121,30,0.10)",
     accentBorder:"rgba(180,121,30,0.28)",
-    title: "AES-256 Zero-Knowledge Encryption",
+    title: "AES-256 Encryption & Ephemeral Destruction",
     description:
-      "Every file is encrypted client-side with AES-256 before it leaves your browser. The key is derived via PBKDF2 (100,000 iterations, SHA-256) and never transmitted — we cannot read your files.",
+      "Files are secured with AES-256 encryption and PBKDF2 (600,000 iterations, SHA-256) with auto-destruction upon view limit or timer expiry. Burn Chat features 100% zero-knowledge E2EE.",
   },
   {
     icon: Eye,
