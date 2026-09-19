@@ -63,6 +63,115 @@ const DecryptPage = ({ onBack }) => {
 
   const showToast = (message, type = 'success') => setToast({ message, type });
 
+  const extractJsonObject = (str, key) => {
+    const keyIdx = str.indexOf(`"${key}"`);
+    if (keyIdx === -1) return null;
+    const startIdx = str.indexOf('{', keyIdx);
+    if (startIdx === -1) return null;
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+    for (let i = startIdx; i < str.length; i++) {
+      const char = str[i];
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (char === '\\') {
+        escape = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (!inString) {
+        if (char === '{') depth++;
+        else if (char === '}') {
+          depth--;
+          if (depth === 0) {
+            try {
+              const parsed = JSON.parse(str.substring(startIdx, i + 1));
+              return (parsed && typeof parsed === 'object') ? parsed : null;
+            } catch {
+              return null;
+            }
+          }
+        }
+      }
+    }
+    return null;
+  };
+
+  /* ── Fast chunked metadata reader (prevents browser tab OOM on 50MB+ files) ── */
+  const parseMetadataFromText = (text) => {
+    // 1. Try full parse if text contains full JSON
+    try {
+      const jsonStart = text.indexOf('\n') + 1;
+      const obfuscated = jsonStart > 0 ? text.substring(jsonStart) : text;
+      const decoded = atob(obfuscated.trim());
+      const jsonData = JSON.parse(decoded);
+      if (jsonData && jsonData.metadata) return jsonData.metadata;
+    } catch {
+      // Fall through to fragment extraction
+    }
+
+    // 2. Try decoding base64 fragments (with 0..3 byte alignment shifts)
+    for (let shift = 0; shift < 4; shift++) {
+      try {
+        const shifted = text.substring(shift);
+        const aligned = shifted.substring(0, shifted.length - (shifted.length % 4));
+        if (!aligned) continue;
+        const decoded = atob(aligned);
+        const parsed = extractJsonObject(decoded, 'metadata');
+        if (parsed) return parsed;
+      } catch {
+        // Continue trying next shift
+      }
+    }
+    return null;
+  };
+
+  const readMetadataSafely = async (file) => {
+    // For small files (<= 2MB), full read is fast and safe
+    if (file.size <= 2 * 1024 * 1024) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(parseMetadataFromText(e.target.result));
+        reader.onerror = () => resolve(null);
+        reader.readAsText(file);
+      });
+    }
+
+    // For large files (> 2MB), read tail (64KB with 1MB fallback), then head if needed
+    const readSlice = (start, end) => {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = () => resolve('');
+        reader.readAsText(file.slice(start, end));
+      });
+    };
+
+    // 1. Try last 64KB (tail is where metadata is located when keys are sorted)
+    let tailText = await readSlice(Math.max(0, file.size - 65536), file.size);
+    let meta = parseMetadataFromText(tailText);
+    if (meta) return meta;
+
+    // 2. Fallback: Try last 1MB
+    tailText = await readSlice(Math.max(0, file.size - 1048576), file.size);
+    meta = parseMetadataFromText(tailText);
+    if (meta) return meta;
+
+    // 3. Fallback: Try first 64KB / 1MB (in case metadata preceded encrypted_data)
+    let headText = await readSlice(0, Math.min(file.size, 65536));
+    meta = parseMetadataFromText(headText);
+    if (meta) return meta;
+
+    headText = await readSlice(0, Math.min(file.size, 1048576));
+    return parseMetadataFromText(headText);
+  };
+
   /* ── File selection & metadata read ── */
   const handleFileSelect = async (e) => {
     const file = e.target.files[0];
@@ -72,23 +181,13 @@ const DecryptPage = ({ onBack }) => {
     setBarFile(file); setError(null); setMetadata(null); setPreviewUrl(null);
 
     try {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        try {
-          const text         = event.target.result;
-          const jsonStart    = text.indexOf('\n') + 1;
-          const obfuscated   = text.substring(jsonStart);
-          const decoded      = atob(obfuscated);
-          const jsonData     = JSON.parse(decoded);
-          setMetadata(jsonData.metadata);
-          generateFileTypePreview(jsonData.metadata.filename);
-        } catch (err) {
-          console.error('Could not read metadata:', err);
-        }
-      };
-      reader.readAsText(file);
+      const meta = await readMetadataSafely(file);
+      if (meta) {
+        setMetadata(meta);
+        if (meta.filename) generateFileTypePreview(meta.filename);
+      }
     } catch (err) {
-      console.error('Error reading file:', err);
+      console.error('Could not read metadata:', err);
     }
   };
 

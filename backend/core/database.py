@@ -265,8 +265,8 @@ class SQLitePool:
             if not self._closed and self._pool is not None:
                 try:
                     await conn.rollback()
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    _logger.debug("SQLite rollback on return to pool ignored: %s", _exc)
                 await self._pool.put(conn)
 
     async def close(self):
@@ -283,8 +283,8 @@ class SQLitePool:
         for conn in self._all_conns:
             try:
                 await conn.close()
-            except Exception:
-                pass
+            except Exception as _exc:
+                _logger.debug("Error closing pooled SQLite connection: %s", _exc)
         self._all_conns.clear()
         self._pool = None
 
@@ -411,8 +411,8 @@ class Database:
                 await db.execute("ALTER TABLE bar_files ADD COLUMN analytics_key_hash TEXT")
                 await db.commit()
                 _logger.info("Migration: added analytics_key_hash column")
-            except Exception:
-                pass  # Column already exists — safe to ignore
+            except Exception as _exc:
+                _logger.debug("analytics_key_hash column migration skipped or already exists: %s", _exc)
 
             # Phase 2 — back-fill SHA-256 hash for rows that still have the
             # plaintext key.  We always use a Python-side loop here because
