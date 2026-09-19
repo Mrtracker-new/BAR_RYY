@@ -83,6 +83,12 @@ Desktop.ini
 restart-servers.bat
 
 # Database
-backend/bar_files.db
-bar_files.db
+backend/bar_files.db*
+bar_files.db*
 *.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
