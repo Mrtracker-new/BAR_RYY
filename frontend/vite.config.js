@@ -46,9 +46,10 @@ export default defineConfig({
       '/analytics': { target: backendUrl, changeOrigin: true },
 
       // ── Burn Chat (REST + WebSocket) ──────────────────────────────────────
-      // GET /chat/:token     → SPA (React Router handles the room page)
-      // POST /chat/create    → FastAPI backend
-      // WS  /chat/:token/ws  → FastAPI backend (WebSocket upgrade)
+      // GET /chat/:token       → SPA (React Router handles the room page)
+      // GET /chat/:token/info  → FastAPI backend (public session metadata)
+      // POST /chat/create      → FastAPI backend
+      // WS  /chat/:token/ws    → FastAPI backend (WebSocket upgrade)
       '/chat': {
         target: backendUrl,
         changeOrigin: true,
@@ -56,7 +57,8 @@ export default defineConfig({
         bypass(req) {
           const isWs = req.headers['upgrade'] === 'websocket';
           const isPost = req.method === 'POST';
-          if (!isWs && !isPost) return '/index.html';
+          const isInfoRequest = /^\/chat\/[^/]+\/info(\?.*)?$/.test(req.url);
+          if (!isWs && !isPost && !isInfoRequest) return '/index.html';
         }
       },
 

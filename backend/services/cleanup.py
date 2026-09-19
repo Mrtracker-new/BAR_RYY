@@ -34,6 +34,7 @@ from datetime import datetime, timezone, timedelta
 
 from core import database, security as _security
 from services import chat_service as _chat_service
+from services.otp_service import otp_service
 
 logger = logging.getLogger(__name__)
 
@@ -455,6 +456,9 @@ async def run_cleanup_loop() -> None:
                     _rl["rate_limit"],
                     _rl["password_attempts"],
                 )
+
+            # OTP storage cleanup — prunes expired OTP verification sessions.
+            otp_service.cleanup_expired_otps()
 
             logger.info("Cleanup cycle complete")
 

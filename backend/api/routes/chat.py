@@ -59,6 +59,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import uuid
 from datetime import datetime, timezone
 
@@ -111,7 +112,7 @@ def _valid_session_token(token: str) -> bool:
 # The SPA's /chat/:token route remains unchanged for all real users.
 # ---------------------------------------------------------------------------
 
-_OG_SITE          = "https://bar-rnr.vercel.app"
+_OG_SITE          = os.getenv("SITE_URL", "https://bar-rnr.vercel.app")
 _OG_CHAT_IMAGE    = f"{_OG_SITE}/og-chat.png"
 _OG_IMAGE_ALT     = "Burn Chat — End-to-End Encrypted Ephemeral Chat | BAR Web"
 _OG_SITE_NAME     = "BAR by Rolan"
@@ -585,7 +586,8 @@ async def chat_websocket(token: str, websocket: WebSocket):
             elif msg_type == "ping":
                 try:
                     await websocket.send_json({"type": "pong"})
-                except Exception:
+                except Exception as _exc:
+                    logger.debug("Failed to send pong to ws_id=%s: %s", ws_id, _exc)
                     break
 
             elif msg_type == "kick":
@@ -617,7 +619,7 @@ async def chat_websocket(token: str, websocket: WebSocket):
                 )
 
     except WebSocketDisconnect:
-        pass
+        logger.debug("WebSocket client disconnected normally: ws_id=%s token=%s…", ws_id, token[:8])
     except Exception:
         logger.exception(
             "Unexpected error in WS message loop for token=%s…", token[:8]

@@ -17,7 +17,7 @@ from utils import crypto_utils
 from storage import client_storage
 from services import analytics
 from services import webhook_service
-from core.concurrency import decrypt_semaphore, iter_bytes
+from core.concurrency import decrypt_semaphore, iter_bytes, track_background_task
 
 logger = logging.getLogger(__name__)
 
@@ -101,20 +101,22 @@ async def decrypt_bar(
     encryption_service: EncryptionService = Depends(get_encryption_service_dep)
 ):
     """
-    Decrypt and extract a file from a client-side .bar container.
+    [DEPRECATED] Legacy endpoint for decrypting .bar files stored directly on disk.
+    Prefer POST /decrypt-upload for direct file uploads or POST /share/{token} for
+    server-side share links.
 
     Security controls
     -----------------
-    * **Rate limit** – max ``_DECRYPT_RATE_LIMIT`` requests per IP per minute.
+    * **Rate limit** - max ``_DECRYPT_RATE_LIMIT`` requests per IP per minute.
       Combined with the PBKDF2 KDF cost inside the encryption service this
       makes parallelised dictionary attacks impractical.
-    * **Brute-force lockout** – failed password attempts are tracked per
+    * **Brute-force lockout** - failed password attempts are tracked per
       (IP, bar_id) pair.  After ``MAX_PASSWORD_ATTEMPTS`` failures the IP is
       locked out for ``LOCKOUT_DURATION_MINUTES`` minutes.
-    * **Progressive delay** – each failed attempt increases the response
-      delay exponentially (1 s → 2 s → 4 s → … capped at 30 s) to slow
+    * **Progressive delay** - each failed attempt increases the response
+      delay exponentially (1 s -> 2 s -> 4 s -> ... capped at 30 s) to slow
       sequential attackers even before the hard lockout kicks in.
-    * **Webhook alerting** – wrong-password and tamper-detection events are
+    * **Webhook alerting** - wrong-password and tamper-detection events are
       forwarded to any configured webhook URL so the file owner is notified.
     """
     try:
@@ -189,12 +191,12 @@ async def decrypt_bar(
                     webhook_url = raw_meta.get("webhook_url") if raw_meta else None
                     if webhook_url:
                         webhook_srv = webhook_service.get_webhook_service()
-                        asyncio.create_task(webhook_srv.send_access_denied_alert(
+                        track_background_task(asyncio.create_task(webhook_srv.send_access_denied_alert(
                             webhook_url=webhook_url,
                             filename=raw_meta.get("filename", "unknown"),
                             reason="Invalid password (client-side decrypt)",
                             ip_address=client_ip,
-                        ))
+                        )))
                 except Exception:
                     pass  # Never let webhook failures surface to the caller
             raise
@@ -214,11 +216,11 @@ async def decrypt_bar(
                 webhook_url = raw_meta.get("webhook_url") if raw_meta else None
                 if webhook_url:
                     webhook_srv = webhook_service.get_webhook_service()
-                    asyncio.create_task(webhook_srv.send_tamper_alert(
+                    track_background_task(asyncio.create_task(webhook_srv.send_tamper_alert(
                         webhook_url=webhook_url,
                         filename=raw_meta.get("filename", "unknown"),
                         token=bar_id,
-                    ))
+                    )))
             except Exception:
                 pass
 
@@ -443,19 +445,19 @@ async def decrypt_uploaded_bar_file(
                     if webhook_url:
                         webhook_srv = webhook_service.get_webhook_service()
                         if is_wrong_password:
-                            asyncio.create_task(webhook_srv.send_access_denied_alert(
+                            track_background_task(asyncio.create_task(webhook_srv.send_access_denied_alert(
                                 webhook_url=webhook_url,
                                 filename=raw_meta.get("filename", "unknown"),
                                 reason=f"{e.detail} (client-side decrypt)",
                                 ip_address=client_ip,
-                            ))
+                            )))
                         else:
                             # Tamper or corruption — fire tamper alert
-                            asyncio.create_task(webhook_srv.send_tamper_alert(
+                            track_background_task(asyncio.create_task(webhook_srv.send_tamper_alert(
                                 webhook_url=webhook_url,
                                 filename=raw_meta.get("filename", "unknown"),
                                 token=file_token,
-                            ))
+                            )))
                 except Exception:
                     pass  # Never let webhook failures mask the auth error
             raise

@@ -17,7 +17,7 @@ from utils import crypto_utils
 from core import database
 from services import analytics
 from services import webhook_service
-from core.concurrency import decrypt_semaphore, iter_bytes
+from core.concurrency import decrypt_semaphore, iter_bytes, track_background_task
 
 logger = logging.getLogger(__name__)
 
@@ -256,12 +256,12 @@ async def share_file(
                     webhook_url = db_metadata.get("webhook_url")
                     if webhook_url:
                         webhook_srv = webhook_service.get_webhook_service()
-                        asyncio.create_task(webhook_srv.send_access_denied_alert(
+                        track_background_task(asyncio.create_task(webhook_srv.send_access_denied_alert(
                             webhook_url=webhook_url,
                             filename=db_metadata.get("filename", "unknown"),
                             reason="File has expired",
                             ip_address=client_ip
-                        ))
+                        )))
 
                     raise HTTPException(status_code=403, detail="File has expired")
 
@@ -287,12 +287,12 @@ async def share_file(
                 webhook_url = db_metadata.get("webhook_url")
                 if webhook_url:
                     webhook_srv = webhook_service.get_webhook_service()
-                    asyncio.create_task(webhook_srv.send_access_denied_alert(
+                    track_background_task(asyncio.create_task(webhook_srv.send_access_denied_alert(
                         webhook_url=webhook_url,
                         filename=db_metadata.get("filename", "unknown"),
                         reason="Password required but not provided",
                         ip_address=client_ip,
-                    ))
+                    )))
                 raise HTTPException(status_code=403, detail="Password required")
 
         # ------------------------------------------------------------------ #
@@ -316,12 +316,12 @@ async def share_file(
                     webhook_url = db_metadata.get("webhook_url")
                     if webhook_url:
                         webhook_srv = webhook_service.get_webhook_service()
-                        asyncio.create_task(webhook_srv.send_access_denied_alert(
+                        track_background_task(asyncio.create_task(webhook_srv.send_access_denied_alert(
                             webhook_url=webhook_url,
                             filename=db_metadata.get("filename", "unknown"),
                             reason=str(e.detail),
                             ip_address=client_ip,
-                        ))
+                        )))
                 raise
 
 
@@ -399,12 +399,12 @@ async def share_file(
             webhook_url = metadata.get("webhook_url")
             if webhook_url:
                 webhook_srv = webhook_service.get_webhook_service()
-                asyncio.create_task(webhook_srv.send_access_denied_alert(
+                track_background_task(asyncio.create_task(webhook_srv.send_access_denied_alert(
                     webhook_url=webhook_url,
                     filename=metadata.get("filename", "unknown"),
                     reason="Maximum views reached — atomic guard rejected request",
                     ip_address=client_ip,
-                ))
+                )))
             raise HTTPException(
                 status_code=410,
                 detail="Maximum views reached — file has been destroyed"
@@ -426,12 +426,12 @@ async def share_file(
         webhook_url = metadata.get("webhook_url")
         if webhook_url:
             webhook_srv = webhook_service.get_webhook_service()
-            asyncio.create_task(webhook_srv.send_access_alert(
+            track_background_task(asyncio.create_task(webhook_srv.send_access_alert(
                 webhook_url=webhook_url,
                 filename=metadata.get("filename", "unknown"),
                 ip_address=ip_address,
                 views_remaining=views_remaining
-            ))
+            )))
         
         # Destroy file if view limit reached
         if should_destroy:
@@ -453,13 +453,13 @@ async def share_file(
                 # to use here; we only removed the stale *view count* snapshot).
                 _max_views = file_record.get('max_views', 0)
                 webhook_srv = webhook_service.get_webhook_service()
-                asyncio.create_task(webhook_srv.send_destruction_alert(
+                track_background_task(asyncio.create_task(webhook_srv.send_destruction_alert(
                     webhook_url=webhook_url,
                     filename=metadata.get("filename", "unknown"),
                     reason="Maximum views reached",
                     views_used=_max_views,
                     max_views=_max_views
-                ))
+                )))
 
         # Return decrypted file
         view_only = metadata.get('view_only', False)

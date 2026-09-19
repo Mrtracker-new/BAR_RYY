@@ -38,7 +38,7 @@
  * User-facing components (BurnChatPage, BurnChatCreate, BurnChatLandingPage) generate /chat/:token share URLs.
  */
 
-const OG_SITE        = 'https://bar-rnr.vercel.app';
+const OG_SITE        = process.env.VITE_SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://bar-rnr.vercel.app';
 const OG_CHAT_IMAGE  = `${OG_SITE}/og-chat.png`;
 const OG_IMAGE_ALT   = 'Burn Chat — End-to-End Encrypted Ephemeral Chat | BAR Web';
 const OG_SITE_NAME   = 'BAR by Rolan';

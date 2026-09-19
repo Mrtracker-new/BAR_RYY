@@ -30,3 +30,23 @@ def iter_bytes(data: bytes, chunk_size: int = 256 * 1024) -> Iterator[bytes]:
     """
     for offset in range(0, len(data), chunk_size):
         yield data[offset : offset + chunk_size]
+
+
+# ---------------------------------------------------------------------------
+# Background task tracking (Python asyncio GC protection)
+# ---------------------------------------------------------------------------
+_background_tasks: set[asyncio.Task] = set()
+
+
+def track_background_task(task: asyncio.Task) -> asyncio.Task:
+    """
+    Retain a strong reference to a background task so it is not prematurely
+    garbage collected by Python's event loop.
+
+    Uses task.add_done_callback(_background_tasks.discard) to safely remove
+    the reference upon task completion.
+    """
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    return task
+

@@ -472,16 +472,39 @@ async def _broadcast(
 ) -> None:
     """Send *payload* to every participant, removing dead connections.
 
-    When a send fails the participant is dropped and a ``system`` message is
-    broadcast so remaining clients see the departure and an up-to-date
-    participant list instead of a silently stale count.
+    Uses asyncio.wait with a 3.0s timeout and task cancellation to prevent
+    stalled or high-latency TCP connections from blocking broadcasts to other
+    participants.
     """
+    targets = [
+        (ws_id, participant)
+        for ws_id, participant in list(session.participants.items())
+        if ws_id != exclude_ws_id
+    ]
+    if not targets:
+        return
+
+    async def _send(ws: WebSocket) -> None:
+        await ws.send_json(payload)
+
+    task_map = {
+        asyncio.create_task(_send(p.ws)): ws_id
+        for ws_id, p in targets
+    }
+
+    done, pending = await asyncio.wait(task_map.keys(), timeout=3.0)
+
     dead: list[str] = []
-    for ws_id, participant in list(session.participants.items()):
-        if ws_id == exclude_ws_id:
-            continue
+    # Cancel any broadcasts that did not finish within the 3.0s timeout
+    for task in pending:
+        task.cancel()
+        dead.append(task_map[task])
+
+    # Check for send errors in completed tasks
+    for task in done:
+        ws_id = task_map[task]
         try:
-            await participant.ws.send_json(payload)
+            task.result()
         except Exception:
             dead.append(ws_id)
 
@@ -489,6 +512,13 @@ async def _broadcast(
     # in each notification already excludes every disconnected member.
     removed = [session.participants.pop(ws_id, None) for ws_id in dead]
     removed = [p for p in removed if p is not None]
+
+    # Close dead/timed-out WebSockets cleanly so sockets are released and clients are notified
+    for p in removed:
+        try:
+            await p.ws.close(code=1001, reason="Broadcast timeout or connection error")
+        except Exception:
+            pass
 
     for participant in removed:
         participant_list = _make_participant_list(session)
@@ -729,22 +759,37 @@ async def join_session(
     )
 
     remaining = max(0, int((session.expires_at - now).total_seconds()))
-    await ws.send_json(
-        {
-            "type": "joined",
-            "participant_id": pid,
-            "participant_token": ptoken,
-            "ws_id": pid,           # client's own stable identity for E2E addressing
-            "display_name": safe_name,
-            "token": token,
-            "is_creator": is_creator,
-            "seconds_remaining": remaining,
-            "participant_count": len(session.participants),
-            "participant_list": participant_list,
-            "locked": session.locked,
-            "expires_at": session.expires_at.isoformat(),
-        }
-    )
+    try:
+        await ws.send_json(
+            {
+                "type": "joined",
+                "participant_id": pid,
+                "participant_token": ptoken,
+                "ws_id": pid,           # client's own stable identity for E2E addressing
+                "display_name": safe_name,
+                "token": token,
+                "is_creator": is_creator,
+                "seconds_remaining": remaining,
+                "participant_count": len(session.participants),
+                "participant_list": participant_list,
+                "locked": session.locked,
+                "expires_at": session.expires_at.isoformat(),
+            }
+        )
+    except Exception as exc:
+        session.participants.pop(pid, None)
+        logger.debug("Failed to send joined confirmation to %s: %s", pid, exc)
+        participant_list = _make_participant_list(session)
+        await _broadcast(
+            session,
+            {
+                "type": "system",
+                "text": f"{safe_name} disconnected",
+                "participant_count": len(session.participants),
+                "participant_list": participant_list,
+            },
+        )
+        return None, JoinStatus.SESSION_NOT_FOUND
 
     return participant, JoinStatus.OK
 
@@ -901,7 +946,7 @@ async def relay_e2e_pubkey(
     Returns True if relayed, False if session/participant not found or key
     fails format validation.
     """
-    session = _SESSIONS.get(token)
+    session = get_session(token)
     if session is None:
         return False
 
@@ -942,7 +987,7 @@ async def relay_e2e_session_key(
 
     Returns True if delivered, False on any precondition failure.
     """
-    session = _SESSIONS.get(token)
+    session = get_session(token)
     if session is None:
         return False
 
@@ -980,7 +1025,7 @@ async def kick_participant(token: str, actor_ws_id: str, target_ws_id: str) -> b
     Returns True if the kick succeeded, False if preconditions were not met
     (session gone, actor is not creator, target not found, self-kick).
     """
-    session = _SESSIONS.get(token)
+    session = get_session(token)
     if session is None:
         return False
 
@@ -1023,7 +1068,7 @@ async def lock_room(token: str, actor_ws_id: str, locked: bool) -> bool:
     When locked=True, new non-creator participants cannot join.
     Returns True if the state was applied, False on precondition failure.
     """
-    session = _SESSIONS.get(token)
+    session = get_session(token)
     if session is None:
         return False
 
@@ -1047,7 +1092,7 @@ async def extend_ttl(token: str, actor_ws_id: str, extra_seconds: int) -> bool:
     absolute session limit cannot be circumvented by repeated extensions.
     Returns True if extended, False on precondition failure.
     """
-    session = _SESSIONS.get(token)
+    session = get_session(token)
     if session is None:
         return False
 
