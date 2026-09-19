@@ -63,7 +63,22 @@ RATE_LIMITS = {
 
 
 def validate_filename(filename: str) -> bool:
-    """Validate filename for security"""
+    """
+    Validate filename against path traversal attacks and disallowed characters.
+
+    Security guarantees:
+      - Enforces length ceiling (MAX_FILENAME_LENGTH = 255).
+      - Rejects directory traversal tokens ('..', '/', '\\').
+      - Rejects null bytes ('\\x00') to prevent poisoning C-level filesystem calls.
+      - Enforces regex allowlist: only alphanumeric characters, spaces, dots,
+        dashes, underscores, parentheses, and square brackets are permitted.
+
+    Args:
+        filename: Raw filename string from client request or upload header.
+
+    Returns:
+        bool: True if filename satisfies all security criteria, False otherwise.
+    """
     if not filename or len(filename) > MAX_FILENAME_LENGTH:
         return False
     
@@ -83,13 +98,37 @@ def validate_filename(filename: str) -> bool:
 
 
 def validate_file_extension(filename: str) -> bool:
-    """Check if file extension is allowed"""
+    """
+    Verify that the file extension is present in ALLOWED_FILE_EXTENSIONS.
+
+    Args:
+        filename: Target filename to inspect.
+
+    Returns:
+        bool: True if extension is recognized and whitelisted, False otherwise.
+    """
     ext = os.path.splitext(filename)[1].lower()
     return ext in ALLOWED_FILE_EXTENSIONS if ext else False
 
 
 def sanitize_filename(filename: str) -> str:
-    """Sanitize filename to prevent security issues"""
+    """
+    Sanitize an untrusted filename for safe storage and display.
+
+    Performs:
+      1. Strips leading directory path components via ``os.path.basename``.
+      2. Removes embedded null bytes ('\\x00').
+      3. Replaces whitespace with underscores to avoid URL and shell escape issues.
+      4. Strips any character outside the safe set: alphanumeric, dashes, dots, underscores.
+      5. Truncates the base name if needed to keep the total length <= MAX_FILENAME_LENGTH
+         while preserving the file extension.
+
+    Args:
+        filename: Untrusted incoming filename.
+
+    Returns:
+        str: Sanitized, filesystem-safe filename string.
+    """
     # Remove path components
     filename = os.path.basename(filename)
     

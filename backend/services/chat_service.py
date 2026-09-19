@@ -470,11 +470,25 @@ async def _broadcast(
     payload: dict,
     exclude_ws_id: Optional[str] = None,
 ) -> None:
-    """Send *payload* to every participant, removing dead connections.
+    """
+    Broadcast a JSON payload concurrently to all connected session participants.
 
-    Uses asyncio.wait with a 3.0s timeout and task cancellation to prevent
-    stalled or high-latency TCP connections from blocking broadcasts to other
-    participants.
+    Concurrency & Security Contract:
+      - Dispatches each ``ws.send_json`` as an independent ``asyncio.Task``.
+      - Enforces a strict 3.0-second execution deadline via ``asyncio.wait``.
+      - Slowloris Mitigation: Any task not completing within the 3.0-second window
+        is explicitly cancelled to prevent stalled or adversarial clients from
+        blocking message delivery to responsive peers.
+      - Cleanup & Disconnect: Timed-out or errored connections are immediately
+        purged from the session participant registry and closed cleanly with
+        WebSocket code 1001 ("Broadcast timeout or connection error").
+      - Disconnect Notification: Triggers an updated participant roster broadcast
+        reflecting only healthy, active connections.
+
+    Args:
+        session: Target chat session instance.
+        payload: JSON-serializable dictionary to broadcast.
+        exclude_ws_id: Optional participant websocket UUID to omit from broadcast (e.g., sender).
     """
     targets = [
         (ws_id, participant)

@@ -63,7 +63,7 @@ _CANONICAL_JSON_KWARGS: _CanonicalJsonKwargs = {"sort_keys": True, "separators":
 #
 #   • Fernet symmetric encryption (AES-128-CBC + PKCS7, random IV per message)
 #     applied to the file content inside ``encrypted_data``.
-#   • PBKDF2-HMAC-SHA256 (100 000 iterations) for password-derived key stretching.
+#   • PBKDF2-HMAC-SHA256 (600,000 iterations per OWASP) for password-derived key stretching.
 #   • HMAC-SHA256 over the entire BAR structure for tamper detection.
 #
 # _BAR_HEADER is the single authoritative source of truth for the magic
@@ -77,9 +77,18 @@ _BAR_HEADER: bytes = b"BAR_FILE_V1\n"
 
 class BarKey(bytes):
     """
-    Subclass of bytes holding a Fernet key (URL-safe base64 bytes)
-    along with an associated HMAC key (raw 32 bytes) for domain-separated integrity.
-    Behaves as a regular bytes object for Fernet and all standard byte operations.
+    Cryptographic container subclassing ``bytes`` to hold a dual-key material pair.
+
+    Encapsulates:
+      - Fernet Key (self): First 32 bytes of derived material, URL-safe base64-encoded.
+        Passed directly to ``cryptography.fernet.Fernet`` constructors.
+      - HMAC Key (self.hmac_key): Second 32 bytes of derived material, raw binary.
+        Used exclusively for canonical JSON HMAC-SHA256 integrity signing and verification.
+
+    Design rationale:
+      Subclassing ``bytes`` maintains backward compatibility across all call sites
+      expecting standard byte keys for Fernet operations while guaranteeing domain
+      separation between symmetric encryption and integrity signing keys.
     """
     hmac_key: bytes
 

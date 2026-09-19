@@ -1,134 +1,115 @@
-# BAR — Burn After Reading (⌐■_■)
+# BAR — Burn After Reading
+
+Upload. Encrypt. Share. Destroy.  
+BAR is an ephemeral data exchange platform engineered to leave zero trace.
 
 <div align="center">
 
 ![BAR Web Demo](BAR_web.gif)
 
-**Highly Secure, Ephemeral File Sharing and Messaging System.**
-*Upload. Encrypt. Share. Destroy. ( ‾́ ◡ ‾́ )*
-
-[![Live Demo](https://img.shields.io/badge/Live_Demo-Try_It_Now-success?style=for-the-badge)](https://bar-rnr.vercel.app/)
-[![GitHub](https://img.shields.io/badge/GitHub-Stars_Welcome-black?style=for-the-badge&logo=github)](https://github.com/Mrtracker-new/BAR_RYY)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python: 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
+[![Node.js: 18+](https://img.shields.io/badge/Node.js-18%2B-green.svg)](https://nodejs.org/)
+[![Live Demo](https://img.shields.io/badge/Demo-bar--rnr.vercel.app-success.svg)](https://bar-rnr.vercel.app/)
 
 </div>
 
 ---
 
-## Overview 
+## What is BAR?
 
-**BAR (Burn After Reading)** is a production-ready, zero-knowledge file sharing and ephemeral messaging platform. Designed with stringent security protocols, it allows users to securely transmit sensitive information that self-destructs after viewing. 
+BAR solves a simple problem: **sensitive data lives too long.** Whether passing a production API token, sharing an NDA, or having a private conversation, BAR guarantees that once your criteria are met, your data is permanently gone.
 
-Whether sharing passwords, sensitive contracts, or engaging in confidential discussions, BAR ensures that your data leaves no trace once the conditions are met. (o_O)
+The platform provides two distinct, non-overlapping security models:
+
+| Dimension | Sealed File Containers (SEAD) | Burn Chat (E2EE) |
+| :--- | :--- | :--- |
+| **Model** | Server-Side Encrypted at Rest with Ephemeral Auto-Destruction | True Zero-Knowledge End-to-End Encryption |
+| **Core Use Case** | Sharing files, credentials, and sensitive documents | Real-time confidential group messaging |
+| **Key Custody** | Transient server memory; recipient holds password | Participant browser memory only (never reaches server) |
+| **Storage Lifecycle** | AES-encrypted on disk until view limit or timer expires | Zero disk persistence (ephemeral in-memory WebSocket relay) |
+| **Destruction** | Ciphertext unlinked, database wiped, memory freed | Instant room burn, sockets closed, RAM cleared |
 
 ---
 
 ## Core Capabilities
 
-### Sealed File Containers [-_-]
+### 1. Sealed File Containers (SEAD)
+* **Custom Auto-Destruct Rules:** Set hard view caps (e.g., burn after 1 view) and lifespan timers (5 minutes to 7 days).
+* **Dual Export Modes:** Share via secure server link, or download an encrypted, standalone `.bar` container to transport offline.
+* **Smart Refresh Protection:** Prevents accidental browser refreshes from consuming view limits within a configurable grace window.
+* **Access Defense:** Progressive delay brute-force lockouts, optional Email OTP verification, and real-time Discord/Slack webhooks on access.
 
-| Feature | Details |
-|---|---|
-| **AES-256 Encryption** | Industry-standard AES-256 encryption securing your files. |
-| **Ephemeral Auto-Destruction** | Configurable timer-based or view-count based permanent deletion (SEAD). |
-| **True E2EE Burn Chat** | Zero-knowledge client-side encryption — the server cannot read chat messages. |
-| **Dual Share Modes** | Client-side `.bar` file or a secure server-side link. |
-| **Smart Refresh Control** | Prevents accidental consumption of view-based limits. |
-| **Webhook Integrations** | Real-time notifications (Discord/Slack) upon access. |
-| **Email OTP Verification** | Secondary authentication layer before file decryption. |
-| **Brute-Force Protection** | Automatic lockout after successive incorrect password attempts. |
-| **Rich File Preview** | Securely view over 50 file types directly in the browser. |
-
-### Burn Chat [>_<]
-
-| Feature | Details |
-|---|---|
-| **End-to-End Encryption** | Messages encrypted in-browser via **AES-GCM-256** prior to transmission. |
-| **ECDH Key Exchange** | Sessions utilize **ECDH P-256** key agreement; shared secrets never reach the server. |
-| **Session Fingerprint** | 6-character verification code to prevent Man-in-the-Middle (MITM) attacks. |
-| **Ephemeral Messaging** | Real-time WebSocket communication with zero server-side persistence. |
-| **Self-Destruct Timer** | Configurable lifespan from 5 minutes up to 24 hours. |
-| **Creator PIN** | Secure moderator role assignment via one-time PIN. |
-| **Instant Destruction** | Synchronized deletion sequence for all participants. |
+### 2. Burn Chat (E2EE)
+* **Zero-Knowledge Architecture:** Messages are encrypted in-browser using AES-GCM-256 before transmission. The server relays opaque ciphertext and cannot read your messages.
+* **ECDH P-256 Key Agreement:** Session keys are wrapped individually per participant using HKDF-SHA256 derived secrets.
+* **Out-of-Band Fingerprint:** A 16-character hex session fingerprint (`SHA-256[0:8]`) enables peer verification against Man-in-the-Middle attacks.
+* **Creator Controls & Synchronized Burn:** Room creators receive a one-time PIN to lock rooms, kick participants, or trigger instant room self-destruction.
 
 ---
 
-## Quick Start Guide (^-^)
+## Quickstart
 
-### Option A: Online Platform
+### Try the Live Platform
+Access the hosted deployment: **[bar-rnr.vercel.app](https://bar-rnr.vercel.app/)**
 
-Access the live environment directly:
-👉 **[bar-rnr.vercel.app](https://bar-rnr.vercel.app/)**
+> Note: The backend runs on a free-tier instance that spins down during inactivity. Use the "Wake Server" button on first access and allow ~50 seconds for cold start.
 
-> **Note:** The backend sleeps during periods of inactivity. Please initialize the "Wake Server" function and allow approximately 50 seconds for the initial cold start.
+### Run Locally
 
-### Option B: Local Deployment (Windows)
-
-For developers and self-hosted environments:
-
-```bash
+#### Windows
+```cmd
 git clone https://github.com/Mrtracker-new/BAR_RYY.git
 cd BAR_RYY
-setup.bat    # Initializes dependencies
-start.bat    # Launches frontend and backend servers
+setup.bat
+start.bat
 ```
 
-Once running, navigate to **http://localhost:5173** in your browser. \o/
+#### Linux / macOS
+```bash
+# Backend
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python run.py
+
+# Frontend (separate terminal)
+cd frontend
+npm install
+npm run dev
+```
+
+Navigate to `http://localhost:5173`. The Vite dev server automatically proxies API and WebSocket requests to the backend at `http://localhost:8000`.
 
 ---
 
-## Application Architecture & Routes
+## Cryptography at a Glance
 
-| Route | Function |
-|---|---|
-| `/` | Application landing page |
-| `/app` | Primary file sealing workspace |
-| `/burn-chat` | Session creation interface for Burn Chat |
-| `/chat/:token` | Active Burn Chat session room |
-| `/share/:token` | Interface for accessing a sealed file container |
-
----
-
-## Security Implementation Specifications {-_-}
-
-### File Containers
-BAR employs **AES-256** encryption combined with **PBKDF2** key derivation (600,000 iterations) and **HMAC-SHA256** for tamper detection. Files are encrypted at rest and automatically wiped from disk and database upon expiry or reaching the configured view limit.
-
-### Burn Chat Protocol
-The Burn Chat module enforces true zero-knowledge end-to-end encryption:
-
-- **Key Agreement:** `ECDH P-256`. Client devices generate keypairs; private keys remain non-extractable.
-- **Session Key:** Encrypted per-peer with the ECDH shared secret using HKDF-SHA256 (`BAR-BurnChat-WrapKey-v1`) and `AES-GCM-256` with random IV, securely relayed through the server.
-- **Message Integrity:** Each message uses a newly generated 12-byte random IV.
-- **Session Fingerprint:** 64-bit fingerprint derived from `SHA-256(raw session key)[0:8]` (16 uppercase hex chars), allowing participants to confirm connection integrity.
-- **Data Degradation:** If accessed via non-TLS environments (`crypto.subtle` unavailable), the system falls back to TLS-only protection with an active warning banner.
+| Component | Standard / Algorithm | Details |
+| :--- | :--- | :--- |
+| **Password KDF** | PBKDF2-HMAC-SHA256 | 600,000 iterations, 32-byte salt |
+| **Dual-Key Split** | `BarKey` (64 bytes derived) | Bytes 0-31: Fernet cipher / Bytes 32-63: HMAC integrity |
+| **File Cipher** | Fernet (AES-128-CBC) | PKCS7 padding, random IV per file |
+| **Container Integrity**| HMAC-SHA256 | Signed over canonical JSON (`sort_keys=True`) |
+| **Chat Key Agreement** | ECDH Curve P-256 | Non-extractable Web Crypto keys |
+| **Chat Key Wrap** | HKDF-SHA256 + AES-GCM | `BAR-BurnChat-WrapKey-v1`, RFC 5869 fallback |
+| **Chat Message Cipher**| AES-GCM-256 | Fresh 12-byte random IV per message |
 
 ---
 
-## Contributing ヽ(•‿•)ノ
+## Architecture & Documentation
 
-Contributions are welcome for enhancing system security, improving documentation, or adding core features.
+For detailed technical references, deep dive into the `docs/` directory:
 
-1. Fork the repository
-2. Implement and test your modifications
-3. Submit a comprehensive Pull Request detailing the changes
-
-Priority is given to security enhancements, comprehensive test coverage, and documentation improvements.
+* [Architecture & Trust Boundaries](docs/ARCHITECTURE.md): Threat models, state flow, and memory lifecycles.
+* [Cryptographic Specifications](docs/CRYPTOGRAPHY.md): Wire envelope specs, KDF derivations, and fallback details.
+* [API & WebSocket Specifications](docs/API_SPECIFICATION.md): Endpoint contracts, payload schemas, and close codes.
+* [Development & Deployment](docs/DEVELOPMENT.md): Vite proxy routing, FastAPI lifespan, and configuration.
+* [Operations & Diagnostics](docs/OPERATIONS.md): Runbooks, proxy CIDR matching, and troubleshooting.
 
 ---
 
 ## License
 
-Licensed under the **MIT License**.
-
-- Use it, modify it, and deploy it.
-- Provided "as is", without warranty of any kind.
-
----
-
-<div align="center">
-
-**Burn After Reading**  
-*Secure, Ephemeral, Uncompromising.*  
-(⌐■_■)
-
-</div>
+BAR is open-source software licensed under the [MIT License](LICENSE).
