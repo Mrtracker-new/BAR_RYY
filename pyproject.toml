@@ -1,0 +1,16 @@
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+ignore = [
+    "E402",  # Module level import not at top of file
+    "E501",  # Line too long
+    "F401",  # Unused imports in legacy modules
+    "F841",  # Local variable assigned but unused
+    "F811",  # Redefinition of unused imports
+    "F541",  # f-string without placeholders
+    "W291",  # Trailing whitespace
+    "W292",  # No newline at end of file
+    "W293",  # Blank line with whitespace
+]

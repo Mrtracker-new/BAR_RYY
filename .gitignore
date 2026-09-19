@@ -36,7 +36,6 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
-package-lock.json
 yarn.lock
 
 # Frontend build
@@ -67,11 +66,14 @@ uploads/
 logs/
 *.log
 
-# Testing
+# Testing & Coverage
 .coverage
 htmlcov/
 .pytest_cache/
-backend/tests/
+coverage.xml
+backend/coverage.xml
+frontend/playwright-report/
+frontend/test-results/
 
 # OS
 Thumbs.db
