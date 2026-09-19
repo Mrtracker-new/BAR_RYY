@@ -2,19 +2,40 @@
 User-agent: *
 Allow: /
 Disallow: /api/
+Disallow: /share/
+Disallow: /chat/
 
 # Sitemap location
 Sitemap: https://bar-rnr.vercel.app/sitemap.xml
 
-# Crawl-delay for polite crawling
-Crawl-delay: 1
-
-# Allow major search engines
+# Allow major search engines to crawl public pages
 User-agent: Googlebot
 Allow: /
+Disallow: /api/
+Disallow: /share/
+Disallow: /chat/
 
 User-agent: Bingbot
 Allow: /
+Disallow: /api/
+Disallow: /share/
+Disallow: /chat/
 
-User-agent: Slurp
+# Explicitly allow social preview crawlers to generate rich cards for shared links
+User-agent: Twitterbot
+Allow: /
+
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: WhatsApp
+Allow: /
+
+User-agent: TelegramBot
+Allow: /
+
+User-agent: Slackbot
+Allow: /
+
+User-agent: Discordbot
 Allow: /

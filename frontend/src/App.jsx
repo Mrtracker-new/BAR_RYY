@@ -873,8 +873,11 @@ function MainApp() {
         color: T.textPrimary, overflowX: "hidden", position: "relative",
       }}
     >
-      <SEO />
-      <ContainerAnimation isSealing={isSealing} />
+      <SEO
+        title="Encrypt &amp; Seal Files — BAR Web | Self-Destructing File Sharing"
+        description="Seal confidential files with AES-256 military-grade encryption, view limits, and self-destruct timers. Client and server storage modes with zero-knowledge security."
+        url="https://bar-rnr.vercel.app/app"
+      />
 
       {/* Fixed ambient background */}
       <div aria-hidden="true" style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0 }}>
@@ -1065,8 +1068,8 @@ function MainApp() {
                 </div>
               </div>
 
-              {/* SEO content — dimmed, below the fold */}
-              <div style={{ marginTop: "5rem", opacity: 0.35 }}>
+              {/* SEO and educational content — below the fold */}
+              <div style={{ marginTop: "5rem" }}>
                 <SEOContent />
               </div>
             </motion.div>

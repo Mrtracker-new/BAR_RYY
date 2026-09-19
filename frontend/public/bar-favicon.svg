@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#CE9530"/>
+      <stop offset="50%" stop-color="#B4791E"/>
+      <stop offset="100%" stop-color="#8F5E16"/>
+    </linearGradient>
+    <radialGradient id="sealGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FAF4E6"/>
+      <stop offset="100%" stop-color="#EDE3CE"/>
+    </radialGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#2A2018" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+  <!-- Base tile -->
+  <rect width="64" height="64" rx="14" fill="url(#sealGlow)" stroke="#B4791E" stroke-width="2"/>
+  <!-- Inner seal circle -->
+  <circle cx="32" cy="32" r="24" fill="url(#goldGrad)" filter="url(#shadow)"/>
+  <!-- Inner ring -->
+  <circle cx="32" cy="32" r="21" fill="none" stroke="#FAF4E6" stroke-width="1.2" stroke-dasharray="2 2" opacity="0.8"/>
+  <!-- Package/Box icon with flame notch in center -->
+  <path d="M22 28L32 23L42 28L32 33L22 28Z" fill="#FFFDF6"/>
+  <path d="M22 29.5V37.5L32 42.5V34.5L22 29.5Z" fill="#FAF4E6" opacity="0.9"/>
+  <path d="M42 29.5V37.5L32 42.5V34.5L42 29.5Z" fill="#EDE3CE" opacity="0.85"/>
+  <!-- Lock keyhole / flame accent -->
+  <circle cx="32" cy="31" r="1.5" fill="#8F5E16"/>
+  <path d="M31.2 31.5H32.8L33.2 34.5H30.8L31.2 31.5Z" fill="#8F5E16"/>
+</svg>

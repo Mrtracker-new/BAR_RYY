@@ -1,0 +1,29 @@
+{
+  "name": "BAR by Rolan — Burn After Reading",
+  "short_name": "BAR Web",
+  "description": "Self-destructing file sharing with AES-256 encryption and ephemeral E2E encrypted Burn Chat.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#EDE3CE",
+  "theme_color": "#EDE3CE",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/bar-favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48 32x32 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}

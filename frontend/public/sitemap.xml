@@ -8,11 +8,37 @@
   <!-- Homepage - BAR Burn After Reading -->
   <url>
     <loc>https://bar-rnr.vercel.app/</loc>
-    <lastmod>2025-11-08</lastmod>
-    <changefreq>weekly</changefreq>
+    <lastmod>2026-09-19</lastmod>
+    <changefreq>daily</changefreq>
     <priority>1.0</priority>
+    <image:image>
+      <image:loc>https://bar-rnr.vercel.app/og-image.png</image:loc>
+      <image:title>BAR by Rolan — Burn After Reading</image:title>
+      <image:caption>Self-destructing file sharing and ephemeral encrypted Burn Chat</image:caption>
+    </image:image>
   </url>
   
-  <!-- Note: Dynamic share URLs are temporary and user-specific, not included for privacy -->
-  
+  <!-- Burn Chat - Ephemeral E2E Encrypted Messaging -->
+  <url>
+    <loc>https://bar-rnr.vercel.app/burn-chat</loc>
+    <lastmod>2026-09-19</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+    <image:image>
+      <image:loc>https://bar-rnr.vercel.app/og-chat.png</image:loc>
+      <image:title>Burn Chat — E2E Encrypted Ephemeral Messaging</image:title>
+      <image:caption>Browser-encrypted ephemeral chat with ECDH P-256 and auto-destruct timer</image:caption>
+    </image:image>
+  </url>
+
+  <!-- Encrypt & Seal Tool Page -->
+  <url>
+    <loc>https://bar-rnr.vercel.app/app</loc>
+    <lastmod>2026-09-19</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Note: Dynamic ephemeral share and chat session URLs are user-specific and excluded for privacy -->
+
 </urlset>

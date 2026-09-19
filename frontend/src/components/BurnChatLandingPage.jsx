@@ -220,16 +220,17 @@ function FeatureCard({ icon: Icon, color, title, desc, index }) {
       </div>
 
       {/* Title: 1rem / T.textPrimary (raised from 0.875rem / #d0d0d0) */}
-      <p
+      <h3
         style={{
           fontSize: '1rem',                     /* raised from 0.875rem */
           fontWeight: 600, letterSpacing: '-0.02em',
           color: T.textPrimary,                 /* raised from #d0d0d0 */
           lineHeight: 1.3,
+          margin: 0,
         }}
       >
         {title}
-      </p>
+      </h3>
 
       {/* Description: 0.875rem (14px) / T.textSecondary (raised from 0.8rem / T.textS) */}
       <p
@@ -626,6 +627,26 @@ export default function BurnChatLandingPage() {
       <SEO
         title="Burn Chat — E2E Encrypted Ephemeral Messaging | BAR Web"
         description="End-to-end encrypted, ephemeral chat that permanently self-destructs when the timer expires. Messages are encrypted in your browser — the server never sees plaintext. No logs, no history, no traces."
+        keywords="burn chat, ephemeral chat, encrypted chat room, e2e encrypted messaging, self-destruct chat, disappearing messages, ECDH key exchange, temporary chat, zero knowledge chat"
+        url="https://bar-rnr.vercel.app/burn-chat"
+        ogImage="https://bar-rnr.vercel.app/og-chat.png"
+        ogImageAlt="Burn Chat — E2E Encrypted Ephemeral Messaging | BAR Web"
+        jsonLd={{
+          "@context": "https://schema.org",
+          "@type": "WebApplication",
+          "@id": "https://bar-rnr.vercel.app/burn-chat#app",
+          "name": "Burn Chat by BAR",
+          "description": "End-to-end encrypted, ephemeral chat that permanently self-destructs when the timer expires. Messages are encrypted in your browser using ECDH P-256 and AES-GCM.",
+          "url": "https://bar-rnr.vercel.app/burn-chat",
+          "image": "https://bar-rnr.vercel.app/og-chat.png",
+          "applicationCategory": "CommunicationApplication",
+          "operatingSystem": "Any",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          }
+        }}
       />
 
       {/* Ambient background */}
@@ -743,12 +764,24 @@ export default function BurnChatLandingPage() {
               auto-fit + minmax(220px, 1fr) → 2-col on ≥460px, 1-col below.
               Cards never go below 220px and never overflow their container.
           */}
+          <div style={{ marginTop: '2.5rem', marginBottom: '1rem', textAlign: 'center' }}>
+            <h2
+              style={{
+                fontSize: '1.25rem',
+                fontWeight: 700,
+                letterSpacing: '-0.025em',
+                color: T.textPrimary,
+                margin: 0,
+              }}
+            >
+              Burn Chat Key Security Features
+            </h2>
+          </div>
           <div
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
               gap: '0.75rem',
-              marginTop: '2rem',
             }}
           >
             {FEATURES.map((f, i) => <FeatureCard key={f.title} {...f} index={i} />)}

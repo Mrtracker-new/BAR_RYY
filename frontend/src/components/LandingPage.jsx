@@ -7,6 +7,7 @@ import {
   MessageSquare, CheckCircle,
 } from "lucide-react";
 import WakeUpButton from "./WakeUpButton";
+import SEO from "./SEO";
 
 /* ─────────────────────────────────────────────────────────────
    Animation presets
@@ -797,24 +798,25 @@ function BurnChatHighlight({ onBurnChat }) {
                 >
                   Also in BAR Web
                 </p>
-                <p
+                <h3
                   style={{
                     fontSize: "1.125rem", fontWeight: 700,
                     letterSpacing: "-0.03em", color: T.textPrimary,
-                    lineHeight: 1.2,
+                    lineHeight: 1.2, margin: 0,
                   }}
                 >
                   Burn Chat
-                </p>
+                </h3>
               </div>
             </div>
 
             {/* Tagline */}
-            <p
+            <h2
               style={{
                 fontSize: "clamp(1.25rem, 2.5vw, 1.625rem)",
                 fontWeight: 700, letterSpacing: "-0.03em",
                 color: T.textPrimary, lineHeight: 1.25,
+                margin: 0,
               }}
             >
               Secure conversations
@@ -828,7 +830,7 @@ function BurnChatHighlight({ onBurnChat }) {
               >
                 that vanish.
               </span>
-            </p>
+            </h2>
 
             {/* Differentiator bullets */}
             <ul
@@ -975,6 +977,7 @@ const LandingPage = () => {
 
   return (
     <div className="page-wrapper">
+      <SEO />
 
       {/* ── Ambient background (fixed, pointer-events off) ── */}
       <div aria-hidden="true" style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0 }}>
