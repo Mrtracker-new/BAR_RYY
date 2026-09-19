@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Burn Chat End-to-End Flow', () => {
   test('renders burn chat landing page and creation form', async ({ page }) => {
-    await page.goto('/chat');
+    await page.goto('/burn-chat');
 
     // Verify title and heading
     await expect(page.getByText('End-to-End Encrypted', { exact: false })).toBeVisible();

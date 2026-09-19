@@ -1,25 +1,41 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('File Lifecycle & Navigation E2E Flow', () => {
-  test('home page renders upload dropzone and navigation options', async ({ page }) => {
+  test('landing page renders and navigates to app', async ({ page }) => {
     await page.goto('/');
 
-    // Verify upload drop zone
+    // Verify landing page branding and features
+    await expect(page.getByText('BAR.web', { exact: false })).toBeVisible();
+    await expect(page.getByText('AES-256 Encryption', { exact: false })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Launch App/i })).toBeVisible();
+
+    // Navigate to /app via Launch App CTA
+    await page.getByRole('button', { name: /Launch App/i }).click();
+    await expect(page).toHaveURL(/\/app/);
     await expect(page.getByText(/Drop file or click to browse/i)).toBeVisible();
-    await expect(page.getByText('Images')).toBeVisible();
-    await expect(page.getByText('PDF')).toBeVisible();
-    await expect(page.getByText('Docs')).toBeVisible();
   });
 
-  test('navigates to decrypt page and validates .bar file upload interface', async ({ page }) => {
-    await page.goto('/decrypt');
+  test('app page allows toggling between create and decrypt modes', async ({ page }) => {
+    await page.goto('/app');
 
-    // Verify decrypt header
+    // Verify upload drop zone in Create mode
+    await expect(page.getByText(/Drop file or click to browse/i)).toBeVisible();
+
+    // Click Decrypt toggle in navbar
+    const decryptToggle = page.getByRole('button', { name: /Decrypt/i });
+    await expect(decryptToggle).toBeVisible();
+    await decryptToggle.click();
+
+    // Verify Decrypt mode is active
     await expect(page.getByText(/Decrypt \.BAR File/i)).toBeVisible();
     await expect(page.getByText(/Click to select \.bar file/i)).toBeVisible();
 
-    // Verify back navigation returns to home or previous page
-    const backBtn = page.getByRole('button', { name: /Back to Create/i });
+    // Toggle back to Create mode
+    const backBtn = page.getByRole('button', { name: /Back to Create|Create/i }).first();
     await expect(backBtn).toBeVisible();
+    await backBtn.click();
+
+    // Verify back in Create mode
+    await expect(page.getByText(/Drop file or click to browse/i)).toBeVisible();
   });
 });

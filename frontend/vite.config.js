@@ -70,7 +70,6 @@ export default defineConfig({
   },
   preview: {
     port: process.env.PORT || 5173,
-    host: true,
-    proxy: proxyConfig
+    host: true
   }
 })
