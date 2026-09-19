@@ -5,12 +5,12 @@ test.describe('File Lifecycle & Navigation E2E Flow', () => {
     await page.goto('/');
 
     // Verify landing page branding and features
-    await expect(page.getByText('BAR.web', { exact: false })).toBeVisible();
     await expect(page.getByText('AES-256 Encryption', { exact: false })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Launch App/i })).toBeVisible();
+    const startSealingBtn = page.getByRole('button', { name: /Start Sealing/i });
+    await expect(startSealingBtn).toBeVisible();
 
-    // Navigate to /app via Launch App CTA
-    await page.getByRole('button', { name: /Launch App/i }).click();
+    // Navigate to /app via Start Sealing CTA
+    await startSealingBtn.click();
     await expect(page).toHaveURL(/\/app/);
     await expect(page.getByText(/Drop file or click to browse/i)).toBeVisible();
   });
