@@ -70,17 +70,27 @@ const FileUpload = ({ onFileSelect, uploadedFile, onRemove, filePreview }) => {
   if (!uploadedFile) {
     return (
       <div
+        key="drop-zone"
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onClick={() => inputRef.current?.click()}
-        className="upload-zone"
+        className={`upload-zone ${isDragging ? 'dragging' : ''}`}
         style={{
-          padding: '3rem 1.5rem',
+          padding: '2.5rem 1.5rem',
           textAlign: 'center',
           userSelect: 'none',
           borderColor: isDragging ? 'rgba(180,121,30,0.45)' : undefined,
           background: isDragging ? 'rgba(180,121,30,0.03)' : undefined,
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          width: '100%',
+          boxSizing: 'border-box',
+          minHeight: '280px',
+          transition: 'all 0.2s ease',
         }}
       >
         <input ref={inputRef} type="file" style={{ display: 'none' }} onChange={handleInput} />
@@ -147,9 +157,12 @@ const FileUpload = ({ onFileSelect, uploadedFile, onRemove, filePreview }) => {
   /* ── File selected ── */
   return (
     <div
+      key="file-selected"
       style={{
         borderRadius: '0.625rem',
-        border: '1px solid rgba(180,121,30,0.18)',
+        borderWidth: '1px',
+        borderStyle: 'solid',
+        borderColor: 'rgba(180,121,30,0.18)',
         background: 'rgba(180,121,30,0.03)',
         overflow: 'hidden',
       }}

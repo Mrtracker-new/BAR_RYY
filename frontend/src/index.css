@@ -1037,9 +1037,17 @@ select.input-field option {
   border: 2px dashed rgba(60, 45, 20, 0.28);
   border-radius: var(--r4);
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  width: 100%;
+  box-sizing: border-box;
   transition:
     border-color var(--dur-base) var(--ease-spring),
-    background var(--dur-base) var(--ease-spring);
+    background var(--dur-base) var(--ease-spring),
+    box-shadow var(--dur-base) var(--ease-spring);
 }
 
 .upload-zone:hover,
@@ -1047,6 +1055,7 @@ select.input-field option {
   border-color: var(--gold-border);
   background: rgba(180, 121, 30, 0.03);
 }
+
 
 
 /* ============================================================
@@ -1490,21 +1499,23 @@ select.input-field option {
   display: grid;
   grid-template-columns: 1fr;
   gap: var(--s6);
-  align-items: start;
+  align-items: stretch;
 }
 
 .app-grid-sidebar {
   position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
 @media (min-width: 960px) {
   .app-grid {
     grid-template-columns: 3fr 2fr;
     gap: var(--s8);
+    align-items: stretch;
   }
   .app-grid-sidebar {
-    position: sticky;
-    top: calc(var(--navbar-height) + var(--s4));
+    position: relative;
   }
 }
 

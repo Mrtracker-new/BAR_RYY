@@ -298,7 +298,7 @@ function ContainerPreview({ uploadedFile, rules }) {
   ];
 
   return (
-    <Card accentColor={T.green}>
+    <Card accentColor={T.green} style={{ height: "100%", display: "flex", flexDirection: "column" }}>
       <CardHeader icon={FileCheck} label="Container Preview" color={T.green}>
         {/* "Ready" status badge */}
         <span
@@ -981,9 +981,17 @@ function MainApp() {
               <div className="app-grid">
 
                 {/* LEFT COLUMN — upload + preview */}
-                <div style={{ display: "flex", flexDirection: "column", gap: "1rem", minWidth: 0 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "1rem", minWidth: 0, height: "100%" }}>
                   {/* Upload card */}
-                  <Card accentColor={T.gold}>
+                  <Card
+                    accentColor={T.gold}
+                    style={{
+                      flex: uploadedFile ? "0 0 auto" : 1,
+                      display: "flex",
+                      flexDirection: "column",
+                      transition: "all 0.25s ease",
+                    }}
+                  >
                     <CardHeader icon={Upload} label="File Upload" color={T.gold}>
                       <span
                         style={{
@@ -995,7 +1003,7 @@ function MainApp() {
                         Any type
                       </span>
                     </CardHeader>
-                    <div style={{ padding: "1.125rem" }}>
+                    <div style={{ padding: "1.125rem", flex: 1, display: "flex", flexDirection: "column" }}>
                       <FileUpload
                         onFileSelect={handleFileSelect}
                         uploadedFile={uploadedFile}
@@ -1014,6 +1022,7 @@ function MainApp() {
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -6 }}
                         transition={{ duration: 0.3, ease: EASE }}
+                        style={{ flex: 1, display: "flex", flexDirection: "column" }}
                       >
                         <ContainerPreview uploadedFile={uploadedFile} rules={rules} />
                       </motion.div>
@@ -1031,6 +1040,10 @@ function MainApp() {
                     overflow: "hidden",
                     boxShadow: shadow,
                     minWidth: 0,
+                    display: "flex",
+                    flexDirection: "column",
+                    height: "100%",
+                    transition: "all 0.25s ease",
                   }}
                 >
                   {/* Gold accent line */}
@@ -1038,9 +1051,10 @@ function MainApp() {
                     style={{
                       height: "1px",
                       background: "linear-gradient(90deg, rgba(180,121,30,0.48) 0%, rgba(180,121,30,0.14) 55%, transparent 100%)",
+                      flexShrink: 0,
                     }}
                   />
-                  <div style={{ padding: "1.125rem" }}>
+                  <div style={{ padding: "1.125rem", flex: 1, display: "flex", flexDirection: "column" }}>
                     <RulesPanel rules={rules} onRulesChange={setRules} />
                   </div>
                   <SealButton
