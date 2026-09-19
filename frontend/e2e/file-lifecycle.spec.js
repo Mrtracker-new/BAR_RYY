@@ -5,8 +5,8 @@ test.describe('File Lifecycle & Navigation E2E Flow', () => {
     await page.goto('/');
 
     // Verify landing page branding and features
-    await expect(page.getByText('AES-256 Encryption', { exact: false })).toBeVisible();
-    const startSealingBtn = page.getByRole('button', { name: /Start Sealing/i });
+    await expect(page.getByText('AES-256 Encryption', { exact: false }).first()).toBeVisible();
+    const startSealingBtn = page.getByRole('button', { name: /Start Sealing/i }).first();
     await expect(startSealingBtn).toBeVisible();
 
     // Navigate to /app via Start Sealing CTA
