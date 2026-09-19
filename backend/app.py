@@ -6,6 +6,7 @@ import os
 import sys
 import asyncio
 import logging
+from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -13,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from dotenv import load_dotenv
 from core.csrf import CSRFGuard
+from core.concurrency import track_background_task
 
 logger = logging.getLogger(__name__)
 
@@ -27,16 +29,54 @@ from core import security
 from core import database
 from services import cleanup
 from services import analytics
+from services import webhook_service
 
 # Import API routes
 from api.routes import upload, seal, decrypt, share, chat
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifecycle (startup and shutdown)."""
+    logger.info("%s starting...", settings.app_name)
+
+    # Initialize database synchronously so we're ready before the first request.
+    try:
+        await database.init_database()
+        logger.info("Database initialized")
+    except Exception as e:
+        logger.error("Database initialization failed: %s (continuing with limited functionality)", e)
+
+    # Start the background cleanup loop after DB is confirmed ready with strong reference tracking.
+    cleanup_task = asyncio.create_task(cleanup.run_cleanup_loop())
+    track_background_task(cleanup_task)
+    logger.info("Cleanup task started")
+
+    # Initialise the managed httpx client used by geolocation lookups.
+    await analytics.init_httpx_client()
+
+    logger.info("%s is ready to serve requests", settings.app_name)
+
+    yield
+
+    logger.info("%s shutting down...", settings.app_name)
+    cleanup_task.cancel()
+    try:
+        await cleanup_task
+    except asyncio.CancelledError:
+        pass
+    await analytics.close_httpx_client()
+    await webhook_service.get_webhook_service().close()
+    await database.close_database()
+    logger.info("%s shutdown complete", settings.app_name)
 
 
 # Create FastAPI application
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
-    description="Secure file sharing with burn-after-reading capabilities"
+    description="Secure file sharing with burn-after-reading capabilities",
+    lifespan=lifespan
 )
 
 
@@ -155,44 +195,7 @@ async def add_security_headers_middleware(request: Request, call_next):
     return security.add_security_headers(response)
 
 
-# Startup event
-@app.on_event("startup")
-async def startup_event():
-    """Initialize app on startup — must complete before requests are served."""
-    logger.info("%s starting...", settings.app_name)
 
-    # Initialize database synchronously so we're ready before the first request.
-    # Previously this ran in a background task, causing a race condition: requests
-    # arriving within the first ~100 ms (e.g. the Vite proxy's health probe) would
-    # find the DB uninitialized and fail/hang silently.
-    try:
-        await database.init_database()
-        logger.info("Database initialized")
-    except Exception as e:
-        # Log clearly — don't silently swallow DB init failures.
-        logger.error("Database initialization failed: %s (continuing with limited functionality)", e)
-
-    # Start the background cleanup loop after DB is confirmed ready.
-    asyncio.create_task(cleanup.run_cleanup_loop())
-    logger.info("Cleanup task started")
-
-    # Initialise the managed httpx client used by geolocation lookups.
-    # Must happen after the event loop is running (hence in startup, not at
-    # module-import time) so the client binds to the correct loop.
-    await analytics.init_httpx_client()
-
-    logger.info("%s is ready to serve requests", settings.app_name)
-
-
-# Shutdown event
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Clean up on shutdown."""
-    # Close the geolocation httpx client first (may still reference the DB
-    # connection pool indirectly via pending backfill tasks).
-    await analytics.close_httpx_client()
-    await database.close_database()
-    logger.info("%s shutting down", settings.app_name)
 
 
 # Register routers

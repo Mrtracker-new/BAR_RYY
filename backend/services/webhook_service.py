@@ -113,6 +113,28 @@ class WebhookService:
     
     def __init__(self):
         self.timeout = 10.0  # 10 second timeout for webhook calls
+        self._client: Optional[httpx.AsyncClient] = None
+
+    def _get_client(self) -> httpx.AsyncClient:
+        """Get or initialize the persistent httpx.AsyncClient."""
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(
+                timeout=self.timeout,
+                follow_redirects=False,  # SSRF: never follow redirects
+                limits=httpx.Limits(
+                    max_connections=20,
+                    max_keepalive_connections=5,
+                    keepalive_expiry=5.0,  # Bounded keepalive prevents stale DNS entries
+                ),
+            )
+        return self._client
+
+    async def close(self) -> None:
+        """Gracefully close the underlying httpx client."""
+        if self._client is not None and not self._client.is_closed:
+            await self._client.aclose()
+            self._client = None
+            logger.info("WebhookService httpx client closed")
     
     async def send_webhook(
         self,
@@ -163,30 +185,27 @@ class WebhookService:
             # else: generic JSON payload already constructed above
 
             # ---------------------------------------------------------------- #
-            # Layer 3 — httpx hardening                                        #
+            # Layer 3 — httpx hardening & connection pooling                   #
             # follow_redirects=False: a redirect to 127.0.0.1 would bypass     #
             # all URL-level validation — we refuse to follow any redirect.     #
             # ---------------------------------------------------------------- #
-            async with httpx.AsyncClient(
-                timeout=self.timeout,
-                follow_redirects=False,  # SSRF: never follow redirects
-            ) as client:
-                response = await client.post(
-                    webhook_url,
-                    json=payload,
-                    headers={"Content-Type": "application/json"}
-                )
+            client = self._get_client()
+            response = await client.post(
+                webhook_url,
+                json=payload,
+                headers={"Content-Type": "application/json"}
+            )
 
-                if response.status_code in [200, 204]:
-                    logger.info("send_webhook: event '%s' delivered successfully.", event_type)
-                    return True, None
-                else:
-                    error_msg = f"Webhook returned status {response.status_code}"
-                    logger.warning(
-                        "send_webhook: event '%s' delivery failed — %s.",
-                        event_type, error_msg
-                    )
-                    return False, error_msg
+            if response.status_code in [200, 204]:
+                logger.info("send_webhook: event '%s' delivered successfully.", event_type)
+                return True, None
+            else:
+                error_msg = f"Webhook returned status {response.status_code}"
+                logger.warning(
+                    "send_webhook: event '%s' delivery failed — %s.",
+                    event_type, error_msg
+                )
+                return False, error_msg
 
         except asyncio.TimeoutError:
             error_msg = "Webhook request timed out"
