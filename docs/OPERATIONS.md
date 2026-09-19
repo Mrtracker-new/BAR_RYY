@@ -93,3 +93,33 @@ Burn Chat sessions reside entirely in process memory:
 * **HTTPS Enforcement:** Webhook URLs must use `https://`. Insecure `http://` targets are rejected by the validator to prevent token leakage.
 * **Rate Limits:** A maximum of 10 webhook delivery attempts are permitted per sealed file container to prevent notification flooding.
 * **Timeout:** Webhook HTTP requests timeout after 5.0 seconds. Failed deliveries do not block or revert file decryption operations.
+
+---
+
+## 6. CI/CD Pipeline & Automated Deployment Runbooks
+
+### 6.1 GitHub Actions Pipeline Topology
+The automated CI pipeline (`.github/workflows/ci.yml`) executes on every `push` and `pull_request` to `master` / `main`.
+
+* **Concurrency Control:** Redundant builds on the same branch are automatically cancelled via `concurrency: { group: ${{ github.workflow }}-${{ github.ref }}, cancel-in-progress: true }`.
+* **Artifact Retention:** Backend coverage XML reports and Playwright test failure traces/videos are retained as downloadable GitHub artifacts for 14 days.
+
+### 6.2 CI Failure Diagnostic Matrix
+
+| Pipeline Job | Failure Signature | Probable Root Cause | Remediation Procedure |
+| :--- | :--- | :--- | :--- |
+| **`lint-backend`** | `ruff check backend/` exits with code 1 | Syntax errors, unhandled imports, or unformatted code | Run `ruff check backend/ --fix` locally. Ensure root and backend `pyproject.toml` configurations are preserved. |
+| **`test-backend`** | Pytest failure or timeout in `tests/` | Regression in crypto primitives, SQLite locking, or header sanitization | Run `pytest tests/ -v -k "<failing_test_name>"` locally. Inspect tracebacks for database concurrency or tamper exception mismatches. |
+| **`build-frontend`** | Vitest failure in `src/test/` | SubtleCrypto missing or React component selector mismatch | Run `npm run test:run` in `frontend/`. Ensure `frontend/src/test/setup.js` properly mounts the native Node Web Crypto polyfill for jsdom. |
+| **`build-frontend`** | `vite build` error | Missing import, JSX syntax error, or unresolvable asset | Run `npm run build` locally in `frontend/` to diagnose bundle compilation errors. |
+| **`test-e2e`** | Playwright test timeout or connection refused | Preview server failed to bind to port 5173 or Chromium dependencies missing | Ensure `npx playwright install --with-deps chromium` was run. Verify that port 5173 is free and that `frontend/playwright.config.js` properly launches the preview server. |
+| **`deploy`** | Render deploy webhook failed (`curl -f`) | Expired or invalid deploy hook URL | Verify `RENDER_DEPLOY_HOOK_URL` in GitHub Repository Secrets. Regenerate the deploy hook in the Render dashboard if compromised. |
+
+### 6.3 Deployment Gating Runbook
+1. **Render (Backend):**
+   * Production deployments are triggered by the `deploy` job via a webhook call to `RENDER_DEPLOY_HOOK_URL`.
+   * If any test job (`lint-backend`, `test-backend`, `build-frontend`, `test-e2e`) fails, the `deploy` job is skipped, protecting production from regressions.
+   * If `RENDER_DEPLOY_HOOK_URL` is unset, the step is skipped gracefully without failing the pipeline.
+2. **Vercel (Frontend):**
+   * Vercel connects directly to GitHub. In Vercel Project Settings $\rightarrow$ Git $\rightarrow$ Ignored Build Step, configure Vercel to inspect GitHub checks and deploy only when all CI pipeline jobs pass.
+

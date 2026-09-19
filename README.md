@@ -10,6 +10,8 @@ BAR is an ephemeral data exchange platform engineered to leave zero trace.
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python: 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Node.js: 18+](https://img.shields.io/badge/Node.js-18%2B-green.svg)](https://nodejs.org/)
+[![CI Pipeline](https://github.com/Mrtracker-new/BAR_RYY/actions/workflows/ci.yml/badge.svg)](https://github.com/Mrtracker-new/BAR_RYY/actions/workflows/ci.yml)
+[![Tests: 225 Passed](https://img.shields.io/badge/Tests-225%20Passed-brightgreen.svg)](docs/DEVELOPMENT.md#6-testing-quality-assurance--cicd)
 [![Live Demo](https://img.shields.io/badge/Demo-bar--rnr.vercel.app-success.svg)](https://bar-rnr.vercel.app/)
 
 </div>
@@ -81,6 +83,32 @@ npm run dev
 ```
 
 Navigate to `http://localhost:5173`. The Vite dev server automatically proxies API and WebSocket requests to the backend at `http://localhost:8000`.
+
+---
+
+## Testing & Quality Assurance
+
+BAR features an automated, defense-in-depth test suite spanning unit, cryptographic, concurrency, and browser-level end-to-end integration tests:
+
+| Target | Framework | Test Count | Scope |
+| :--- | :--- | :--- | :--- |
+| **Backend** | Pytest, pytest-asyncio, pytest-cov | **210 tests** | PBKDF2 (600k rounds), `BarKey` separation, tamper detection, right-to-left XFF anti-spoofing, 50-client SQLite concurrency, Slowloris task cancellation |
+| **Frontend** | Vitest, React Testing Library | **15 tests** | Web Crypto ECDH key agreement, HKDF wrap, AES-GCM-256 integrity, session fingerprinting, component workflows |
+| **E2E** | Playwright | **2 suites** | Multi-browser Burn Chat session lifecycles, file dropzone & decryption flows |
+| **Linter** | Ruff (0.8.6) | **0 warnings** | Static analysis, import validation, and syntax checking |
+
+```bash
+# Run backend test suite (from backend/)
+pytest tests/ -v
+
+# Run frontend test suite (from frontend/)
+npm run test:run
+
+# Run Playwright E2E tests (from frontend/)
+npm run test:e2e
+```
+
+For complete test breakdowns and CI/CD topology, see the [Development & CI/CD Guide](docs/DEVELOPMENT.md#6-testing-quality-assurance--cicd).
 
 ---
 

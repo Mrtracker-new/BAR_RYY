@@ -170,3 +170,41 @@ To maintain accurate rate-limiting and audit logging behind reverse proxies (e.g
 
 1. **Peer Validation:** The direct TCP connection (`request.client.host`) is validated against `TRUSTED_PROXY_CIDRS`. If the direct peer is not in this list, `X-Forwarded-For` and `X-Real-IP` headers are discarded.
 2. **Right-to-Left Traversal:** When behind a trusted proxy, `X-Forwarded-For` is parsed from right to left to locate the first untrusted IP. This prevents attackers from injecting spoofed IP addresses at the beginning of the header.
+
+---
+
+## 6. Automated Testing & Verification Boundaries
+
+To prevent regression of security properties, BAR establishes an automated verification boundary that must pass before any code can be deployed to production:
+
+```mermaid
+graph TD
+    subgraph CI ["CI/CD Pipeline Verification Boundary"]
+        Ruff["1. Static Analysis (Ruff)<br/>Syntax, Imports, Formats"]
+        Pytest["2. Backend Verification (Pytest)<br/>Crypto, HMAC, SQLite WAL, Slowloris"]
+        Vitest["3. Frontend Verification (Vitest)<br/>Web Crypto, ECDH Wrap, AES-GCM, UI"]
+        Playwright["4. End-to-End Verification (Playwright)<br/>Multi-Context Browser Flows"]
+    end
+
+    subgraph ProdGate ["Deployment Gate (Master Only)"]
+        Gate{"All Checks Passed?"}
+        Render["Render Backend Webhook"]
+        Vercel["Vercel Edge Deployment"]
+    end
+
+    Ruff --> Pytest
+    Ruff --> Vitest
+    Pytest --> Playwright
+    Vitest --> Playwright
+    Playwright --> Gate
+    Gate -->|Yes| Render
+    Gate -->|Yes| Vercel
+    Gate -->|No| Block[Block Deployment & Notify]
+```
+
+### 6.1 Cryptographic & Concurrency Enforcements
+* **PBKDF2 Iteration Floor:** Automated tests enforce that `derive_key_from_password` maintains a default of $\ge 600,000$ rounds (OWASP 2023+ recommendation).
+* **Key Separation Invariant:** Tests verify that `BarKey` derives distinct Fernet and HMAC keys such that `bytes(key) != key.hmac_key`.
+* **Zero Name-Based Lookups:** Tests statically verify that internal chat data structures never key off mutable or cosmetic display names.
+* **Non-Blocking WebSocket Broadcasts:** Concurrency tests simulate Slowloris stalling to verify that clients exceeding 3.0 seconds are cancelled and disconnected with code 1001 without blocking other participants.
+
