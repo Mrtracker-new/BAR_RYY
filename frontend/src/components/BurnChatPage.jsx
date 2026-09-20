@@ -983,6 +983,11 @@ export default function BurnChatPage({ token }) {
     // Do NOT clear input yet — clear only after successful send so the
     // user's message is preserved if encryption or the WS send throws.
 
+    if (!cryptoAvailable) {
+      setWsError('End-to-End Encryption is unavailable in this browsing context. Message transmission blocked.');
+      return;
+    }
+
     const { sessionKey } = e2eRef.current;
 
     if (sessionKey) {
@@ -998,10 +1003,6 @@ export default function BurnChatPage({ token }) {
         // Message text intentionally preserved in <textarea> so user can retry.
         setWsError('Encryption failed — message not sent. Please try again.');
       }
-    } else if (!cryptoAvailable) {
-      // ── Plaintext path: TLS-only (insecure context, no SubtleCrypto) ──
-      wsRef.current.send(JSON.stringify({ type: 'send', text }));
-      setInput('');
     } else {
       // Crypto is available but key not ready — refuse to send.
       // This branch should be unreachable because the UI disables the
@@ -1098,7 +1099,7 @@ export default function BurnChatPage({ token }) {
             {/* E2E status badge — 10px acceptable for compact indicator pill */}
             {!cryptoAvailable ? (
               <span
-                title="E2E encryption unavailable — page is not served over HTTPS. Messages are protected by TLS only."
+                title="E2E encryption unavailable — page is not served over HTTPS. Message transmission blocked."
                 style={{
                   fontSize:'0.625rem', fontWeight:700, letterSpacing:'0.04em',
                   color:'#B33A2E', background:'rgba(179,58,46,0.09)',
@@ -1202,7 +1203,7 @@ export default function BurnChatPage({ token }) {
             <AlertTriangle size={14} style={{ color:T.red, flexShrink:0 }} />
             <p style={{ fontSize:'0.875rem', color:'#B33A2E', lineHeight:1.5 }}>
               <strong>E2E encryption unavailable</strong> — page must be served over HTTPS.
-              {' '}Messages are protected by TLS only.
+              {' '}Message transmission blocked.
             </p>
           </div>
         )}
