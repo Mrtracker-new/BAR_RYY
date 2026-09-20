@@ -978,7 +978,8 @@ class Database:
                         inc AS (
                             UPDATE bar_files
                             SET    current_views   = current_views + 1,
-                                   last_accessed_at = $4
+                                   last_accessed_at = $4,
+                                   destroyed       = CASE WHEN (current_views + 1) >= max_views THEN TRUE ELSE FALSE END
                             WHERE  token = $1
                               AND  destroyed = FALSE
                               AND  current_views < max_views
@@ -1067,11 +1068,12 @@ class Database:
                                 is_new_view = (await cur.fetchone()) is None
 
                         if is_new_view:
-                            # 2. Guarded increment
+                            # 2. Guarded increment and atomic destruction
                             await db.execute("""
                                 UPDATE bar_files
                                 SET current_views = current_views + 1,
-                                    last_accessed_at = ?
+                                    last_accessed_at = ?,
+                                    destroyed = CASE WHEN (current_views + 1) >= max_views THEN 1 ELSE 0 END
                                 WHERE token = ?
                                   AND destroyed = 0
                                   AND current_views < max_views
@@ -1129,12 +1131,10 @@ class Database:
             views_remaining = max(0, max_views - current_views)
             should_destroy  = current_views >= max_views
 
-            # Mark as destroyed inside this method so the caller never needs
-            # to call mark_as_destroyed() separately — closing a second race
-            # window where two concurrent requests could both trigger deletion.
-            if should_destroy:
-                await self.mark_as_destroyed(token)
-
+            # bar_files.destroyed is already atomically updated to 1 (or TRUE)
+            # in the guarded UPDATE statement above when current_views reaches
+            # max_views, eliminating any TOCTOU race window between view
+            # increment and destruction without needing a secondary transaction.
             return True, views_remaining, should_destroy, is_new_view, False
 
         except Exception as e:
