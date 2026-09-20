@@ -28,6 +28,8 @@ from typing import Optional, Dict, Any, List
 
 import httpx
 
+from core import security
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -173,32 +175,39 @@ class OTPService:
             "created_at": datetime.now(timezone.utc),
             "expires_at": datetime.now(timezone.utc) + timedelta(minutes=OTP_EXPIRY_MINUTES),
             "attempts": 0,
-            "verified": False,
         }
 
         logger.info("OTP session created for token %.8s… (expires in %d min)", token, OTP_EXPIRY_MINUTES)
         return otp_code
 
-    def verify_otp(self, token: str, otp_code: str) -> tuple[bool, str]:
+    def verify_otp_and_issue_token(
+        self, token: str, otp_code: str, client_ip: str
+    ) -> tuple[bool, Optional[str], str]:
         """
-        Verify *otp_code* for *token*.
-        Returns (is_valid, error_message).
+        Verify *otp_code* for *token* and issue an HMAC-signed session token bound to client_ip.
+
+        Guarantees:
+          - Validates session existence and expiration.
+          - Enforces attempt limits (MAX_OTP_ATTEMPTS).
+          - Uses constant-time digest comparison (hmac.compare_digest).
+          - Burns the OTP session immediately upon success (single-use guarantee).
+          - Issues a cryptographically signed, short-lived token bound to sub=token and ip=client_ip.
+
+        Returns:
+            (is_valid: bool, session_token: Optional[str], error_message: str)
         """
         if token not in self.otp_storage:
-            return False, "OTP session not found. Please request a new OTP."
+            return False, None, "OTP session not found. Please request a new OTP."
 
         session = self.otp_storage[token]
 
-        if session["verified"]:
-            return False, "OTP already used. Please request a new OTP."
-
         if datetime.now(timezone.utc) > session["expires_at"]:
             del self.otp_storage[token]
-            return False, "OTP has expired. Please request a new OTP."
+            return False, None, "OTP has expired. Please request a new OTP."
 
         if session["attempts"] >= MAX_OTP_ATTEMPTS:
             del self.otp_storage[token]
-            return False, (
+            return False, None, (
                 f"Maximum OTP attempts ({MAX_OTP_ATTEMPTS}) exceeded. "
                 "Please request a new OTP."
             )
@@ -206,21 +215,44 @@ class OTPService:
         session["attempts"] += 1
 
         # Constant-time comparison — prevents timing side-channel (CWE-208)
-        provided_hash = hashlib.sha256(otp_code.encode()).hexdigest()
+        clean_code = str(otp_code or "").strip()
+        provided_hash = hashlib.sha256(clean_code.encode()).hexdigest()
         if hmac.compare_digest(provided_hash, session["otp_hash"]):
-            session["verified"] = True
-            logger.info("OTP verified for token %.8s…", token)
-            return True, ""
+            session_token = security.create_short_lived_token(
+                data={"sub": token, "ip": client_ip},
+                expires_delta=timedelta(minutes=5)
+            )
+            del self.otp_storage[token]  # Single-use: burn OTP immediately
+            logger.info("OTP verified and session token issued for token %.8s…", token)
+            return True, session_token, ""
 
         remaining = MAX_OTP_ATTEMPTS - session["attempts"]
-        return False, f"Invalid OTP code. {remaining} attempt(s) remaining."
+        if remaining <= 0:
+            del self.otp_storage[token]
+            return False, None, (
+                f"Maximum OTP attempts ({MAX_OTP_ATTEMPTS}) exceeded. "
+                "Please request a new OTP."
+            )
+
+        return False, None, f"Invalid OTP code. {remaining} attempt(s) remaining."
+
+    def verify_otp(self, token: str, otp_code: str) -> tuple[bool, str]:
+        """
+        [Deprecated] Verify *otp_code* without issuing a client-bound token.
+        Preserved for backwards compatibility with legacy callers/tests.
+        """
+        valid, _, err = self.verify_otp_and_issue_token(token, otp_code, client_ip="")
+        return valid, err
 
     def is_verified(self, token: str) -> bool:
-        """Return True if *token* has a live, verified OTP session."""
-        return self.otp_storage.get(token, {}).get("verified", False)
+        """
+        [Deprecated] Global in-memory verification status check.
+        Replaced by client-bound signed token verification in routes/share.py.
+        """
+        return False
 
     def clear_verification(self, token: str) -> None:
-        """Remove the OTP session for *token* after successful file access."""
+        """Remove the OTP session for *token* if still present."""
         if token in self.otp_storage:
             del self.otp_storage[token]
             logger.info("OTP verification cleared for token %.8s…", token)

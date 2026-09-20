@@ -143,14 +143,18 @@ async def verify_otp(
         if not file_record or not file_record.get('require_otp'):
             raise HTTPException(status_code=403, detail="Access denied.")
         
-        # Verify OTP
-        is_valid, error_msg = otp_service.verify_otp(token, otp_code)
+        # Verify OTP and issue client-bound token
+        client_ip = analytics.get_client_ip(req)
+        is_valid, session_token, error_msg = otp_service.verify_otp_and_issue_token(
+            token, otp_code, client_ip
+        )
         
         if not is_valid:
             raise HTTPException(status_code=403, detail=error_msg)
         
         return {
             "success": True,
+            "otp_token": session_token,
             "message": "OTP verified successfully. You can now access the file."
         }
         
@@ -194,10 +198,27 @@ async def share_file(
         
         # Check if 2FA is required
         if file_record.get('require_otp'):
-            if not otp_service.is_verified(token):
+            otp_token = request.otp_token or req.headers.get("X-OTP-Token")
+            if not otp_token:
+                auth_header = req.headers.get("Authorization", "")
+                if auth_header.startswith("Bearer "):
+                    otp_token = auth_header[7:].strip()
+
+            if not otp_token:
                 raise HTTPException(
                     status_code=403,
                     detail="2FA verification required. Please request and verify OTP first."
+                )
+
+            is_valid, payload, error_msg = security.verify_short_lived_token(
+                token=otp_token,
+                expected_sub=token,
+                expected_ip=client_ip
+            )
+            if not is_valid:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"2FA verification failed: {error_msg}"
                 )
         
         # Resolve file path from DB record, then open atomically.
@@ -418,9 +439,8 @@ async def share_file(
                 token, views_remaining,
             )
         
-        # Clear OTP verification
-        if file_record.get('require_otp'):
-            otp_service.clear_verification(token)
+        # OTP verification uses stateless, short-lived tokens bound to client IP,
+        # so there is no global in-memory state to clear.
         
         # Send successful access webhook
         webhook_url = metadata.get("webhook_url")

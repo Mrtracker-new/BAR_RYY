@@ -10,6 +10,11 @@ from urllib.parse import quote, urlparse
 import json
 import re
 import os
+import time
+import base64
+import hmac
+import hashlib
+import secrets
 import unicodedata
 import socket
 import ipaddress
@@ -997,4 +1002,172 @@ def build_content_disposition(
     encoded = quote(filename.encode('utf-8'), safe=_RFC5987_SAFE)
 
     return f'{disposition}; filename="{ascii_fallback}"; filename*=UTF-8\'\'{encoded}'
+
+
+# ---------------------------------------------------------------------------
+# Short-lived Verification Tokens (HMAC-SHA256)
+# ---------------------------------------------------------------------------
+
+_CACHED_SECRET_KEY: Optional[str] = None
+
+
+def get_secret_key() -> str:
+    """
+    Return the application secret key used for cryptographic signing.
+
+    Resolution order:
+      1. In-memory cached secret key.
+      2. SECRET_KEY environment variable.
+      3. File-backed persistent key in settings.generated_dir / '.secret_key'
+         (ensures multi-worker processes on the same host share the exact same key).
+      4. Secure random generation written to that file with 0o600 permissions.
+    """
+    global _CACHED_SECRET_KEY
+    if _CACHED_SECRET_KEY:
+        return _CACHED_SECRET_KEY
+
+    secret = os.getenv("SECRET_KEY", "").strip()
+    if secret:
+        _CACHED_SECRET_KEY = secret
+        return _CACHED_SECRET_KEY
+
+    os.makedirs(settings.generated_dir, exist_ok=True)
+    key_file = os.path.join(settings.generated_dir, ".secret_key")
+    try:
+        if os.path.exists(key_file):
+            with open(key_file, "r", encoding="utf-8") as f:
+                cached = f.read().strip()
+                if cached:
+                    _CACHED_SECRET_KEY = cached
+                    return _CACHED_SECRET_KEY
+    except Exception as exc:
+        logger.warning("Could not read .secret_key file: %s", exc)
+
+    # Generate a fresh 256-bit (64-char hex) secret and persist it atomically
+    new_secret = secrets.token_hex(32)
+    try:
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        fd = os.open(key_file, flags, 0o600)
+        with open(fd, "w", encoding="utf-8") as f:
+            f.write(new_secret)
+        logger.info("Generated persistent secret key for token signing.")
+        _CACHED_SECRET_KEY = new_secret
+        return _CACHED_SECRET_KEY
+    except FileExistsError:
+        # Concurrent worker created it first; read the shared key
+        try:
+            with open(key_file, "r", encoding="utf-8") as f:
+                cached = f.read().strip()
+                if cached:
+                    _CACHED_SECRET_KEY = cached
+                    return _CACHED_SECRET_KEY
+        except Exception as exc:
+            logger.warning("Could not read concurrently created .secret_key: %s", exc)
+    except Exception as exc:
+        logger.warning("Could not persist .secret_key file: %s", exc)
+
+    _CACHED_SECRET_KEY = new_secret
+    return _CACHED_SECRET_KEY
+
+
+def create_short_lived_token(
+    data: dict,
+    expires_delta: timedelta = timedelta(minutes=5),
+    secret_key: Optional[str] = None
+) -> str:
+    """
+    Create a cryptographically signed (HMAC-SHA256) short-lived token.
+
+    Format: base64url(payload).base64url(signature)
+    Payload includes:
+      - Custom data fields (e.g. 'sub', 'ip')
+      - 'exp': Unix timestamp expiration
+      - 'iat': Unix timestamp issued at
+      - 'jti': unique random nonce (CSPRNG)
+
+    Args:
+        data: Claims to embed in the payload (e.g. {'sub': token, 'ip': client_ip}).
+        expires_delta: Validity window (default: 5 minutes).
+        secret_key: Optional signing key (defaults to get_secret_key()).
+
+    Returns:
+        URL-safe signed token string.
+    """
+    key = (secret_key or get_secret_key()).encode("utf-8")
+
+    now = int(time.time())
+    exp = now + int(expires_delta.total_seconds())
+
+    payload = dict(data)
+    payload.update({
+        "exp": exp,
+        "iat": now,
+        "jti": secrets.token_hex(16),
+    })
+
+    payload_bytes = json.dumps(payload, separators=(',', ':'), sort_keys=True).encode("utf-8")
+    payload_b64 = base64.urlsafe_b64encode(payload_bytes).decode("ascii").rstrip("=")
+
+    sig = hmac.new(key, payload_b64.encode("ascii"), hashlib.sha256).digest()
+    sig_b64 = base64.urlsafe_b64encode(sig).decode("ascii").rstrip("=")
+
+    return f"{payload_b64}.{sig_b64}"
+
+
+def verify_short_lived_token(
+    token: str,
+    expected_sub: Optional[str] = None,
+    expected_ip: Optional[str] = None,
+    secret_key: Optional[str] = None
+) -> tuple[bool, Optional[dict], str]:
+    """
+    Verify an HMAC-SHA256 signed short-lived token and validate its claims.
+
+    Guarantees:
+      1. Structural format check (payload.signature).
+      2. Constant-time signature verification (prevents timing attacks).
+      3. Expiration verification ('exp' claim).
+      4. Constant-time subject verification ('sub' claim) if expected_sub is specified.
+      5. Constant-time IP verification ('ip' claim) if expected_ip is specified.
+
+    Returns:
+        (is_valid, payload_dict, error_message)
+    """
+    if not token or not isinstance(token, str) or "." not in token:
+        return False, None, "Malformed token format."
+
+    parts = token.split(".")
+    if len(parts) != 2:
+        return False, None, "Invalid token structure."
+
+    payload_b64, sig_b64 = parts
+    key = (secret_key or get_secret_key()).encode("utf-8")
+
+    # Verify signature in constant time
+    expected_sig = hmac.new(key, payload_b64.encode("ascii"), hashlib.sha256).digest()
+    expected_sig_b64 = base64.urlsafe_b64encode(expected_sig).decode("ascii").rstrip("=")
+
+    if not hmac.compare_digest(sig_b64, expected_sig_b64):
+        return False, None, "Invalid token signature."
+
+    # Decode payload
+    try:
+        pad_len = (4 - len(payload_b64) % 4) % 4
+        payload_bytes = base64.urlsafe_b64decode(payload_b64 + "=" * pad_len)
+        payload = json.loads(payload_bytes.decode("utf-8"))
+    except Exception:
+        return False, None, "Invalid token payload."
+
+    now = int(time.time())
+    if now > payload.get("exp", 0):
+        return False, None, "Token has expired."
+
+    if expected_sub is not None and not secrets.compare_digest(str(payload.get("sub", "")), str(expected_sub)):
+        return False, None, "Token subject mismatch."
+
+    if expected_ip is not None and not secrets.compare_digest(str(payload.get("ip", "")), str(expected_ip)):
+        return False, None, "Token client IP mismatch."
+
+    return True, payload, ""
+
 

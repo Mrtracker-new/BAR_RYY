@@ -89,6 +89,7 @@ const SharePage = ({ token }) => {
   const [otpSent, setOtpSent]                 = useState(false);
   const [otpVerified, setOtpVerified]         = useState(false);
   const [otpCode, setOtpCode]                 = useState('');
+  const [otpToken, setOtpToken]               = useState(null);
   const [otpInfo, setOtpInfo]                 = useState(null);
   const [otpPanelOpen, setOtpPanelOpen]       = useState(false);
   const [recipientEmail, setRecipientEmail]   = useState('');
@@ -131,12 +132,16 @@ const SharePage = ({ token }) => {
     try {
       const formData = new FormData();
       formData.append('otp_code', otpCode);
-      await axios.post(`/verify-otp/${token}`, formData);
+      const res = await axios.post(`/verify-otp/${token}`, formData);
+      const sessionToken = res.data?.otp_token || null;
+      if (sessionToken) {
+        setOtpToken(sessionToken);
+      }
       setOtpVerified(true);
       setOtpPanelOpen(false);
       setSuccessMessage('✅ Identity verified — accessing your file…');
       await new Promise(r => setTimeout(r, 100));
-      await handleDownload();
+      await handleDownload(sessionToken);
     } catch (err) {
       setError(err.response?.data?.detail || 'OTP verification failed');
       setIsLoading(false);
@@ -144,11 +149,17 @@ const SharePage = ({ token }) => {
   };
 
   /* ── File download ── */
-  const handleDownload = async () => {
+  const handleDownload = async (explicitOtpToken = null) => {
     setIsLoading(true); setError(null); setSuccessMessage(null);
     setLoadingStage('connecting'); setLoadingProgress(0);
     const startTime = Date.now();
     setRequestStartTime(startTime);
+
+    const activeOtpToken = (typeof explicitOtpToken === 'string' ? explicitOtpToken : null) || otpToken;
+    const headers = {};
+    if (activeOtpToken) {
+      headers['X-OTP-Token'] = activeOtpToken;
+    }
 
     try {
       setTimeout(() => {
@@ -157,8 +168,11 @@ const SharePage = ({ token }) => {
 
       const response = await axios.post(
         `/share/${token}`,
-        { password: password || null },
-        { responseType: 'arraybuffer' }
+        {
+          password: password || null,
+          otp_token: activeOtpToken || null
+        },
+        { responseType: 'arraybuffer', headers }
       );
 
       const responseTime = (Date.now() - startTime) / 1000;

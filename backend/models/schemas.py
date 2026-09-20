@@ -181,6 +181,7 @@ class SealRequest(BaseModel):
 class DecryptRequest(BaseModel):
     """Request model for decrypting a BAR file."""
     password: Optional[str] = None
+    otp_token: Optional[str] = None
 
 
 class OTPRequest(BaseModel):
