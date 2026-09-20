@@ -522,15 +522,11 @@ async def chat_websocket(token: str, websocket: WebSocket):
             msg_type = data.get("type", "")
 
             if msg_type == "send":
-                # ── Dual-path dispatch: E2E ciphertext or plaintext ──────────────
                 raw_ct = data.get("ciphertext")
                 raw_iv = data.get("iv")
 
-                if raw_ct is not None:
+                if raw_ct is not None and raw_iv is not None:
                     # E2E path — forward opaque ciphertext; service validates format.
-                    # Silently drop if iv is absent — a well-behaved client never omits it.
-                    if not raw_iv:
-                        continue
                     await chat_service.broadcast_message(
                         token=token,
                         ws_id=ws_id,
@@ -538,12 +534,15 @@ async def chat_websocket(token: str, websocket: WebSocket):
                         iv=str(raw_iv)[: chat_service._E2E_IV_MAX + 10],
                     )
                 else:
-                    # Plaintext path — server HTML-escapes before relay.
-                    raw_text = str(data.get("text", ""))[: chat_service.MAX_MESSAGE_LENGTH + 10].strip()
-                    if raw_text:
-                        await chat_service.broadcast_message(
-                            token=token, ws_id=ws_id, text=raw_text,
-                        )
+                    # Plaintext path — rejected; all messages must be end-to-end encrypted
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "text": "E2EE is mandatory. Plaintext messages are not accepted.",
+                            "code": "e2ee_required",
+                        }
+                    )
+                    continue
 
             elif msg_type == "pubkey":
                 # E2E key exchange — relay ECDH public key to all other participants.

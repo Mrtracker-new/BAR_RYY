@@ -160,7 +160,10 @@ def check_rate_limit(request: Request, limit: int = 60) -> None:
         # Cannot rate-limit without an IP — allow the request but log it.
         return
 
-    client_ip = request.client.host
+    from services import analytics
+    client_ip = analytics.get_client_ip(request)
+    if client_ip == "Unknown":
+        return
     check_rate_limit_keyed(client_ip, limit=limit, window_seconds=60)
 
 

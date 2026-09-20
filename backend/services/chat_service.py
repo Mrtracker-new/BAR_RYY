@@ -30,6 +30,7 @@ from enum import Enum
 from typing import Dict, Optional
 
 from fastapi import WebSocket
+from core.concurrency import track_background_task
 
 logger = logging.getLogger(__name__)
 
@@ -626,11 +627,33 @@ async def _destroy_session(token: str) -> None:
         except Exception:
             pass
 
+    # Cancel the countdown task if running and not self.
+    destroy_task = getattr(session, "_destroy_task", None)
+    if destroy_task and destroy_task != asyncio.current_task() and not destroy_task.done():
+        try:
+            if not destroy_task.get_loop().is_closed():
+                destroy_task.cancel()
+        except (RuntimeError, Exception):
+            pass
+
     # Remove from memory — this is the burn.
     _SESSIONS.pop(token, None)
     logger.info(
         "Burn chat session %s destroyed and purged from RAM.", token[:8]
     )
+
+
+async def close_chat_service() -> None:
+    """Cancel all active countdown tasks and clear sessions on shutdown."""
+    for session in list(_SESSIONS.values()):
+        destroy_task = getattr(session, "_destroy_task", None)
+        if destroy_task and not destroy_task.done():
+            try:
+                if not destroy_task.get_loop().is_closed():
+                    destroy_task.cancel()
+            except (RuntimeError, Exception):
+                pass
+    _SESSIONS.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -670,6 +693,7 @@ def create_session(ttl_seconds: int) -> tuple[str, str, datetime]:
 
     # Start the countdown / auto-destroy background task.
     task = asyncio.create_task(_countdown_loop(token, session))
+    track_background_task(task)
     session._destroy_task = task
 
     logger.info(

@@ -20,37 +20,34 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Trusted-proxy CIDR list
 # ---------------------------------------------------------------------------
-# Render.com routes all inbound traffic through its own edge/load-balancer
-# fleet. Only packets arriving from those routers should be allowed to set
-# X-Forwarded-For / X-Real-IP.  All other peers are treated as direct clients
+# Reverse proxies and load balancers route inbound traffic to the backend.
+# Only packets arriving from trusted proxies should be allowed to set
+# X-Forwarded-For / X-Real-IP. All other peers are treated as direct clients
 # and their forwarded-for headers are silently discarded.
 #
-# Known Render egress / load-balancer ranges (as of 2025):
-#   https://render.com/docs/network#static-outbound-ip-addresses
-# These are also set via the TRUSTED_PROXY_CIDRS env-var so you can override
-# them without redeploying code.
+# DO NOT trust RFC 1918 private network blocks (10.0.0.0/8, 172.16.0.0/12,
+# 192.168.0.0/16) by default! When deployed in Docker, AWS ECS, Kubernetes,
+# or private VPCs, direct connections arrive with private container/bridge IPs.
+# Trusting them by default enables universal IP spoofing via X-Forwarded-For.
+#
+# Production deployments behind reverse proxies MUST explicitly configure
+# TRUSTED_PROXY_CIDRS (e.g. TRUSTED_PROXY_CIDRS=10.0.0.0/8 or specific proxy IPs).
 # ---------------------------------------------------------------------------
 
-_RENDER_DEFAULT_CIDRS: List[str] = [
-    # Render load-balancer / private network ranges
-    "10.0.0.0/8",
-    "172.16.0.0/12",
-    "192.168.0.0/16",
-    # Render's documented public static IPs (add/update as needed)
-    # https://render.com/docs/network
-    "35.160.0.0/13",
-    "52.32.0.0/11",
-    "54.148.0.0/15",
-    # localhost / loopback (for local dev)
-    "127.0.0.0/8",
+_DEFAULT_TRUSTED_CIDRS: List[str] = [
+    # Localhost / loopback only (for local dev)
+    "127.0.0.1/32",
     "::1/128",
 ]
+
+# Backward-compatibility alias
+_RENDER_DEFAULT_CIDRS: List[str] = _DEFAULT_TRUSTED_CIDRS
 
 
 def _load_trusted_networks() -> List[ipaddress.IPv4Network | ipaddress.IPv6Network]:
     """
     Build the set of trusted-proxy networks from environment config or the
-    Render defaults.  Call once at module load time; result is cached in
+    safe loopback defaults. Call once at module load time; result is cached in
     _TRUSTED_NETWORKS.
 
     TRUSTED_PROXY_CIDRS env-var accepts a comma-separated list of CIDR blocks,
@@ -63,7 +60,7 @@ def _load_trusted_networks() -> List[ipaddress.IPv4Network | ipaddress.IPv6Netwo
     if raw.lower() == "none":
         return []  # Disable all forwarded-header trust
 
-    cidr_strings = [c.strip() for c in raw.split(",") if c.strip()] if raw else _RENDER_DEFAULT_CIDRS
+    cidr_strings = [c.strip() for c in raw.split(",") if c.strip()] if raw else _DEFAULT_TRUSTED_CIDRS
 
     networks: List[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
     for cidr in cidr_strings:

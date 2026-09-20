@@ -31,7 +31,7 @@ Create a `.env` file inside `backend/` using `backend/.env.example` as a templat
 | `GENERATED_DIR` | path | `"./generated"` | Directory for sealed on-disk `.bar` containers. |
 | `MAX_FILE_SIZE` | integer | `104857600` | Maximum file upload size in bytes (default: 100 MB). |
 | `ALLOWED_ORIGINS` | string | `"http://localhost:5173"` | Comma-separated list of permitted CORS origins. |
-| `TRUSTED_PROXY_CIDRS` | string | Render defaults | Comma-separated CIDR blocks trusted for `X-Forwarded-For` parsing. Set to `none` to disable. |
+| `TRUSTED_PROXY_CIDRS` | string | `127.0.0.1/32,::1/128` | Comma-separated CIDR blocks trusted for `X-Forwarded-For` parsing. Set to `none` to disable. |
 | `CHAT_PIN_MAX_FAILURES` | integer | `3` | Max failed creator PIN attempts before IP is blocked. |
 | `CHAT_PIN_WINDOW_SECS` | float | `600.0` | Sliding window in seconds for creator PIN brute-force defense. |
 

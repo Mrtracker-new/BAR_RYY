@@ -64,21 +64,51 @@ class TestGetClientIpDirectConnection:
         req.headers = {"X-Forwarded-For": "1.2.3.4"}
         assert analytics.get_client_ip(req) == "Unknown"
 
+    @pytest.mark.parametrize(
+        "private_ip",
+        [
+            "10.0.0.1",
+            "10.244.0.5",
+            "172.16.0.1",
+            "172.17.0.2",
+            "172.31.255.254",
+            "192.168.0.1",
+            "192.168.1.100",
+        ],
+    )
+    def test_rfc1918_private_peers_cannot_spoof_xff(self, private_ip: str):
+        """
+        RFC 1918 subnets must NOT be trusted by default. Direct container/VPC
+        peers cannot inject arbitrary IPs via X-Forwarded-For or X-Real-IP.
+        """
+        req_xff = _make_request(
+            client_host=private_ip,
+            headers={"X-Forwarded-For": "1.2.3.4, 5.6.7.8"},
+        )
+        assert analytics.get_client_ip(req_xff) == private_ip
+
+        req_x_real_ip = _make_request(
+            client_host=private_ip,
+            headers={"X-Real-IP": "8.8.8.8"},
+        )
+        assert analytics.get_client_ip(req_x_real_ip) == private_ip
+
 
 # ---------------------------------------------------------------------------
-# get_client_ip: Behind trusted proxy (Render / Load Balancer)
+# get_client_ip: Behind trusted proxy (Loopback / Explicitly Configured)
 # ---------------------------------------------------------------------------
 
 class TestGetClientIpBehindTrustedProxy:
     """
-    When the direct TCP peer IS a trusted proxy (e.g. 10.0.0.1 or 127.0.0.1),
-    parse X-Forwarded-For from right to left to find the first untrusted IP.
+    When the direct TCP peer IS a trusted proxy (e.g. 127.0.0.1 by default,
+    or explicitly configured CIDRs), parse X-Forwarded-For from right to left
+    to find the first untrusted IP.
     """
 
     def test_trusted_peer_single_client_ip(self):
-        # Direct peer is 10.0.0.1 (trusted private network)
+        # Direct peer is 127.0.0.1 (trusted loopback)
         req = _make_request(
-            client_host="10.0.0.1",
+            client_host="127.0.0.1",
             headers={"X-Forwarded-For": "203.0.113.195"},
         )
         assert analytics.get_client_ip(req) == "203.0.113.195"
@@ -86,12 +116,12 @@ class TestGetClientIpBehindTrustedProxy:
     def test_trusted_peer_right_to_left_spoofing_mitigation(self):
         """
         Attacker injects '1.2.3.4', real client is '203.0.113.50',
-        and proxy appended '10.0.0.2'.
+        and proxy appended '127.0.0.1'.
         Right-to-left parsing must pick '203.0.113.50', NOT the attacker's '1.2.3.4'.
         """
         req = _make_request(
-            client_host="10.0.0.1",
-            headers={"X-Forwarded-For": "1.2.3.4, 203.0.113.50, 10.0.0.2"},
+            client_host="127.0.0.1",
+            headers={"X-Forwarded-For": "1.2.3.4, 203.0.113.50, 127.0.0.1"},
         )
         assert analytics.get_client_ip(req) == "203.0.113.50"
 
@@ -101,17 +131,17 @@ class TestGetClientIpBehindTrustedProxy:
         it falls back to the leftmost IP.
         """
         req = _make_request(
-            client_host="10.0.0.1",
-            headers={"X-Forwarded-For": "10.0.0.5, 10.0.0.2"},
+            client_host="127.0.0.1",
+            headers={"X-Forwarded-For": "127.0.0.1, 127.0.0.1"},
         )
-        assert analytics.get_client_ip(req) == "10.0.0.5"
+        assert analytics.get_client_ip(req) == "127.0.0.1"
 
     def test_trusted_peer_x_real_ip_fallback(self):
         """
         When XFF is empty but X-Real-IP is provided from a trusted peer.
         """
         req = _make_request(
-            client_host="10.0.0.1",
+            client_host="127.0.0.1",
             headers={"X-Real-IP": "203.0.113.88"},
         )
         assert analytics.get_client_ip(req) == "203.0.113.88"
@@ -122,10 +152,39 @@ class TestGetClientIpBehindTrustedProxy:
         and valid IPs are still parsed.
         """
         req = _make_request(
-            client_host="10.0.0.1",
+            client_host="127.0.0.1",
             headers={"X-Forwarded-For": "not-an-ip, 203.0.113.77, invalid-again"},
         )
         assert analytics.get_client_ip(req) == "203.0.113.77"
+
+    def test_explicit_trusted_proxy_cidrs_configuration(self, monkeypatch):
+        """
+        When TRUSTED_PROXY_CIDRS is explicitly configured in production (e.g. for Render/AWS ALB),
+        connections from those configured proxy CIDRs are trusted.
+        """
+        monkeypatch.setenv("TRUSTED_PROXY_CIDRS", "10.0.0.0/8,172.16.0.0/12")
+        custom_networks = analytics._load_trusted_networks()
+        monkeypatch.setattr(analytics, "_TRUSTED_NETWORKS", custom_networks)
+
+        req = _make_request(
+            client_host="10.0.0.1",
+            headers={"X-Forwarded-For": "1.2.3.4, 203.0.113.50, 10.0.0.2"},
+        )
+        assert analytics.get_client_ip(req) == "203.0.113.50"
+
+    def test_trusted_proxy_cidrs_none(self, monkeypatch):
+        """
+        When TRUSTED_PROXY_CIDRS is 'none', proxy headers from loopback are also ignored.
+        """
+        monkeypatch.setenv("TRUSTED_PROXY_CIDRS", "none")
+        custom_networks = analytics._load_trusted_networks()
+        monkeypatch.setattr(analytics, "_TRUSTED_NETWORKS", custom_networks)
+
+        req = _make_request(
+            client_host="127.0.0.1",
+            headers={"X-Forwarded-For": "203.0.113.50"},
+        )
+        assert analytics.get_client_ip(req) == "127.0.0.1"
 
 
 # ---------------------------------------------------------------------------

@@ -30,6 +30,7 @@ from core import database
 from services import cleanup
 from services import analytics
 from services import webhook_service
+from services import chat_service
 
 # Import API routes
 from api.routes import upload, seal, decrypt, share, chat
@@ -65,6 +66,7 @@ async def lifespan(app: FastAPI):
         await cleanup_task
     except asyncio.CancelledError:
         pass
+    await chat_service.close_chat_service()
     await analytics.close_httpx_client()
     await webhook_service.get_webhook_service().close()
     await database.close_database()
@@ -95,12 +97,10 @@ app = FastAPI(
 _raw_cidrs = os.getenv("TRUSTED_PROXY_CIDRS", "").strip()
 _trusted_hosts: list[str] = []
 if _raw_cidrs.lower() != "none":
-    # ProxyHeadersMiddleware trusted_hosts accepts exact IPs or "*".
-    # We use "*" when behind Render because Render's LB IPs are stable but
-    # numerous; the CIDR-level enforcement is handled by analytics.get_client_ip.
-    # Do NOT use "*" if this service is directly internet-facing.
-    _is_production = os.getenv("IS_PRODUCTION", "false").lower() == "true"
-    _trusted_hosts = ["*"] if _is_production else ["127.0.0.1", "::1"]
+    if _raw_cidrs:
+        _trusted_hosts = [c.strip() for c in _raw_cidrs.split(",") if c.strip()]
+    else:
+        _trusted_hosts = ["127.0.0.1", "::1"]
 
 if _trusted_hosts:
     app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=_trusted_hosts)
