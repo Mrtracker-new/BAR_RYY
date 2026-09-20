@@ -58,6 +58,7 @@ Configure via environment variables; see chat_service._PinRateLimiter.
 from __future__ import annotations
 
 import asyncio
+import html
 import logging
 import os
 import uuid
@@ -89,7 +90,7 @@ def _valid_session_token(token: str) -> bool:
         # uuid.UUID silently normalises some inputs, so round-trip the
         # canonical form to catch things like uppercase letters or extra chars.
         return str(parsed) == token
-    except ValueError:
+    except (ValueError, TypeError, AttributeError):
         return False
 
 
@@ -112,21 +113,15 @@ def _valid_session_token(token: str) -> bool:
 # The SPA's /chat/:token route remains unchanged for all real users.
 # ---------------------------------------------------------------------------
 
-_OG_SITE          = os.getenv("SITE_URL", "https://bar-rnr.vercel.app")
+_OG_SITE          = os.getenv("SITE_URL", "https://bar-rnr.vercel.app").rstrip("/")
 _OG_CHAT_IMAGE    = f"{_OG_SITE}/og-chat.png"
 _OG_IMAGE_ALT     = "Burn Chat — End-to-End Encrypted Ephemeral Chat | BAR Web"
 _OG_SITE_NAME     = "BAR by Rolan"
 
 
 def _html_escape(text: str) -> str:
-    """Escape characters that are unsafe inside HTML attribute values."""
-    return (
-        text
-        .replace("&",  "&amp;")
-        .replace('"',  "&quot;")
-        .replace("<",  "&lt;")
-        .replace(">",  "&gt;")
-    )
+    """Escape characters that are unsafe inside HTML attribute values and content."""
+    return html.escape(text, quote=True)
 
 
 @router.get("/og/chat/{token}", include_in_schema=False)
@@ -146,49 +141,43 @@ async def chat_og_page(token: str):
         /og/chat/:token  →  <backend>/og/chat/:token
     """
     if not _valid_session_token(token):
-        # Malformed token — serve a generic expired card rather than
-        # leaking whether the token format is wrong.
-        title       = "Burn Chat — Session Unavailable | BAR Web"
+        raise HTTPException(status_code=400, detail="Invalid session token format")
+
+    info = chat_service.session_info(token)
+    if info is None:
+        # Valid token format but session is gone (expired / destroyed).
+        title       = "Burn Chat — Session Burned | BAR Web"
         description = (
-            "This Burn Chat session link is invalid or has already expired "
-            "and been permanently destroyed."
+            "This Burn Chat session has already expired and been permanently "
+            "destroyed. All messages were erased. No trace remains."
         )
     else:
-        info = chat_service.session_info(token)
-        if info is None:
-            # Valid token format but session is gone (expired / destroyed).
-            title       = "Burn Chat — Session Burned | BAR Web"
-            description = (
-                "This Burn Chat session has already expired and been permanently "
-                "destroyed. All messages were erased. No trace remains."
-            )
-        else:
-            secs  = int(info.get("seconds_remaining", 0))
-            mins  = max(1, round(secs / 60))
-            count = info.get("participant_count", 0)
+        secs  = int(info.get("seconds_remaining", 0))
+        mins  = max(1, round(secs / 60))
+        count = info.get("participant_count", 0)
 
-            plural_m = "s" if mins  != 1 else ""
-            plural_p = "s" if count != 1 else ""
+        plural_m = "s" if mins  != 1 else ""
+        plural_p = "s" if count != 1 else ""
 
-            title = f"Join Burn Chat — {mins} min{plural_m} remaining | BAR Web"
+        title = f"Join Burn Chat — {mins} min{plural_m} remaining | BAR Web"
 
-            participant_note = (
-                f"{count} person{plural_p} already inside. "
-                if count > 0 else ""
-            )
-            description = (
-                f"You've been invited to a Burn Chat — end-to-end encrypted "
-                f"ephemeral messaging that self-destructs in "
-                f"{mins} minute{plural_m}. "
-                f"{participant_note}"
-                "No logs, no history. Messages encrypted in your browser with "
-                "ECDH P-256 + AES-GCM."
-            )
+        participant_note = (
+            f"{count} person{plural_p} already inside. "
+            if count > 0 else ""
+        )
+        description = (
+            f"You've been invited to a Burn Chat — end-to-end encrypted "
+            f"ephemeral messaging that self-destructs in "
+            f"{mins} minute{plural_m}. "
+            f"{participant_note}"
+            "No logs, no history. Messages encrypted in your browser with "
+            "ECDH P-256 + AES-GCM."
+        )
 
     # HTML-escape all dynamic values before interpolation.
-    safe_title       = _html_escape(title)
-    safe_description = _html_escape(description)
-    canonical_url    = f"{_OG_SITE}/chat/{token}"
+    safe_title         = _html_escape(title)
+    safe_description   = _html_escape(description)
+    safe_canonical_url = _html_escape(f"{_OG_SITE}/chat/{token}")
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -201,33 +190,33 @@ async def chat_og_page(token: str):
   <meta name="robots" content="noindex,nofollow">
 
   <!-- Canonical -->
-  <link rel="canonical" href="{canonical_url}">
+  <link rel="canonical" href="{safe_canonical_url}">
 
   <!-- Open Graph (Facebook, WhatsApp, Telegram, iMessage, Discord …) -->
   <meta property="og:type"        content="website">
-  <meta property="og:url"         content="{canonical_url}">
-  <meta property="og:site_name"   content="{_OG_SITE_NAME}">
+  <meta property="og:url"         content="{safe_canonical_url}">
+  <meta property="og:site_name"   content="{_html_escape(_OG_SITE_NAME)}">
   <meta property="og:title"       content="{safe_title}">
   <meta property="og:description" content="{safe_description}">
-  <meta property="og:image"       content="{_OG_CHAT_IMAGE}">
-  <meta property="og:image:alt"   content="{_OG_IMAGE_ALT}">
+  <meta property="og:image"       content="{_html_escape(_OG_CHAT_IMAGE)}">
+  <meta property="og:image:alt"   content="{_html_escape(_OG_IMAGE_ALT)}">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
 
   <!-- Twitter / X -->
   <meta name="twitter:card"        content="summary_large_image">
-  <meta name="twitter:url"         content="{canonical_url}">
+  <meta name="twitter:url"         content="{safe_canonical_url}">
   <meta name="twitter:title"       content="{safe_title}">
   <meta name="twitter:description" content="{safe_description}">
-  <meta name="twitter:image"       content="{_OG_CHAT_IMAGE}">
-  <meta name="twitter:image:alt"   content="{_OG_IMAGE_ALT}">
+  <meta name="twitter:image"       content="{_html_escape(_OG_CHAT_IMAGE)}">
+  <meta name="twitter:image:alt"   content="{_html_escape(_OG_IMAGE_ALT)}">
 
   <!-- Instant redirect for real browsers — crawlers stop at the meta tags above -->
-  <meta http-equiv="refresh" content="0;url={canonical_url}">
+  <meta http-equiv="refresh" content="0;url={safe_canonical_url}">
 </head>
 <body>
   <!-- Fallback for browsers that don't honour meta-refresh -->
-  <p>Redirecting to Burn Chat… <a href="{canonical_url}">Click here if not redirected.</a></p>
+  <p>Redirecting to Burn Chat… <a href="{safe_canonical_url}">Click here if not redirected.</a></p>
 </body>
 </html>"""
 

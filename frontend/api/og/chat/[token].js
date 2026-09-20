@@ -56,7 +56,8 @@ function escape(str) {
     .replace(/&/g, '&amp;')
     .replace(/"/g, '&quot;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/>/g, '&gt;')
+    .replace(/'/g, '&#x27;');
 }
 
 /** Return true only for well-formed UUID v4 strings. */
