@@ -12,14 +12,18 @@ Events we notify about:
 """
 
 import httpx
+import httpcore
+from httpcore._backends.auto import AutoBackend
+from httpcore._exceptions import ConnectError
 import asyncio
 import logging
 import socket
 import ipaddress
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union, List
 from urllib.parse import urlparse
 import json
+from core.security import _is_ip_restricted
 
 logger = logging.getLogger(__name__)
 
@@ -84,14 +88,7 @@ def _ssrf_safe_url(url: str) -> bool:
                 )
                 return False
 
-            if (
-                addr.is_private
-                or addr.is_loopback
-                or addr.is_link_local
-                or addr.is_multicast
-                or addr.is_reserved
-                or addr.is_unspecified
-            ):
+            if _is_ip_restricted(addr):
                 logger.warning(
                     "SSRF guard (request-time): resolved '%s' for '%s' is internal — blocking.",
                     raw_ip, hostname
@@ -108,6 +105,92 @@ def _ssrf_safe_url(url: str) -> bool:
     return True
 
 
+class _SSRFSafeBackend(AutoBackend):
+    """
+    Network backend that performs DNS resolution and validates that resolved IPs
+    are not internal/private/loopback immediately before connecting the TCP socket,
+    completely closing the DNS rebinding TOCTOU window.
+    """
+
+    async def connect_tcp(
+        self,
+        host: str,
+        port: int,
+        timeout: Optional[float] = None,
+        local_address: Optional[str] = None,
+        socket_options: Optional[Any] = None,
+    ):
+        clean_host = host.strip("[]")
+        try:
+            addr = ipaddress.ip_address(clean_host)
+            is_ip = True
+        except ValueError:
+            is_ip = False
+
+        if is_ip:
+            if _is_ip_restricted(addr):
+                logger.warning("SSRF guard (connect-time): direct IP '%s' is internal — blocking.", clean_host)
+                raise ConnectError(f"SSRF Guard: IP {clean_host} is internal/restricted")
+            safe_ips = [clean_host]
+        else:
+            try:
+                loop = asyncio.get_running_loop()
+                results = await loop.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+            except socket.gaierror as e:
+                logger.warning("SSRF guard (connect-time): could not resolve '%s' — blocking.", host)
+                raise ConnectError(f"SSRF Guard: DNS resolution failed for {host}") from e
+
+            if not results:
+                logger.warning("SSRF guard (connect-time): no addresses for '%s' — blocking.", host)
+                raise ConnectError(f"SSRF Guard: No DNS records for {host}")
+
+            safe_ips = []
+            for _family, _socktype, _proto, _canonname, sockaddr in results:
+                raw_ip = sockaddr[0]
+                try:
+                    addr = ipaddress.ip_address(raw_ip)
+                except ValueError:
+                    logger.warning("SSRF guard (connect-time): malformed address '%s' for '%s' — blocking.", raw_ip, host)
+                    raise ConnectError(f"SSRF Guard: malformed IP {raw_ip} for {host}")
+
+                if _is_ip_restricted(addr):
+                    logger.warning("SSRF guard (connect-time): resolved '%s' for '%s' is internal — blocking.", raw_ip, host)
+                    raise ConnectError(f"SSRF Guard: IP {raw_ip} for {host} is internal/restricted")
+
+                if raw_ip not in safe_ips:
+                    safe_ips.append(raw_ip)
+
+        # Attempt connection across verified candidate IPs (supporting dual-stack fallback).
+        # Note: httpcore retains self._origin.host for TLS SNI and cert validation!
+        last_exc: Optional[Exception] = None
+        for candidate_ip in safe_ips:
+            try:
+                return await super().connect_tcp(
+                    host=candidate_ip,
+                    port=port,
+                    timeout=timeout,
+                    local_address=local_address,
+                    socket_options=socket_options,
+                )
+            except (ConnectError, httpcore.ConnectTimeout, OSError) as exc:
+                last_exc = exc
+                continue
+
+        if last_exc is not None:
+            raise last_exc
+
+
+class SSRFSafeAsyncHTTPTransport(httpx.AsyncHTTPTransport):
+    """
+    Custom HTTPX transport enforcing DNS resolution & SSRF IP validation
+    at TCP connection time to eliminate DNS rebinding TOCTOU vulnerabilities.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._pool._network_backend = _SSRFSafeBackend()
+
+
 class WebhookService:
     """Service for sending webhook notifications"""
     
@@ -116,16 +199,19 @@ class WebhookService:
         self._client: Optional[httpx.AsyncClient] = None
 
     def _get_client(self) -> httpx.AsyncClient:
-        """Get or initialize the persistent httpx.AsyncClient."""
+        """Get or initialize the persistent httpx.AsyncClient with SSRF-safe transport."""
         if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(
-                timeout=self.timeout,
-                follow_redirects=False,  # SSRF: never follow redirects
+            transport = SSRFSafeAsyncHTTPTransport(
                 limits=httpx.Limits(
                     max_connections=20,
                     max_keepalive_connections=5,
                     keepalive_expiry=5.0,  # Bounded keepalive prevents stale DNS entries
                 ),
+            )
+            self._client = httpx.AsyncClient(
+                transport=transport,
+                timeout=self.timeout,
+                follow_redirects=False,  # SSRF: never follow redirects
             )
         return self._client
 
@@ -207,6 +293,10 @@ class WebhookService:
                 )
                 return False, error_msg
 
+        except httpx.ConnectError as e:
+            error_msg = f"Webhook connection blocked by SSRF guard: {str(e)}"
+            logger.warning("send_webhook: connection error for event '%s': %s", event_type, error_msg)
+            return False, error_msg
         except asyncio.TimeoutError:
             error_msg = "Webhook request timed out"
             logger.warning("send_webhook: event '%s' timed out.", event_type)

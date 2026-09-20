@@ -548,6 +548,53 @@ def validate_password_strength(password: str) -> tuple[bool, str]:
     return True, ""
 
 
+_NAT64_PREFIX = ipaddress.IPv6Network("64:ff9b::/96")
+
+
+def _is_ip_restricted(addr: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """
+    Check if an IP address falls into a private, loopback, link-local, multicast,
+    unspecified, or reserved range. Handles IPv4-mapped and NAT64 addresses.
+    """
+    if (
+        addr.is_private
+        or addr.is_loopback
+        or addr.is_link_local
+        or addr.is_multicast
+        or addr.is_unspecified
+    ):
+        return True
+
+    if isinstance(addr, ipaddress.IPv6Address):
+        # IPv4-mapped IPv6 addresses (::ffff:0:0/96)
+        if addr.ipv4_mapped:
+            v4 = addr.ipv4_mapped
+            return (
+                v4.is_private
+                or v4.is_loopback
+                or v4.is_link_local
+                or v4.is_multicast
+                or v4.is_reserved
+                or v4.is_unspecified
+            )
+        # NAT64 Well-Known Prefix (64:ff9b::/96)
+        if addr in _NAT64_PREFIX:
+            v4 = ipaddress.IPv4Address(addr.packed[-4:])
+            return (
+                v4.is_private
+                or v4.is_loopback
+                or v4.is_link_local
+                or v4.is_multicast
+                or v4.is_reserved
+                or v4.is_unspecified
+            )
+
+    if addr.is_reserved:
+        return True
+
+    return False
+
+
 def _resolve_and_classify(hostname: str) -> bool:
     """
     Resolve *hostname* to all of its IP addresses and return ``True`` if **any**
@@ -607,14 +654,7 @@ def _resolve_and_classify(hostname: str) -> bool:
             logger.warning("SSRF guard: malformed address '%s' for '%s' — blocking.", raw_ip, hostname)
             return True
 
-        if (
-            addr.is_private       # RFC1918 + ULA + loopback (Python ≥3.11 broadened this)
-            or addr.is_loopback   # 127.x.x.x / ::1
-            or addr.is_link_local # 169.254.x.x / fe80::
-            or addr.is_multicast  # 224.x.x.x / ff::
-            or addr.is_reserved   # 0.0.0.0 and other IANA-reserved blocks
-            or addr.is_unspecified  # 0.0.0.0 / ::
-        ):
+        if _is_ip_restricted(addr):
             logger.warning(
                 "SSRF guard: resolved address '%s' for '%s' is internal — blocking.",
                 raw_ip, hostname

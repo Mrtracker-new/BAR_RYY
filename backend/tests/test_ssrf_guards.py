@@ -24,6 +24,10 @@ from services import webhook_service
         ("fe80::1", False),          # Link-local IPv6
         ("::ffff:127.0.0.1", False), # IPv4-mapped IPv6 loopback
         ("::ffff:10.0.0.1", False),  # IPv4-mapped IPv6 private
+        ("64:ff9b::5db8:d822", True), # NAT64 mapped public IP (93.184.216.34)
+        ("64:ff9b::7f00:1", False),  # NAT64 mapped loopback (127.0.0.1)
+        ("64:ff9b::a9fe:a9fe", False), # NAT64 mapped link-local (169.254.169.254)
+        ("64:ff9b::a00:1", False),   # NAT64 mapped private (10.0.0.1)
     ],
     ids=[
         "public_ip",
@@ -38,6 +42,10 @@ from services import webhook_service
         "link_local_v6",
         "v4_mapped_loopback",
         "v4_mapped_private",
+        "nat64_mapped_public",
+        "nat64_mapped_loopback",
+        "nat64_mapped_metadata",
+        "nat64_mapped_private",
     ],
 )
 def test_ssrf_safe_url_mocked_dns_resolution(resolved_ip, expected_safe):
@@ -98,3 +106,74 @@ def test_validate_webhook_url_empty_is_optional():
     """Verify validate_webhook_url returns True for empty/None input as webhooks are optional."""
     assert security.validate_webhook_url("") is True
     assert security.validate_webhook_url(None) is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "rebound_ip",
+    [
+        "127.0.0.1",
+        "10.0.0.1",
+        "172.16.0.1",
+        "192.168.1.1",
+        "169.254.169.254",
+        "::1",
+        "fc00::1",
+    ],
+    ids=[
+        "rebind_loopback_v4",
+        "rebind_private_10",
+        "rebind_private_172",
+        "rebind_private_192",
+        "rebind_link_local_metadata",
+        "rebind_loopback_v6",
+        "rebind_unique_local_v6",
+    ],
+)
+async def test_dns_rebinding_toctou_prevention(rebound_ip):
+    """
+    Verify that if a domain resolves to a public IP at pre-check time (_ssrf_safe_url),
+    but rebinds to an internal/restricted IP at TCP connect time, the SSRF-safe
+    transport blocks the connection immediately at socket creation.
+    """
+    service = webhook_service.WebhookService()
+
+    # Call 1 (pre-check _ssrf_safe_url): returns public IP 93.184.216.34
+    # Call 2 (connect-time _SSRFSafeBackend): returns rebound internal IP
+    dns_responses = [
+        [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 80))],
+        [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (rebound_ip, 80))],
+    ]
+
+    def mock_getaddrinfo(*args, **kwargs):
+        if dns_responses:
+            return dns_responses.pop(0)
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (rebound_ip, 80))]
+
+    with patch("socket.getaddrinfo", side_effect=mock_getaddrinfo):
+        success, error = await service.send_webhook(
+            webhook_url="http://attacker-rebind.com/webhook",
+            event_type="tamper_alert",
+            data={"test": "data"},
+        )
+        assert success is False
+        assert error is not None
+        assert "SSRF guard" in error or "SSRF Guard" in error
+
+    await service.close()
+
+
+@pytest.mark.asyncio
+async def test_ssrf_safe_transport_direct_internal_ip_blocked():
+    """Verify that direct connection attempts to internal IPs are blocked at connect time."""
+    service = webhook_service.WebhookService()
+    success, error = await service.send_webhook(
+        webhook_url="http://127.0.0.1:8080/webhook",
+        event_type="tamper_alert",
+        data={"test": "data"},
+    )
+    assert success is False
+    assert error is not None
+    assert "SSRF guard" in error or "SSRF Guard" in error
+    await service.close()
+
