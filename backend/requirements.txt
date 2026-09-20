@@ -11,5 +11,6 @@ asyncpg==0.30.0
 httpx==0.28.1
 python-dotenv==1.0.1
 Pillow==11.1.0
+portalocker==4.4.0
 # sib-api-v3-sdk removed — email is now sent via httpx + Brevo REST API
 # (the SDK was synchronous and blocked the event loop; httpx is fully async)

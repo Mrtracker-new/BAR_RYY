@@ -3,7 +3,7 @@ import os
 import hashlib
 import asyncio
 import logging
-import tempfile
+import portalocker
 from fastapi import APIRouter, Request, File, UploadFile, Form, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
@@ -32,64 +32,7 @@ router = APIRouter()
 
 _DECRYPT_RATE_LIMIT = 10  # requests per 60-second window per IP
 
-# ── Per-file lock registry (CWE-362 fix) ─────────────────────────────────────
-# Serialises the read → decrypt → increment → write/destroy cycle for each
-# bar_id so concurrent requests cannot both read the same current_views value
-# and silently lose an increment (or bypass burn-after-read).
-#
-# The registry uses reference counting to safely evict idle locks:
-#   _acquire_file_lock  → increments refcount (or creates lock + sets count=1)
-#   _release_file_lock  → decrements refcount; evicts when count reaches 0
-# Both operations hold _file_locks_guard, so no interleaving can cause a
-# coroutine to acquire a lock that another coroutine is about to evict.
-_file_locks: dict[str, asyncio.Lock] = {}
-_file_lock_refcounts: dict[str, int] = {}
-_file_locks_guard = asyncio.Lock()  # protects both dicts above
 
-
-async def _acquire_file_lock(bar_id: str) -> asyncio.Lock:
-    """Return (and lazily create) the per-file lock, incrementing its refcount."""
-    async with _file_locks_guard:
-        if bar_id not in _file_locks:
-            _file_locks[bar_id] = asyncio.Lock()
-            _file_lock_refcounts[bar_id] = 0
-        _file_lock_refcounts[bar_id] += 1
-        return _file_locks[bar_id]
-
-
-async def _release_file_lock(bar_id: str) -> None:
-    """Decrement the refcount and evict the lock when no waiters remain."""
-    async with _file_locks_guard:
-        count = _file_lock_refcounts.get(bar_id, 0) - 1
-        if count <= 0:
-            _file_locks.pop(bar_id, None)
-            _file_lock_refcounts.pop(bar_id, None)
-        else:
-            _file_lock_refcounts[bar_id] = count
-
-
-def _atomic_write(file_path: str, data: bytes) -> None:
-    """Write *data* to *file_path* atomically via temp-file + os.replace.
-
-    If the process crashes mid-write, *file_path* retains its previous
-    contents (or is absent) — it is never left in a half-written state.
-    """
-    dir_name = os.path.dirname(file_path)
-    fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix=".tmp")
-    try:
-        os.write(fd, data)
-        os.close(fd)
-        fd = -1  # mark as closed so the except branch doesn't double-close
-        os.replace(tmp_path, file_path)
-    except BaseException:
-        if fd >= 0:
-            os.close(fd)
-        # Clean up the temp file on failure; ignore errors (it may not exist).
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
 
 
 @router.post("/decrypt/{bar_id}")
@@ -142,8 +85,28 @@ async def decrypt_bar(
         # ------------------------------------------------------------------ #
         # 3. Read file data                                                    #
         # ------------------------------------------------------------------ #
-        with open(bar_file, "rb") as f:
-            bar_data = f.read()
+        # On Windows, a concurrent request may momentarily hold an exclusive
+        # lock while updating the view count or zeroing the file. Retry briefly
+        # on PermissionError/OSError before concluding the read failed.
+        bar_data = None
+        for _ in range(20):
+            try:
+                with open(bar_file, "rb") as f:
+                    bar_data = f.read()
+                break
+            except FileNotFoundError:
+                raise HTTPException(status_code=410, detail="File not found or already destroyed")
+            except (PermissionError, OSError):
+                await asyncio.sleep(0.01)
+
+        if not bar_data:
+            for _ in range(20):
+                try:
+                    crypto_utils.delete_file(bar_file)
+                    break
+                except (PermissionError, OSError):
+                    await asyncio.sleep(0.02)
+            raise HTTPException(status_code=410, detail="File not found or already destroyed")
 
         # ------------------------------------------------------------------ #
         # 4. Brute-force check + progressive delay                            #
@@ -176,29 +139,38 @@ async def decrypt_bar(
         try:
             decrypted_data, metadata, key, _enc, _salt = encryption_service.decrypt_bar_file(bar_data, password_to_use)
         except HTTPException as decrypt_exc:
-            # Wrong password (403) – record the failure so the brute-force
-            # counter advances and the progressive delay grows.
-            if decrypt_exc.status_code == 403:
-                security.record_password_attempt(client_ip, False, bar_id)
-                logger.warning('[%s] Wrong password from %s', bar_id, client_ip)
+            security.record_password_attempt(client_ip, False, bar_id)
 
-                # Notify the file owner via webhook if one is configured.
-                # We deliberately read the webhook URL from the raw bar_data
-                # header rather than the fully-decrypted metadata to avoid
-                # leaking file contents on auth failure.
-                try:
-                    raw_meta = _peek_metadata(bar_data)
-                    webhook_url = raw_meta.get("webhook_url") if raw_meta else None
-                    if webhook_url:
-                        webhook_srv = webhook_service.get_webhook_service()
+            is_wrong_password = (
+                decrypt_exc.status_code == 403
+                and (
+                    "Invalid password" in decrypt_exc.detail
+                    or "Password required" in decrypt_exc.detail
+                )
+            )
+
+            try:
+                raw_meta = _peek_metadata(bar_data)
+                webhook_url = raw_meta.get("webhook_url") if raw_meta else None
+                if webhook_url:
+                    webhook_srv = webhook_service.get_webhook_service()
+                    if is_wrong_password:
+                        logger.warning('[%s] Wrong password from %s', bar_id, client_ip)
                         track_background_task(asyncio.create_task(webhook_srv.send_access_denied_alert(
                             webhook_url=webhook_url,
                             filename=raw_meta.get("filename", "unknown"),
-                            reason="Invalid password (client-side decrypt)",
+                            reason=f"{decrypt_exc.detail} (client-side decrypt)",
                             ip_address=client_ip,
                         )))
-                except Exception:
-                    pass  # Never let webhook failures surface to the caller
+                    else:
+                        logger.warning('[%s] Tamper detected from %s: %s', bar_id, client_ip, decrypt_exc.detail)
+                        track_background_task(asyncio.create_task(webhook_srv.send_tamper_alert(
+                            webhook_url=webhook_url,
+                            filename=raw_meta.get("filename", "unknown"),
+                            token=bar_id,
+                        )))
+            except Exception:
+                pass
             raise
 
         except Exception as tamper_exc:
@@ -233,8 +205,24 @@ async def decrypt_bar(
             decrypt_semaphore.release()
 
         # ------------------------------------------------------------------ #
-        # 6. Successful decryption — clear brute-force counter                #
+        # 6. Validate access — expiry and password                            #
         # ------------------------------------------------------------------ #
+        is_valid, errors = client_storage.validate_client_access(metadata, password_to_use)
+        if not is_valid:
+            error_msg = "; ".join(errors)
+            if any(e for e in errors if "password" in e.lower()):
+                security.record_password_attempt(client_ip, False, bar_id)
+            # If expired, delete the expired file from disk
+            if any("expired" in e.lower() for e in errors):
+                for _ in range(20):
+                    try:
+                        crypto_utils.delete_file(bar_file)
+                        logger.info('[%s] Expired BAR file destroyed from disk', bar_id)
+                        break
+                    except (PermissionError, OSError):
+                        await asyncio.sleep(0.02)
+            raise HTTPException(status_code=403, detail=error_msg)
+
         if metadata.get("password_protected"):
             security.record_password_attempt(client_ip, True, bar_id)
             logger.info('[%s] Correct password from %s', bar_id, client_ip)
@@ -247,89 +235,126 @@ async def decrypt_bar(
         # both compute N+1, and the file silently loses one increment —
         # breaking the burn-after-read guarantee for max_views files.
         #
-        # Fix: hold a per-bar_id asyncio.Lock around the entire cycle and
-        # **re-read the file from disk inside the lock** so the current_views
-        # snapshot is authoritative.  We use peek_bar_metadata (JSON parse
-        # only, zero PBKDF2 cost) to obtain the fresh view count.
-        #
-        # The decrypted_data returned to the caller was derived from the
-        # pre-lock read, which is fine — the file content does not change
-        # between views; only the view counter does.
+        # Use OS-level kernel file locking (portalocker) so the read,
+        # increment, and write/destroy operations are synchronized across all
+        # processes and workers accessing the BAR file.
         max_views = metadata.get("max_views", 0)
-        file_lock = await _acquire_file_lock(bar_id)
-        try:
-            async with file_lock:
-                # ── Re-read the file under the lock ──────────────────────
-                # Another request may have incremented or destroyed the
-                # file between our initial read and the lock acquisition.
-                try:
-                    with open(bar_file, "rb") as f:
-                        fresh_bar_data = f.read()
-                except FileNotFoundError:
-                    # Destroyed by a concurrent request that won the lock
-                    # before us.  The file is gone; report 410.
-                    raise HTTPException(
-                        status_code=410,
-                        detail="File not found or already destroyed"
-                    )
-
-                # Re-derive current_views from the freshly-read bytes.
-                # peek_bar_metadata is a lightweight JSON parse with zero
-                # crypto cost (no PBKDF2, no HMAC, no Fernet) — it reads
-                # the plaintext metadata header that sits outside the
-                # encrypted payload.
-                try:
-                    fresh_metadata = crypto_utils.peek_bar_metadata(
-                        fresh_bar_data
-                    )
-                except (ValueError, KeyError) as parse_err:
-                    # The file is unreadable (corrupted / truncated mid-write
-                    # by a prior crash).  Do NOT fall back to stale metadata:
-                    # that would silently reset the view counter.  Surface a
-                    # 500 so the operator can investigate.
-                    logger.error(
-                        '[%s] Cannot read metadata from on-disk BAR file '
-                        'inside view-count lock: %s',
-                        bar_id, parse_err,
-                    )
-                    raise HTTPException(
-                        status_code=500,
-                        detail=security.OPAQUE_500_DETAIL,
-                    )
-
-                current_views = fresh_metadata.get("current_views", 0) + 1
-                should_destroy = (
-                    max_views > 0 and current_views >= max_views
+        f = None
+        for _ in range(20):
+            try:
+                f = open(bar_file, "r+b")
+                break
+            except FileNotFoundError:
+                raise HTTPException(
+                    status_code=410,
+                    detail="File not found or already destroyed"
                 )
+            except (PermissionError, OSError):
+                await asyncio.sleep(0.01)
 
-                if not should_destroy:
-                    # update_bar_view_count is the single authoritative
-                    # entry point for persisting a view-count change.
-                    # See its docstring for why pack_bar_file is not
-                    # reused here.
-                    #
-                    # ValueError signals a legacy pre-HMAC file — skip
-                    # the write but still serve the content.
+        if not f:
+            raise HTTPException(
+                status_code=410,
+                detail="File not found or already destroyed"
+            )
+
+        try:
+            with f:
+                portalocker.lock(f, portalocker.LOCK_EX)
+                try:
+                    fresh_bar_data = f.read()
+                    if not fresh_bar_data:
+                        # File was destroyed/truncated by a concurrent request that won the lock
+                        raise HTTPException(
+                            status_code=410,
+                            detail="File not found or already destroyed"
+                        )
+
                     try:
-                        updated_bar = crypto_utils.update_bar_view_count(
-                            fresh_bar_data, key
+                        fresh_metadata = crypto_utils.peek_bar_metadata(
+                            fresh_bar_data
                         )
-                        _atomic_write(bar_file, updated_bar)
-                    except ValueError as legacy_err:
-                        logger.warning(
-                            '[%s] View-count not persisted (legacy unsigned '
-                            'file): %s',
-                            bar_id, legacy_err,
+                    except (ValueError, KeyError) as parse_err:
+                        # The file is unreadable (corrupted / truncated mid-write
+                        # by a prior crash).  Do NOT fall back to stale metadata:
+                        # that would silently reset the view counter.  Surface a
+                        # 500 so the operator can investigate.
+                        logger.error(
+                            '[%s] Cannot read metadata from on-disk BAR file '
+                            'inside view-count lock: %s',
+                            bar_id, parse_err,
                         )
-                else:
-                    # Destroy the file — view limit reached.
-                    crypto_utils.delete_file(bar_file)
-                    logger.info(
-                        '[%s] File destroyed after reaching max views',
+                        raise HTTPException(
+                            status_code=500,
+                            detail=security.OPAQUE_500_DETAIL,
+                        )
+
+                    current_on_disk_views = fresh_metadata.get("current_views", 0)
+                    if max_views > 0 and current_on_disk_views >= max_views:
+                        raise HTTPException(
+                            status_code=410,
+                            detail="File not found or already destroyed"
+                        )
+
+                    current_views = current_on_disk_views + 1
+                    should_destroy = (
+                        max_views > 0 and current_views >= max_views
+                    )
+
+                    if not should_destroy:
+                        # update_bar_view_count is the single authoritative
+                        # entry point for persisting a view-count change.
+                        #
+                        # ValueError signals a legacy pre-HMAC file — skip
+                        # the write but still serve the content.
+                        try:
+                            updated_bar = crypto_utils.update_bar_view_count(
+                                fresh_bar_data, key
+                            )
+                            f.seek(0)
+                            f.write(updated_bar)
+                            f.truncate()
+                            f.flush()
+                            os.fsync(f.fileno())
+                        except ValueError as legacy_err:
+                            logger.warning(
+                                '[%s] View-count not persisted (legacy unsigned '
+                                'file): %s',
+                                bar_id, legacy_err,
+                            )
+                    else:
+                        # Destroy the file — view limit reached.
+                        # Truncate under the lock so any waiting process immediately sees
+                        # an empty/destroyed file upon acquiring the lock.
+                        f.seek(0)
+                        f.truncate(0)
+                        f.flush()
+                finally:
+                    portalocker.unlock(f)
+
+            if should_destroy:
+                deleted = False
+                for attempt in range(40):
+                    try:
+                        crypto_utils.delete_file(bar_file)
+                        deleted = True
+                        break
+                    except (PermissionError, OSError):
+                        await asyncio.sleep(min(0.02 * (1.1 ** attempt), 0.1))
+                if not deleted:
+                    logger.warning(
+                        '[%s] File zeroed but deletion deferred',
                         bar_id,
                     )
-        finally:
-            await _release_file_lock(bar_id)
+                logger.info(
+                    '[%s] File destroyed after reaching max views',
+                    bar_id,
+                )
+        except FileNotFoundError:
+            raise HTTPException(
+                status_code=410,
+                detail="File not found or already destroyed"
+            )
 
         # ------------------------------------------------------------------ #
         # 8. Return decrypted file                                             #
@@ -343,7 +368,11 @@ async def decrypt_bar(
             headers={
                 "Content-Disposition": security.build_content_disposition(original_filename, 'attachment'),
                 "X-BAR-Views-Remaining": str(views_remaining),
+                "X-BAR-Should-Destroy": str(should_destroy).lower(),
                 "X-BAR-Destroyed": str(should_destroy).lower(),
+                "X-BAR-View-Only": str(metadata.get('view_only', False)).lower(),
+                "X-BAR-Filename": security.sanitize_header_value(original_filename),
+                "X-BAR-Metadata": security.build_safe_metadata_header(metadata),
             },
         )
         return security.add_security_headers(response)
@@ -382,7 +411,7 @@ async def decrypt_uploaded_bar_file(
     password: str = Form(""),
     encryption_service: EncryptionService = Depends(get_encryption_service_dep)
 ):
-    """Decrypt a .bar file that was uploaded directly (tracks view count properly)."""
+    """Decrypt a .bar file that was uploaded directly (processed in-memory, view limits not enforced)."""
     try:
         # Rate limit
         security.check_rate_limit(req, limit=20)
@@ -428,38 +457,39 @@ async def decrypt_uploaded_bar_file(
         try:
             decrypted_data, metadata, key, _enc, _salt = encryption_service.decrypt_bar_file(bar_data, password_to_use)
         except HTTPException as e:
-            if e.status_code == 403:
-                security.record_password_attempt(client_ip, False, file_token)
+            security.record_password_attempt(client_ip, False, file_token)
 
-                # decrypt_bar_file() maps both "wrong password" and
-                # "genuine tampering" to HTTPException(403).  We distinguish
-                # them by the detail string so we can fire the correct webhook
-                # and log the correct event.
-                is_wrong_password = (
+            # decrypt_bar_file() maps "wrong password" to HTTPException(403) and
+            # "tampering/corruption" to HTTPException(403/500). We distinguish
+            # them by status code and detail string so we can fire the correct webhook.
+            is_wrong_password = (
+                e.status_code == 403
+                and (
                     "Invalid password" in e.detail
                     or "Password required" in e.detail
                 )
-                try:
-                    raw_meta = _peek_metadata(bar_data)
-                    webhook_url = raw_meta.get("webhook_url") if raw_meta else None
-                    if webhook_url:
-                        webhook_srv = webhook_service.get_webhook_service()
-                        if is_wrong_password:
-                            track_background_task(asyncio.create_task(webhook_srv.send_access_denied_alert(
-                                webhook_url=webhook_url,
-                                filename=raw_meta.get("filename", "unknown"),
-                                reason=f"{e.detail} (client-side decrypt)",
-                                ip_address=client_ip,
-                            )))
-                        else:
-                            # Tamper or corruption — fire tamper alert
-                            track_background_task(asyncio.create_task(webhook_srv.send_tamper_alert(
-                                webhook_url=webhook_url,
-                                filename=raw_meta.get("filename", "unknown"),
-                                token=file_token,
-                            )))
-                except Exception:
-                    pass  # Never let webhook failures mask the auth error
+            )
+            try:
+                raw_meta = _peek_metadata(bar_data)
+                webhook_url = raw_meta.get("webhook_url") if raw_meta else None
+                if webhook_url:
+                    webhook_srv = webhook_service.get_webhook_service()
+                    if is_wrong_password:
+                        track_background_task(asyncio.create_task(webhook_srv.send_access_denied_alert(
+                            webhook_url=webhook_url,
+                            filename=raw_meta.get("filename", "unknown"),
+                            reason=f"{e.detail} (client-side decrypt)",
+                            ip_address=client_ip,
+                        )))
+                    else:
+                        # Tamper or corruption — fire tamper alert
+                        track_background_task(asyncio.create_task(webhook_srv.send_tamper_alert(
+                            webhook_url=webhook_url,
+                            filename=raw_meta.get("filename", "unknown"),
+                            token=file_token,
+                        )))
+            except Exception:
+                pass  # Never let webhook failures mask the auth error
             raise
         finally:
             decrypt_semaphore.release()
@@ -490,13 +520,14 @@ async def decrypt_uploaded_bar_file(
         logger.info('Access granted (client-side — view limits NOT enforced)')
         
         # Return file data (streamed in chunks for backpressure)
-        return StreamingResponse(
+        response = StreamingResponse(
             iter_bytes(decrypted_data),
             media_type="application/octet-stream",
             headers={
                 "Content-Disposition": security.build_content_disposition(metadata.get('filename', 'decrypted_file'), 'attachment'),
                 "X-BAR-Views-Remaining": "0",
                 "X-BAR-Should-Destroy": "false",
+                "X-BAR-Destroyed": "false",
                 "X-BAR-View-Only": str(metadata.get('view_only', False)).lower(),
                 "X-BAR-Filename": security.sanitize_header_value(metadata.get("filename", "decrypted_file")),
                 # Only allowlisted, non-sensitive fields are included.
@@ -508,6 +539,7 @@ async def decrypt_uploaded_bar_file(
                 "X-BAR-Metadata": security.build_safe_metadata_header(metadata),
             }
         )
+        return security.add_security_headers(response)
         
     except HTTPException:
         raise
