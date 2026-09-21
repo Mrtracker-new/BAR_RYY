@@ -791,5 +791,71 @@ describe('BurnChatPage Utilities & Security', () => {
       expect(encryptSpy).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe('In-Memory Cryptographic Key Scrubbing on Component Unmount', () => {
+    let originalWebSocket;
+    let mockWsInstances = [];
+
+    beforeEach(() => {
+      mockWsInstances = [];
+      axios.get.mockResolvedValue({
+        data: { exists: true, seconds_remaining: 300, participant_count: 2 },
+      });
+      originalWebSocket = globalThis.WebSocket;
+      globalThis.WebSocket = class MockWebSocket {
+        static OPEN = 1;
+        constructor(url) {
+          this.url = url;
+          this.readyState = 1;
+          this.send = vi.fn();
+          this.close = vi.fn();
+          mockWsInstances.push(this);
+          setTimeout(() => {
+            if (this.onopen) this.onopen();
+          }, 0);
+        }
+      };
+      globalThis.WebSocket.OPEN = 1;
+    });
+
+    afterEach(() => {
+      cleanup();
+      globalThis.WebSocket = originalWebSocket;
+      vi.restoreAllMocks();
+    });
+
+    it('scrubs key material and clears peer maps/sets on component unmount', async () => {
+      const mapClearSpy = vi.spyOn(Map.prototype, 'clear');
+      const setClearSpy = vi.spyOn(Set.prototype, 'clear');
+
+      vi.spyOn(E2E, 'isAvailable').mockReturnValue(true);
+      vi.spyOn(E2E, 'generateKeyPair').mockResolvedValue({
+        publicKey: { extractable: true },
+        privateKey: { extractable: false },
+      });
+      vi.spyOn(E2E, 'exportPublicKey').mockResolvedValue('pub');
+      vi.spyOn(E2E, 'generateSessionKey').mockResolvedValue({});
+      vi.spyOn(E2E, 'sessionFingerprint').mockResolvedValue('0123456789ABCDEF');
+
+      const { render, screen, fireEvent, waitFor } = await import('@testing-library/react');
+      const BurnChatPage = (await import('../components/BurnChatPage')).default;
+
+      const { unmount } = render(<BurnChatPage token="scrub-test-token" />);
+
+      const nameInput = await screen.findByPlaceholderText(/Your name…/i);
+      fireEvent.change(nameInput, { target: { value: 'Alice' } });
+
+      const joinBtn = screen.getByRole('button', { name: /Join Session/i });
+      fireEvent.click(joinBtn);
+
+      await waitFor(() => expect(mockWsInstances.length).toBeGreaterThan(0));
+
+      unmount();
+
+      expect(mapClearSpy).toHaveBeenCalled();
+      expect(setClearSpy).toHaveBeenCalled();
+    });
+  });
 });
+
 

@@ -644,6 +644,20 @@ export default function BurnChatPage({ token }) {
     wsRef.current?.close();
   }, []);
 
+  /* in-memory cryptographic key scrubbing on unmount */
+  useEffect(() => {
+    return () => {
+      if (e2eRef.current) {
+        e2eRef.current.keyPair = null;
+        e2eRef.current.sessionKey = null;
+        e2eRef.current.pendingSessionKeys.clear();
+        e2eRef.current.pubkeys.clear();
+        e2eRef.current.keyedPeers.clear();
+      }
+    };
+  }, []);
+
+
   const handleJoin = useCallback((name, pin) => {
     setJoinError(null);
     setMyName(name);
