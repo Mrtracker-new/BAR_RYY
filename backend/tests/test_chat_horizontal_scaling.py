@@ -6,7 +6,7 @@ import json
 import time
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import services.chat_service as svc
@@ -33,6 +33,10 @@ class FakePubSub:
             if self in self.fake_redis._subscribers[channel]:
                 self.fake_redis._subscribers[channel].remove(self)
 
+    async def close(self):
+        self.subscribed = False
+        await self.unsubscribe(self.channel)
+
     async def listen(self):
         while self.subscribed:
             try:
@@ -41,10 +45,7 @@ class FakePubSub:
             except asyncio.TimeoutError:
                 continue
             except asyncio.CancelledError:
-                break
-
-    async def close(self):
-        await self.unsubscribe(self.channel)
+                raise
 
 
 class FakeAsyncRedisClient:
@@ -605,3 +606,67 @@ async def test_global_session_cap_enforced_across_workers():
         assert t3 is not None
     finally:
         svc.MAX_SESSIONS = orig_max
+
+
+@pytest.mark.asyncio
+async def test_close_async_redis_client_with_aclose():
+    """Verify close_async_redis_client invokes aclose and resets _async_redis_client to None."""
+    mock_client = AsyncMock()
+    mock_client.aclose = AsyncMock()
+    svc.set_async_redis_client(mock_client)
+    assert svc._async_redis_client is mock_client
+
+    await svc.close_async_redis_client()
+    assert svc._async_redis_client is None
+    mock_client.aclose.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_close_async_redis_client_with_close():
+    """Verify close_async_redis_client falls back to close and resets _async_redis_client to None."""
+    mock_client = AsyncMock(spec=["close"])
+    mock_client.close = AsyncMock()
+    svc.set_async_redis_client(mock_client)
+    assert svc._async_redis_client is mock_client
+
+    await svc.close_async_redis_client()
+    assert svc._async_redis_client is None
+    mock_client.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_close_async_redis_client_when_none():
+    """Verify close_async_redis_client handles None safely without errors."""
+    svc.set_async_redis_client(None)
+    await svc.close_async_redis_client()
+    assert svc._async_redis_client is None
+
+
+@pytest.mark.asyncio
+async def test_app_lifespan_closes_async_redis_client():
+    """Verify app.py lifespan calls chat_service.close_async_redis_client on shutdown."""
+    from app import lifespan, app
+
+    mock_webhook_svc = MagicMock()
+    mock_webhook_svc.close = AsyncMock()
+
+    async def _dummy_cleanup():
+        try:
+            await asyncio.sleep(100)
+        except asyncio.CancelledError:
+            pass
+
+    with patch("services.chat_service.close_async_redis_client", new_callable=AsyncMock) as mock_close_async_redis:
+        with patch("services.cleanup.run_cleanup_loop", side_effect=_dummy_cleanup):
+            with patch("services.analytics.init_httpx_client", new_callable=AsyncMock):
+                with patch("core.database.init_database", new_callable=AsyncMock):
+                    with patch("core.database.close_database", new_callable=AsyncMock):
+                        with patch("services.chat_service.close_chat_service", new_callable=AsyncMock):
+                            with patch("services.analytics.close_httpx_client", new_callable=AsyncMock):
+                                with patch("services.webhook_service.get_webhook_service", return_value=mock_webhook_svc):
+                                    with patch("core.security.close_redis_client"):
+                                        async with lifespan(app):
+                                            pass
+    mock_close_async_redis.assert_awaited_once()
+
+

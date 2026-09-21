@@ -26,6 +26,7 @@ import string
 import time
 import json
 import uuid
+import inspect
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from enum import Enum
@@ -506,10 +507,28 @@ _ASYNC_REDIS_RETRY_INTERVAL: float = 30.0
 _PUBSUB_TASKS: Dict[str, asyncio.Task] = {}
 
 
+def _is_redis_enabled() -> bool:
+    """Return True if Redis is configured or an async client is explicitly set."""
+    if aioredis is None:
+        return False
+    redis_url = getattr(settings, "redis_url", "") or os.getenv("REDIS_URL", "")
+    return bool(redis_url) or _async_redis_client is not None
+
+
+def _handle_async_redis_failure(e: Exception) -> None:
+    """Handle a runtime async Redis operation failure by backing off and falling back."""
+    global _async_redis_client, _last_async_redis_retry
+    logger.warning("Async Redis operation failed (%s); falling back to in-memory chat", e)
+    if aioredis is not None and isinstance(e, (aioredis.ConnectionError, aioredis.TimeoutError)):
+        _async_redis_client = None
+        _last_async_redis_retry = time.time()
+
+
 def set_async_redis_client(client: Any) -> None:
     """Set or override the async Redis client (useful for tests or manual injection)."""
-    global _async_redis_client
+    global _async_redis_client, _last_async_redis_retry
     _async_redis_client = client
+    _last_async_redis_retry = 0.0
 
 
 async def get_async_redis_client() -> Optional[Any]:
@@ -554,6 +573,59 @@ async def get_async_redis_client() -> Optional[Any]:
         return None
 
 
+async def close_async_redis_client() -> None:
+    """Close the async Redis client connection pool and all Pub/Sub listeners on shutdown."""
+    global _async_redis_client, _last_async_redis_retry
+    try:
+        current_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        current_loop = None
+
+    pubsub_tasks = list(_PUBSUB_TASKS.values())
+    same_loop_tasks = []
+    for task in pubsub_tasks:
+        if not task.done():
+            try:
+                task_loop = task.get_loop()
+                if not task_loop.is_closed():
+                    if task_loop == current_loop:
+                        task.cancel()
+                        same_loop_tasks.append(task)
+                    else:
+                        task_loop.call_soon_threadsafe(task.cancel)
+            except Exception:
+                pass
+
+    if same_loop_tasks and current_loop is not None:
+        await asyncio.gather(*same_loop_tasks, return_exceptions=True)
+    _PUBSUB_TASKS.clear()
+
+    if _async_redis_client is not None:
+        client = _async_redis_client
+        _async_redis_client = None
+        _last_async_redis_retry = time.time()
+        try:
+            aclose_fn = getattr(client, "aclose", None)
+            if callable(aclose_fn):
+                res = aclose_fn()
+                if asyncio.iscoroutine(res) or inspect.isawaitable(res):
+                    await res
+            elif hasattr(client, "close"):
+                res = client.close()
+                if asyncio.iscoroutine(res) or inspect.isawaitable(res):
+                    await res
+
+            pool = getattr(client, "connection_pool", None)
+            if pool is not None:
+                pool_disconnect = getattr(pool, "disconnect", None)
+                if callable(pool_disconnect):
+                    res = pool_disconnect()
+                    if asyncio.iscoroutine(res) or inspect.isawaitable(res):
+                        await res
+        except Exception as exc:
+            logger.debug("Error closing async Redis client: %s", exc)
+
+
 async def _get_participant_list_async(session: _ChatSession) -> list[dict]:
     """Get the global participant roster across all workers from Redis (or local session)."""
     client = await get_async_redis_client()
@@ -586,6 +658,10 @@ async def _get_participant_count_async(session: _ChatSession) -> int:
 
 async def _pubsub_listener(token: str) -> None:
     """Listen to Redis Pub/Sub for room events and dispatch to local participants."""
+    if not _is_redis_enabled():
+        _PUBSUB_TASKS.pop(token, None)
+        return
+
     channel = f"chat:channel:{token}"
     while True:
         session = _SESSIONS.get(token)
@@ -594,7 +670,9 @@ async def _pubsub_listener(token: str) -> None:
 
         client = await get_async_redis_client()
         if client is None:
-            await asyncio.sleep(1.0)
+            if not _is_redis_enabled():
+                break
+            await asyncio.sleep(5.0)
             continue
 
         pubsub = client.pubsub()
@@ -603,6 +681,7 @@ async def _pubsub_listener(token: str) -> None:
             async for message in pubsub.listen():
                 session = _SESSIONS.get(token)
                 if session is None:
+                    _PUBSUB_TASKS.pop(token, None)
                     return
 
                 if message is None or message.get("type") != "message":
@@ -635,6 +714,7 @@ async def _pubsub_listener(token: str) -> None:
                             except (RuntimeError, Exception):
                                 pass
                         _SESSIONS.pop(token, None)
+                        _PUBSUB_TASKS.pop(token, None)
                         return
                     elif payload.get("type") == "room_locked":
                         session.locked = bool(payload.get("locked", True))
@@ -674,12 +754,22 @@ async def _pubsub_listener(token: str) -> None:
             break
         except Exception as exc:
             logger.debug("Pub/Sub listener error for %s: %s (reconnecting)", token[:8], exc)
+            _handle_async_redis_failure(exc)
             await asyncio.sleep(0.5)
+        else:
+            break
         finally:
             try:
                 await pubsub.unsubscribe(channel)
-                await pubsub.close()
-            except Exception:
+            except (Exception, asyncio.CancelledError):
+                pass
+            try:
+                close_fn = getattr(pubsub, "close", None)
+                if callable(close_fn):
+                    res = close_fn()
+                    if asyncio.iscoroutine(res) or inspect.isawaitable(res):
+                        await res
+            except (Exception, asyncio.CancelledError):
                 pass
 
     _PUBSUB_TASKS.pop(token, None)
@@ -687,6 +777,8 @@ async def _pubsub_listener(token: str) -> None:
 
 def _ensure_pubsub_listener(token: str) -> None:
     """Ensure a background Redis Pub/Sub listener is active for this session token."""
+    if not _is_redis_enabled():
+        return
     task = _PUBSUB_TASKS.get(token)
     if task is None or task.done():
         listener_task = asyncio.create_task(_pubsub_listener(token))
@@ -724,10 +816,13 @@ async def _deliver_local_broadcast(
     done, pending = await asyncio.wait(task_map.keys(), timeout=1.0)
 
     dead: list[str] = []
-    # Cancel any broadcasts that did not finish within the 3.0s timeout
+    # Cancel any broadcasts that did not finish within the 1.0s timeout
     for task in pending:
         task.cancel()
         dead.append(task_map[task])
+
+    if pending:
+        await asyncio.gather(*pending, return_exceptions=True)
 
     # Check for send errors in completed tasks
     for task in done:
@@ -788,6 +883,7 @@ async def _broadcast(
             return
         except Exception as exc:
             logger.warning("Redis publish failed (%s), falling back to local broadcast", exc)
+            _handle_async_redis_failure(exc)
 
     # In-memory fallback direct delivery
     await _deliver_local_broadcast(session, payload, exclude_ws_id)
@@ -890,7 +986,18 @@ async def _destroy_session(token: str) -> None:
     # Clean up Pub/Sub listener task
     task = _PUBSUB_TASKS.pop(token, None)
     if task and not task.done():
-        task.cancel()
+        try:
+            task_loop = task.get_loop()
+            if not task_loop.is_closed():
+                if task_loop == asyncio.get_running_loop():
+                    task.cancel()
+                else:
+                    task_loop.call_soon_threadsafe(task.cancel)
+        except Exception:
+            try:
+                task.cancel()
+            except Exception:
+                pass
 
     # Delete from Redis
     client = await get_async_redis_client()
@@ -912,30 +1019,37 @@ async def _destroy_session(token: str) -> None:
 async def close_chat_service() -> None:
     """Cancel all active countdown tasks, Pub/Sub listeners, and clear sessions on shutdown."""
     global _async_redis_client
+    try:
+        current_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        current_loop = None
+
+    destroy_tasks = []
+    current_task = None
+    try:
+        current_task = asyncio.current_task()
+    except RuntimeError:
+        pass
+
     for session in list(_SESSIONS.values()):
         destroy_task = getattr(session, "_destroy_task", None)
-        if destroy_task and not destroy_task.done():
+        if destroy_task and destroy_task != current_task and not destroy_task.done():
             try:
-                if not destroy_task.get_loop().is_closed():
-                    destroy_task.cancel()
+                task_loop = destroy_task.get_loop()
+                if not task_loop.is_closed():
+                    if task_loop == current_loop:
+                        destroy_task.cancel()
+                        destroy_tasks.append(destroy_task)
+                    else:
+                        task_loop.call_soon_threadsafe(destroy_task.cancel)
             except (RuntimeError, Exception):
                 pass
 
-    for task in list(_PUBSUB_TASKS.values()):
-        if not task.done():
-            try:
-                task.cancel()
-            except Exception:
-                pass
-    _PUBSUB_TASKS.clear()
     _SESSIONS.clear()
+    if destroy_tasks and current_loop is not None:
+        await asyncio.gather(*destroy_tasks, return_exceptions=True)
 
-    if _async_redis_client is not None:
-        try:
-            await _async_redis_client.close()
-        except Exception:
-            pass
-        _async_redis_client = None
+    await close_async_redis_client()
 
 
 # ---------------------------------------------------------------------------
@@ -1380,7 +1494,18 @@ async def leave_session(token: str, ws_id: str) -> None:
     if len(session.participants) == 0:
         task = _PUBSUB_TASKS.pop(token, None)
         if task and not task.done():
-            task.cancel()
+            try:
+                task_loop = task.get_loop()
+                if not task_loop.is_closed():
+                    if task_loop == asyncio.get_running_loop():
+                        task.cancel()
+                    else:
+                        task_loop.call_soon_threadsafe(task.cancel)
+            except Exception:
+                try:
+                    task.cancel()
+                except Exception:
+                    pass
 
     if p_name:
         participant_list = await _get_participant_list_async(session)

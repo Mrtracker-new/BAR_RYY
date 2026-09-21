@@ -71,6 +71,7 @@ async def lifespan(app: FastAPI):
     await webhook_service.get_webhook_service().close()
     await database.close_database()
     security.close_redis_client()
+    await chat_service.close_async_redis_client()
     logger.info("%s shutdown complete", settings.app_name)
 
 
