@@ -191,3 +191,62 @@ def test_cleanup_rate_limit_storage():
     assert res["password_attempts"] >= 1
     assert "1.2.3.4" not in security.rate_limit_storage
     assert "1.2.3.4:token" not in security.password_attempts
+
+
+@pytest.mark.asyncio
+async def test_sqlite_pool_begin_immediate_retry_success():
+    """Verify begin_immediate retries on lock contention and succeeds once lock is cleared."""
+    import sqlite3
+    from unittest.mock import AsyncMock, patch
+    from core.database import SQLitePool
+
+    mock_conn = AsyncMock()
+    # Fail twice with "database is locked", then succeed
+    mock_conn.execute.side_effect = [
+        sqlite3.OperationalError("database is locked"),
+        sqlite3.OperationalError("database is locked"),
+        AsyncMock(),
+    ]
+
+    with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+        await SQLitePool.begin_immediate(mock_conn, max_attempts=5)
+
+    assert mock_conn.execute.call_count == 3
+    assert mock_sleep.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_sqlite_pool_begin_immediate_retry_exhausted():
+    """Verify begin_immediate raises sqlite3.OperationalError when retry attempts are exhausted."""
+    import sqlite3
+    from unittest.mock import AsyncMock, patch
+    from core.database import SQLitePool
+
+    mock_conn = AsyncMock()
+    mock_conn.execute.side_effect = sqlite3.OperationalError("database is locked")
+
+    with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+        with pytest.raises(sqlite3.OperationalError, match="database is locked"):
+            await SQLitePool.begin_immediate(mock_conn, max_attempts=4)
+
+    assert mock_conn.execute.call_count == 4
+    assert mock_sleep.call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_sqlite_pool_begin_immediate_non_lock_error_raises_immediately():
+    """Verify begin_immediate does not retry on unrelated OperationalErrors."""
+    import sqlite3
+    from unittest.mock import AsyncMock, patch
+    from core.database import SQLitePool
+
+    mock_conn = AsyncMock()
+    mock_conn.execute.side_effect = sqlite3.OperationalError("syntax error near IMMEDIATE")
+
+    with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+        with pytest.raises(sqlite3.OperationalError, match="syntax error"):
+            await SQLitePool.begin_immediate(mock_conn, max_attempts=5)
+
+    assert mock_conn.execute.call_count == 1
+    assert mock_sleep.call_count == 0
+

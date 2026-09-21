@@ -14,6 +14,8 @@ import hashlib
 import hmac
 import asyncio
 import logging
+import random
+import sqlite3
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any, List
 import aiosqlite
@@ -269,6 +271,37 @@ class SQLitePool:
                     _logger.debug("SQLite rollback on return to pool ignored: %s", _exc)
                 await self._pool.put(conn)
 
+    @staticmethod
+    async def begin_immediate(conn: aiosqlite.Connection, max_attempts: int = 5) -> None:
+        """Execute BEGIN IMMEDIATE with randomized exponential backoff retry on lock contention.
+
+        Under a high concurrent write burst across pooled connections, SQLite can throw
+        sqlite3.OperationalError: database is locked before timeout. Retrying with randomized
+        exponential jitter allows concurrent writers to complete and release the lock.
+        """
+        max_attempts = max(1, max_attempts)
+        for attempt in range(max_attempts):
+            try:
+                await conn.execute("BEGIN IMMEDIATE")
+                return
+            except (sqlite3.OperationalError, aiosqlite.OperationalError) as exc:
+                if "locked" in str(exc).lower() or "busy" in str(exc).lower():
+                    if attempt < max_attempts - 1:
+                        jitter = 0.05 * (2 ** attempt) + random.uniform(0, 0.03)
+                        _logger.debug(
+                            "SQLite lock contention on BEGIN IMMEDIATE (attempt %d/%d); retrying in %.3fs: %s",
+                            attempt + 1, max_attempts, jitter, exc,
+                        )
+                        await asyncio.sleep(jitter)
+                    else:
+                        _logger.warning(
+                            "SQLite BEGIN IMMEDIATE lock contention retry exhausted after %d attempts: %s",
+                            max_attempts, exc,
+                        )
+                        raise
+                else:
+                    raise
+
     async def close(self):
         """Close all connections in the pool."""
         if self._closed:
@@ -319,6 +352,13 @@ class Database:
             )
         async with self._sqlite_pool.acquire() as conn:
             yield conn
+
+    async def _begin_immediate(self, conn: aiosqlite.Connection, max_attempts: int = 5) -> None:
+        """Execute BEGIN IMMEDIATE on SQLite connection with retry on lock contention."""
+        if self._sqlite_pool is not None:
+            await self._sqlite_pool.begin_immediate(conn, max_attempts=max_attempts)
+        else:
+            await SQLitePool.begin_immediate(conn, max_attempts=max_attempts)
 
     async def _init_sqlite(self):
         """Initialize SQLite database with connection pool and WAL mode."""
@@ -1050,7 +1090,7 @@ class Database:
                 cutoff_iso = cutoff.isoformat()
 
                 async with self._sqlite() as db:
-                    await db.execute("BEGIN IMMEDIATE")
+                    await self._begin_immediate(db)
                     try:
                         # 1. Dedup check — inside the write lock, so no
                         #    concurrent INSERT can sneak in between this
