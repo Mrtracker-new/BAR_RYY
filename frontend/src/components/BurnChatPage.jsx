@@ -158,8 +158,8 @@ function JoinScreen({ token, onJoin, error, infoState, joinSecsLeft, joinPartici
             <input className="input-field" placeholder="Your name…" value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&canJoin&&onJoin(name.trim(),isCreator?pin:null)} maxLength={30} style={{ fontSize:'var(--text-sm)' }} />
           </div>
 
-          <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.625rem 0.75rem', borderRadius:'0.5rem', background:'rgba(60,45,20,0.04)', border:`1px solid ${T.border}`, cursor:'pointer' }} onClick={()=>setIsCreator(v=>!v)}>
-            <input type="checkbox" id="creator-chk" checked={isCreator} onChange={()=>setIsCreator(v=>!v)} style={{ cursor:'pointer' }} />
+          <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.625rem 0.75rem', borderRadius:'0.5rem', background:'rgba(60,45,20,0.04)', border:`1px solid ${T.border}` }}>
+            <input type="checkbox" id="creator-chk" checked={isCreator} onChange={e=>setIsCreator(e.target.checked)} style={{ cursor:'pointer' }} />
             <label htmlFor="creator-chk" style={{ fontSize:'0.875rem', color:T.textS, cursor:'pointer', display:'flex', alignItems:'center', gap:'0.375rem' }}>
               <Shield size={13} style={{ color:T.orange }} /> I'm the creator (have PIN)
             </label>
@@ -237,7 +237,7 @@ function DestroyedScreen() {
  * When sessionKey changes (creator reconnect, late key delivery) the effect
  * re-runs for every mounted bubble that holds an undecrypted ciphertext.
  */
-function Bubble({ msg, myName, myWsId, sessionKey }) {
+function Bubble({ msg, myName, myWsId, myWsIds, sessionKey }) {
   // null  = not yet attempted / pending key
   // false = decryption failed
   // string = decrypted plaintext
@@ -270,7 +270,7 @@ function Bubble({ msg, myName, myWsId, sessionKey }) {
   }, [sessionKey]);
 
   const senderId = msg.sender_id || msg.participant_id;
-  const isMe = senderId ? senderId === myWsId : msg.sender_name === myName;
+  const isMe = (senderId && myWsIds?.has(senderId)) || (senderId ? senderId === myWsId : msg.sender_name === myName);
 
   if (msg.type === 'system') return (
     <div style={{ textAlign:'center', padding:'0.25rem 0' }}>
@@ -423,13 +423,13 @@ function ParticipantPanel({ participantList, myWsId, isCreator, roomLocked, onKi
               <p style={{
                 fontSize: '0.875rem',         /* raised from 0.8rem — below 14px minimum */
                 fontWeight: 600,
-                color: p.ws_id === myWsId ? T.orange : p.is_creator ? T.gold : T.text,
+                color: isCurrent ? T.orange : p.is_creator ? T.gold : T.text,
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}>
                 {p.name}
                 {p.is_creator && ' 👑'}
                 {/* (you) label — 11px acceptable for inline parenthetical */}
-                {p.ws_id === myWsId && <span style={{ color: T.textT, fontWeight: 400, fontSize: '0.6875rem' }}> (you)</span>}
+                {isCurrent && <span style={{ color: T.textT, fontWeight: 400, fontSize: '0.6875rem' }}> (you)</span>}
               </p>
             </div>
 
@@ -516,10 +516,14 @@ export default function BurnChatPage({ token }) {
 
   const wsRef         = useRef(null);
   const myWsIdRef     = useRef(null);         // own ws_id from 'joined'
+  const myWsIdsRef    = useRef(new Set());    // set of all own ws_ids in this session (preserves ownership across reconnects)
   const bottomRef     = useRef(null);
   const countRef      = useRef(null);
   const joinCountRef  = useRef(null);
   const joinedRef     = useRef(false);
+  const isCreatorRef  = useRef(false);
+  const destroyedRef  = useRef(false);        // true once session burned / destroyed
+  const isSendingRef  = useRef(false);        // prevents double-sending messages
   const pingRef       = useRef(null);
   const reconnectRef  = useRef({
     count: 0, name: null, pin: null, timeoutId: null,
@@ -541,13 +545,15 @@ export default function BurnChatPage({ token }) {
     pubkeys:           new Map(),   // ws_id → base64-JWK pubkey for all known peers
     keyedPeers:        new Set(),   // ws_ids the creator has already sent session_key to
     pendingSessionKeys: new Map(),  // fromWsId → wrappedKey — held during pubkey race
+    isUnwrapping:       false,
+    creatorWsId:        null,
   });
 
   // Direct SPA URL for user-facing share links: /chat/:token
   const shareUrl = `${window.location.origin}/chat/${token}`;
 
   /* auto-scroll */
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:'smooth' }); }, [messages]);
+  useEffect(() => { bottomRef.current?.scrollIntoView?.({ behavior:'smooth' }); }, [messages]);
 
   /* fetch session info once on mount — fast-path expired sessions */
   useEffect(() => {
@@ -563,6 +569,7 @@ export default function BurnChatPage({ token }) {
       .catch(err => {
         if (cancelled) return;
         if (err.response?.status === 410) {
+          destroyedRef.current = true;
           setInfoState('expired');
           setPhase('destroyed');
         } else {
@@ -585,6 +592,7 @@ export default function BurnChatPage({ token }) {
         })
         .catch(err => {
           if (err.response?.status === 410) {
+            destroyedRef.current = true;
             setInfoState('expired');
             setPhase('destroyed');
           }
@@ -612,7 +620,15 @@ export default function BurnChatPage({ token }) {
   /* local countdown tick for in-chat timer (server is authoritative) */
   useEffect(() => {
     if (secsLeft === null || secsLeft <= 0) return;
-    countRef.current = setInterval(() => setSecsLeft(s => Math.max(0, s - 1)), 1000);
+    countRef.current = setInterval(() => {
+      setSecsLeft(s => {
+        if (s <= 1) {
+          clearInterval(countRef.current);
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
     return () => clearInterval(countRef.current);
   }, [secsLeft !== null]);
 
@@ -661,8 +677,14 @@ export default function BurnChatPage({ token }) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function _connectWs(name, pin) {
+    clearTimeout(reconnectRef.current.timeoutId);
+    if (destroyedRef.current) return;
     clearInterval(pingRef.current);
-    joinedRef.current = false;
+    if (wsRef.current) {
+      try { wsRef.current.close(); } catch {}
+    }
+    joinedRef.current    = false;
+    isCreatorRef.current = false;
     setConnStatus('connecting');
 
     // ── Reset all E2E state for this (re)connection ───────────────────────────
@@ -677,6 +699,8 @@ export default function BurnChatPage({ token }) {
       pubkeys:           new Map(),
       keyedPeers:        new Set(),
       pendingSessionKeys: new Map(),
+      isUnwrapping:       false,
+      creatorWsId:        null,
     };
     setE2eReady(false);
     setE2eFingerprint(null);
@@ -688,12 +712,47 @@ export default function BurnChatPage({ token }) {
     const ws     = new WebSocket(`${wsBase}/chat/${token}/ws`);
     wsRef.current = ws;
 
+    function _unwrapAndCommitKey(fromWsId, wrappedKey, creatorPubKeyB64, keyPair, currentWs) {
+      if (e2eRef.current.isUnwrapping) return;
+      e2eRef.current.isUnwrapping = true;
+      e2eRef.current.pendingSessionKeys.delete(fromWsId);
+      (async () => {
+        try {
+          const creatorPub  = await E2E.importPublicKey(creatorPubKeyB64);
+          const wrapKey     = await E2E.deriveWrapKey(keyPair.privateKey, creatorPub);
+          const resolvedKey = await E2E.unwrapSessionKey(wrappedKey, wrapKey);
+          const fp          = await E2E.sessionFingerprint(resolvedKey);
+
+          if (wsRef.current !== currentWs) return; // Stale connection guard
+
+          e2eRef.current.sessionKey  = resolvedKey;
+          e2eRef.current.creatorWsId = fromWsId;
+
+          setE2eSessionKey(resolvedKey);
+          setE2eFingerprint(fp);
+          setE2eReady(true);
+          setWsError(null);
+        } catch (err) {
+          console.error('[E2E] Failed to unwrap session key:', err);
+          if (wsRef.current === currentWs) {
+            setWsError('Failed to establish secure encryption key. Please reconnect.');
+          }
+        } finally {
+          if (wsRef.current === currentWs) {
+            e2eRef.current.isUnwrapping = false;
+          }
+        }
+      })();
+    }
+
     ws.onopen = () => {
+      if (wsRef.current !== ws) return;
       // Still 'connecting' until the server confirms via 'joined'.
       ws.send(JSON.stringify({ type: 'join', display_name: name, ...(pin ? { pin } : {}) }));
     };
 
     ws.onmessage = (ev) => {
+      if (wsRef.current !== ws) return;
       let data;
       try { data = JSON.parse(ev.data); } catch { return; }
 
@@ -701,7 +760,10 @@ export default function BurnChatPage({ token }) {
 
         case 'joined': {
           joinedRef.current     = true;
-          myWsIdRef.current     = data.participant_id ?? data.ws_id ?? null;
+          isCreatorRef.current  = !!data.is_creator;
+          const myId            = data.participant_id ?? data.ws_id ?? null;
+          myWsIdRef.current     = myId;
+          if (myId) myWsIdsRef.current.add(myId);
           reconnectRef.current.count = 0;
           setConnStatus('connected');
           setIsCreator(data.is_creator);
@@ -730,62 +792,76 @@ export default function BurnChatPage({ token }) {
           // This also handles the case where a participant joins an already-active
           // room: all existing peers' pubkeys land in the map before we begin.
           (data.participant_list ?? []).forEach(p => {
-            if (p.ws_id && p.public_key) {
-              e2eRef.current.pubkeys.set(p.ws_id, p.public_key);
+            const pid = p.ws_id || p.participant_id;
+            if (pid && p.public_key) {
+              e2eRef.current.pubkeys.set(pid, p.public_key);
             }
           });
+
+          const currentWs = ws;
 
           (async () => {
             try {
               // 1. Generate our ECDH keypair (private key extractable:false).
               const keyPair = await E2E.generateKeyPair();
+              if (wsRef.current !== currentWs) return; // Stale connection guard
               e2eRef.current.keyPair = keyPair;
 
               // 2. Export and broadcast our own public key to all peers.
               //    The server will also store it so future joiners see it.
               const pubKeyB64 = await E2E.exportPublicKey(keyPair.publicKey);
-              // Store our own pubkey keyed by our ws_id.  The creator needs this
-              // so participants can verify the wrap-key derivation later.
-              e2eRef.current.pubkeys.set(data.ws_id, pubKeyB64);
+              if (wsRef.current !== currentWs) return;
+              // Store our own pubkey keyed by our ID.
+              if (myId) e2eRef.current.pubkeys.set(myId, pubKeyB64);
               ws.send(JSON.stringify({ type: 'pubkey', public_key: pubKeyB64 }));
 
               if (data.is_creator) {
                 // 3a. Creator: generate the shared AES-GCM-256 session key.
                 const sk = await E2E.generateSessionKey();
+                if (wsRef.current !== currentWs) return;
                 e2eRef.current.sessionKey = sk;
+                e2eRef.current.creatorWsId = myId;
 
                 // 4a. Compute and display fingerprint.
                 const fp = await E2E.sessionFingerprint(sk);
+                if (wsRef.current !== currentWs) return;
                 setE2eFingerprint(fp);
                 setE2eSessionKey(sk);
                 setE2eReady(true);
 
-                // 5a. Wrap and unicast session key to every peer already in the
-                //     room whose pubkey is already known (from the seeded map).
+                // 5a. Wrap and unicast session key to every peer whose pubkey is
+                //     known (from participant_list seed OR received while keyPair was generating).
                 //     Peers who join later are handled reactively in 'pubkey' handler.
                 const { keyedPeers } = e2eRef.current;
-                const existingPeers = (data.participant_list ?? [])
-                  .filter(p => p.ws_id !== data.ws_id && p.public_key);
-
-                for (const peer of existingPeers) {
-                  if (keyedPeers.has(peer.ws_id)) continue;
+                for (const [peerWsId, peerPubKeyB64] of e2eRef.current.pubkeys.entries()) {
+                  if (peerWsId === myId || keyedPeers.has(peerWsId)) continue;
+                  keyedPeers.add(peerWsId); // Synchronously mark to prevent duplicate wraps
                   try {
-                    const theirPub = await E2E.importPublicKey(peer.public_key);
+                    const theirPub = await E2E.importPublicKey(peerPubKeyB64);
                     const wrapKey  = await E2E.deriveWrapKey(keyPair.privateKey, theirPub);
                     const wrapped  = await E2E.wrapSessionKey(sk, wrapKey);
-                    keyedPeers.add(peer.ws_id);
+                    if (wsRef.current !== currentWs || ws.readyState !== WebSocket.OPEN) return;
                     ws.send(JSON.stringify({
                       type:        'session_key',
-                      for_ws_id:   peer.ws_id,
+                      for_ws_id:   peerWsId,
                       wrapped_key: wrapped,
                     }));
                   } catch (err) {
-                    console.error('[E2E] Failed to wrap for existing peer:', peer.ws_id, err);
+                    keyedPeers.delete(peerWsId);
+                    console.error('[E2E] Failed to wrap for peer:', peerWsId, err);
+                  }
+                }
+              } else {
+                // 3b. Participant path: resolve any pending session keys that
+                //     arrived while keypair was generating.
+                for (const [fromWsId, pendingWrappedKey] of e2eRef.current.pendingSessionKeys.entries()) {
+                  const creatorPubKeyB64 = e2eRef.current.pubkeys.get(fromWsId);
+                  if (creatorPubKeyB64) {
+                    _unwrapAndCommitKey(fromWsId, pendingWrappedKey, creatorPubKeyB64, keyPair, currentWs);
+                    break;
                   }
                 }
               }
-              // Participant path: session key arrives via 'session_key' message.
-              // By the time it arrives, the creator's pubkey is already seeded above.
             } catch (err) {
               console.error('[E2E] Key bootstrap failed:', err);
             }
@@ -801,27 +877,26 @@ export default function BurnChatPage({ token }) {
           // Store in the pubkey map for this peer.
           e2eRef.current.pubkeys.set(peerWsId, peerPubKeyB64);
 
-          // Also store our own pubkey (keyed by our ws_id) so
-          // participants can find the creator's pubkey for wrap-key derivation.
-          // (We stored it already in the 'joined' handler above.)
-
           // ── Creator: wrap and unicast the session key to the new peer ────
           const { keyPair, sessionKey: sk, keyedPeers } = e2eRef.current;
-          const amCreator = joinedRef.current && !!sk;
+          const amCreator = joinedRef.current && isCreatorRef.current && !!sk;
 
           if (amCreator && keyPair && sk && !keyedPeers.has(peerWsId)) {
+            keyedPeers.add(peerWsId); // Synchronously mark to prevent racing duplicate wraps
+            const currentWs = ws;
             (async () => {
               try {
                 const theirPub  = await E2E.importPublicKey(peerPubKeyB64);
                 const wrapKey   = await E2E.deriveWrapKey(keyPair.privateKey, theirPub);
                 const wrapped   = await E2E.wrapSessionKey(sk, wrapKey);
-                keyedPeers.add(peerWsId);
+                if (wsRef.current !== currentWs) return;
                 ws.send(JSON.stringify({
                   type:        'session_key',
                   for_ws_id:   peerWsId,
                   wrapped_key: wrapped,
                 }));
               } catch (err) {
+                keyedPeers.delete(peerWsId);
                 console.error('[E2E] Failed to wrap session key for peer:', peerWsId, err);
               }
             })();
@@ -830,25 +905,8 @@ export default function BurnChatPage({ token }) {
           // ── Participant: resolve a pending session_key that arrived before
           //                this pubkey (race-condition guard) ───────────────
           const pendingWrappedKey = e2eRef.current.pendingSessionKeys.get(peerWsId);
-          if (pendingWrappedKey) {
-            e2eRef.current.pendingSessionKeys.delete(peerWsId);
-            const wrappedKey = pendingWrappedKey;
-            (async () => {
-              try {
-                const { keyPair: kp } = e2eRef.current;
-                if (!kp) return;
-                const creatorPub  = await E2E.importPublicKey(peerPubKeyB64);
-                const wrapKey     = await E2E.deriveWrapKey(kp.privateKey, creatorPub);
-                const resolvedKey = await E2E.unwrapSessionKey(wrappedKey, wrapKey);
-                const fp          = await E2E.sessionFingerprint(resolvedKey);
-                e2eRef.current.sessionKey = resolvedKey;
-                setE2eSessionKey(resolvedKey);
-                setE2eFingerprint(fp);
-                setE2eReady(true);
-              } catch (err) {
-                console.error('[E2E] Failed to resolve pending session_key after pubkey arrived:', err);
-              }
-            })();
+          if (pendingWrappedKey && keyPair) {
+            _unwrapAndCommitKey(peerWsId, pendingWrappedKey, peerPubKeyB64, keyPair, ws);
           }
           break;
         }
@@ -858,32 +916,22 @@ export default function BurnChatPage({ token }) {
           const { from_ws_id: fromWsId, wrapped_key: wrappedKey } = data;
           if (!fromWsId || !wrappedKey) break;
 
-          const { keyPair, pubkeys } = e2eRef.current;
-          if (!keyPair) break; // keypair not yet generated — should not happen
+          // If already unwrapped from this creator or unwrapping in progress, ignore duplicate/racing frames
+          if ((e2eRef.current.creatorWsId === fromWsId && e2eRef.current.sessionKey) || e2eRef.current.isUnwrapping) {
+            break;
+          }
 
+          const { keyPair, pubkeys } = e2eRef.current;
           const creatorPubKeyB64 = pubkeys.get(fromWsId);
 
-          if (!creatorPubKeyB64) {
-            // Race: creator's pubkey hasn't arrived yet — park this message.
-            // The 'pubkey' handler will detect and resolve it.
+          if (!keyPair || !creatorPubKeyB64) {
+            // Race: keypair is still generating, or creator's pubkey hasn't arrived yet.
+            // Park this message. It will be resolved when keyPair finishes or pubkey arrives.
             e2eRef.current.pendingSessionKeys.set(fromWsId, wrappedKey);
             break;
           }
 
-          (async () => {
-            try {
-              const creatorPub  = await E2E.importPublicKey(creatorPubKeyB64);
-              const wrapKey     = await E2E.deriveWrapKey(keyPair.privateKey, creatorPub);
-              const resolvedKey = await E2E.unwrapSessionKey(wrappedKey, wrapKey);
-              const fp          = await E2E.sessionFingerprint(resolvedKey);
-              e2eRef.current.sessionKey = resolvedKey;
-              setE2eSessionKey(resolvedKey);
-              setE2eFingerprint(fp);
-              setE2eReady(true);
-            } catch (err) {
-              console.error('[E2E] Failed to unwrap session key:', err);
-            }
-          })();
+          _unwrapAndCommitKey(fromWsId, wrappedKey, creatorPubKeyB64, keyPair, ws);
           break;
         }
 
@@ -913,6 +961,8 @@ export default function BurnChatPage({ token }) {
           break;
 
         case 'destroyed':
+          destroyedRef.current = true;
+          clearTimeout(reconnectRef.current.timeoutId);
           clearInterval(pingRef.current);
           clearInterval(countRef.current);
           setPhase('burning');
@@ -932,11 +982,18 @@ export default function BurnChatPage({ token }) {
     };
 
     ws.onerror = () => {
+      if (wsRef.current !== ws) return;
       if (!joinedRef.current) setJoinError('Could not connect — session may have expired.');
     };
 
     ws.onclose = (ev) => {
+      if (wsRef.current !== ws) return;
       clearInterval(pingRef.current);
+
+      if (destroyedRef.current) {
+        setConnStatus('disconnected');
+        return;
+      }
 
       const isServerRejection = ev.code >= 4000 && ev.code < 5000;
 
@@ -978,6 +1035,7 @@ export default function BurnChatPage({ token }) {
   const e2ePending = cryptoAvailable && !e2eReady;
 
   const sendMessage = async () => {
+    if (isSendingRef.current) return;
     const text = input.trim();
     if (!text || wsRef.current?.readyState !== WebSocket.OPEN) return;
     // Do NOT clear input yet — clear only after successful send so the
@@ -992,6 +1050,7 @@ export default function BurnChatPage({ token }) {
 
     if (sessionKey) {
       // ── E2E path: encrypt client-side; server relays opaque ciphertext ──
+      isSendingRef.current = true;
       try {
         const { ciphertext, iv } = await E2E.encryptMessage(text, sessionKey);
         // Guard again: WS might have closed during the async encrypt.
@@ -1002,6 +1061,8 @@ export default function BurnChatPage({ token }) {
         console.error('[E2E] Encryption failed:', err);
         // Message text intentionally preserved in <textarea> so user can retry.
         setWsError('Encryption failed — message not sent. Please try again.');
+      } finally {
+        isSendingRef.current = false;
       }
     } else {
       // Crypto is available but key not ready — refuse to send.
@@ -1268,6 +1329,7 @@ export default function BurnChatPage({ token }) {
                 msg={m}
                 myName={myName}
                 myWsId={myWsIdRef.current}
+                myWsIds={myWsIdsRef.current}
                 sessionKey={e2eSessionKey}
               />
             ))}
