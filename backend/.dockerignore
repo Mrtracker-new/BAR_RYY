@@ -1,0 +1,53 @@
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+.secret_key
+*.key
+
+# Python cache & bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Database files
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+bar_files.db*
+
+# Uploaded and generated files (runtime data)
+uploads/*
+!uploads/.gitkeep
+generated/*
+!generated/.gitkeep
+
+# Testing, coverage & linting caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+tests/
+
+# Git & IDE
+.git/
+.github/
+.gitignore
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary & log files
+*.log
+Dockerfile

@@ -1,0 +1,75 @@
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+backend/.venv/
+
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+.secret_key
+*.key
+
+# Python cache & bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+backend/__pycache__/
+
+# Database files
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+bar_files.db*
+backend/bar_files.db*
+
+# Uploaded and generated files (runtime data)
+uploads/*
+!uploads/.gitkeep
+generated/*
+!generated/.gitkeep
+backend/uploads/*
+!backend/uploads/.gitkeep
+backend/generated/*
+!backend/generated/.gitkeep
+
+# Frontend dependencies & build artifacts
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+
+# Testing, coverage & linting caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+backend/.pytest_cache/
+backend/.ruff_cache/
+backend/.coverage
+backend/coverage.xml
+
+# Git & IDE
+.git/
+.github/
+.gitignore
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Documentation & media
+docs/
+docs_ignore/
+*.log
+*.gif
+*.png
