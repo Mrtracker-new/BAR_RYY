@@ -1,26 +1,42 @@
 import React, { useState, useRef } from 'react';
-import { Upload, File, X, FileText, Image, Film, Music, Archive, Lock } from 'lucide-react';
+import { Upload, File, X, FileText, Image, Film, Music, Archive, Lock, AlertCircle } from 'lucide-react';
+import { validateFile } from '../utils/fileValidation';
 
 /* ── File type → icon + accent color ── */
 function getFileType(file) {
   if (!file) return { Icon: File, label: 'File', color: '#857358' };
-  const t = file.type;
-  if (t.startsWith('image/'))  return { Icon: Image,    label: 'Image',    color: '#38BDF8' };
-  if (t.startsWith('video/'))  return { Icon: Film,     label: 'Video',    color: '#A78BFA' };
-  if (t.startsWith('audio/'))  return { Icon: Music,    label: 'Audio',    color: '#34D399' };
-  if (t === 'application/pdf') return { Icon: FileText, label: 'PDF',      color: '#FB7185' };
-  if (t.includes('zip') || t.includes('rar') || t.includes('archive'))
+  const t = file.type || '';
+  const name = (file.name || '').trim();
+  const ext = name.slice(name.lastIndexOf('.')).toLowerCase();
+
+  if (t.startsWith('image/') || ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp'].includes(ext))
+    return { Icon: Image,    label: 'Image',    color: '#38BDF8' };
+  if (t.startsWith('video/') || ['.mp4', '.avi', '.mov', '.mkv'].includes(ext))
+    return { Icon: Film,     label: 'Video',    color: '#A78BFA' };
+  if (t.startsWith('audio/') || ['.mp3', '.wav'].includes(ext))
+    return { Icon: Music,    label: 'Audio',    color: '#34D399' };
+  if (t === 'application/pdf' || ext === '.pdf')
+    return { Icon: FileText, label: 'PDF',      color: '#FB7185' };
+  if (t.includes('zip') || t.includes('rar') || t.includes('archive') || ['.zip', '.rar', '.7z', '.tar', '.gz'].includes(ext))
     return { Icon: Archive, label: 'Archive', color: '#FBBF24' };
-  if (t.includes('document') || t.includes('word') || t.includes('text'))
+  if (t.includes('presentation') || t.includes('powerpoint') || ['.ppt', '.pptx', '.key'].includes(ext))
+    return { Icon: FileText, label: 'Presentation', color: '#F97316' };
+  if (t.includes('spreadsheet') || t.includes('excel') || ['.xlsx', '.xls', '.csv'].includes(ext))
+    return { Icon: FileText, label: 'Spreadsheet', color: '#10B981' };
+  if (t.includes('document') || t.includes('word') || ['.doc', '.docx', '.rtf', '.odt'].includes(ext))
+    return { Icon: FileText, label: 'Document', color: '#2C4A6E' };
+  if (t === 'application/json' || t === 'application/xml' || t === 'text/xml' || ['.json', '.xml'].includes(ext))
+    return { Icon: FileText, label: 'Data', color: '#6366F1' };
+  if (t.startsWith('text/') || ['.txt', '.md'].includes(ext))
     return { Icon: FileText, label: 'Document', color: '#2C4A6E' };
   return { Icon: File, label: 'File', color: '#666' };
 }
 
 function fmtSize(bytes) {
-  if (!bytes) return '0 B';
+  if (!bytes || bytes <= 0 || isNaN(bytes)) return '0 B';
   const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
   return `${Math.round((bytes / Math.pow(k, i)) * 10) / 10} ${sizes[i]}`;
 }
 
@@ -32,19 +48,34 @@ const TYPE_PILLS = [
 ];
 
 /* ── Component ── */
-const FileUpload = ({ onFileSelect, uploadedFile, onRemove, filePreview }) => {
+const FileUpload = ({ onFileSelect, uploadedFile, onRemove, filePreview, onError }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [localPreview, setLocalPreview] = useState(null);
+  const [validationError, setValidationError] = useState(null);
   const inputRef = useRef(null);
 
   const handleDragOver  = e => { e.preventDefault(); setIsDragging(true); };
   const handleDragLeave = e => { e.preventDefault(); setIsDragging(false); };
 
-  const processFile = (file) => {
+  const processFile = async (file) => {
     if (!file) return;
-    if (file.type.startsWith('image/')) {
+    setValidationError(null);
+
+    // Validate file extension, MIME type, and initial magic bytes (4–8 bytes) before encryption
+    const validation = await validateFile(file);
+    if (!validation.isValid) {
+      setValidationError(validation.error);
+      onError?.(validation.error);
+      if (inputRef.current) inputRef.current.value = '';
+      return;
+    }
+
+    const isImage = (file.type && file.type.startsWith('image/')) ||
+                    /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(file.name || '');
+    if (isImage) {
       const reader = new FileReader();
       reader.onload = e => setLocalPreview(e.target.result);
+      reader.onerror = () => setLocalPreview(null);
       reader.readAsDataURL(file);
     } else {
       setLocalPreview(null);
@@ -62,6 +93,8 @@ const FileUpload = ({ onFileSelect, uploadedFile, onRemove, filePreview }) => {
   const handleInput = e => {
     const file = e.target.files[0];
     if (file) processFile(file);
+    // Reset input value so re-selecting the same file fires onChange
+    if (e.target) e.target.value = '';
   };
 
   const { Icon, label, color } = getFileType(uploadedFile);
@@ -127,11 +160,36 @@ const FileUpload = ({ onFileSelect, uploadedFile, onRemove, filePreview }) => {
         <p
           style={{
             fontSize: '0.8125rem', color: '#A2916F',
-            marginBottom: '1.5rem', letterSpacing: '-0.01em',
+            marginBottom: validationError ? '1rem' : '1.5rem', letterSpacing: '-0.01em',
           }}
         >
           Any file type supported
         </p>
+
+        {/* Validation error alert */}
+        {validationError && (
+          <div
+            role="alert"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.5rem 0.75rem',
+              borderRadius: '0.5rem',
+              background: 'rgba(179, 58, 46, 0.08)',
+              border: '1px solid rgba(179, 58, 46, 0.25)',
+              color: '#b33a2e',
+              fontSize: '0.75rem',
+              fontWeight: 500,
+              maxWidth: '90%',
+              marginBottom: '1rem',
+              textAlign: 'left',
+            }}
+          >
+            <AlertCircle size={14} style={{ flexShrink: 0 }} />
+            <span>{validationError}</span>
+          </div>
+        )}
 
         {/* Type pills */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem', justifyContent: 'center' }}>
@@ -198,7 +256,7 @@ const FileUpload = ({ onFileSelect, uploadedFile, onRemove, filePreview }) => {
 
         {/* Remove */}
         <button
-          onClick={() => { onRemove(); setLocalPreview(null); }}
+          onClick={() => { onRemove(); setLocalPreview(null); setValidationError(null); if (inputRef.current) inputRef.current.value = ''; }}
           title="Remove file"
           className="btn-icon"
           style={{ width: 28, height: 28 }}

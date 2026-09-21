@@ -1012,6 +1012,7 @@ function MainApp() {
                         uploadedFile={uploadedFile}
                         onRemove={handleRemoveFile}
                         filePreview={filePreview}
+                        onError={setError}
                       />
                     </div>
                   </Card>
