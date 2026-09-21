@@ -46,6 +46,17 @@ if __name__ == "__main__":
     # For local auto-reload during development use an external watcher:
     #   watchfiles "uvicorn app:app --host 0.0.0.0 --port 8000" .
     # -----------------------------------------------------------------------
+    # -----------------------------------------------------------------------
+    # Horizontal scaling:
+    # Ephemeral states (Chat sessions, WebSockets, OTP verification) and
+    # message passing are decoupled from process memory via Redis and Redis
+    # Pub/Sub, enabling multi-process and multi-container scaling.
+    # Reads standard WEB_CONCURRENCY (Heroku/Render) or WORKERS env vars,
+    # defaulting to 1 for lightweight or single-core deployments.
+    # -----------------------------------------------------------------------
+    workers = int(os.getenv("WEB_CONCURRENCY", os.getenv("WORKERS", "1")))
+    print(f"👥 Workers: {workers}")
+
     uvicorn.run(
         "app:app",
         host="0.0.0.0",         # Bind to all interfaces — expected behind a reverse proxy
@@ -53,4 +64,6 @@ if __name__ == "__main__":
         log_level="info",       # Startup, request, and error logs visible in platform logs
         access_log=True,        # Per-request log lines — required for audit trails
         reload=False,           # See comment block above — never flip this to True
+        workers=workers,        # Multi-process scaling enabled via Redis-backed state & Pub/Sub
     )
+

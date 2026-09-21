@@ -25,6 +25,7 @@ import logging
 import traceback
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
+import json
 
 import httpx
 
@@ -141,11 +142,22 @@ async def _send_with_retry(
 # ---------------------------------------------------------------------------
 
 class OTPService:
-    """Handles OTP generation, in-memory storage, validation, and delivery."""
+    """Handles OTP generation, Redis/in-memory storage, validation, and delivery."""
 
     def __init__(self) -> None:
-        # token → session dict
+        # token → session dict (in-memory fallback & cache)
         self.otp_storage: Dict[str, Dict[str, Any]] = {}
+        self._redis_client: Optional[Any] = None
+
+    def set_redis_client(self, client: Any) -> None:
+        """Set or override the Redis client for OTP storage (useful for tests or manual injection)."""
+        self._redis_client = client
+
+    def _get_redis_client(self) -> Any:
+        """Return the active Redis client or attempt to fetch from core.security."""
+        if self._redis_client is not None:
+            return self._redis_client
+        return security.get_redis_client()
 
     # ------------------------------------------------------------------
     # Generation
@@ -168,12 +180,39 @@ class OTPService:
         """Create (or replace) an OTP session for *token*. Returns the OTP code."""
         otp_code = self.generate_otp()
         otp_hash = hashlib.sha256(otp_code.encode()).hexdigest()
+        now = datetime.now(timezone.utc)
+        expires_at = now + timedelta(minutes=OTP_EXPIRY_MINUTES)
 
+        session_data = {
+            "otp_hash": otp_hash,
+            "email": email,
+            "created_at": now.isoformat(),
+            "expires_at": expires_at.isoformat(),
+            "attempts": 0,
+        }
+
+        # Store in Redis with TTL expiration if available
+        client = self._get_redis_client()
+        if client is not None:
+            try:
+                client.set(
+                    f"otp:session:{token}",
+                    json.dumps(session_data),
+                    ex=OTP_EXPIRY_MINUTES * 60,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Failed to store OTP in Redis (%s), falling back to in-memory: token=%.8s…",
+                    exc,
+                    token,
+                )
+
+        # In-memory storage for fallback / cache
         self.otp_storage[token] = {
             "otp_hash": otp_hash,
             "email": email,
-            "created_at": datetime.now(timezone.utc),
-            "expires_at": datetime.now(timezone.utc) + timedelta(minutes=OTP_EXPIRY_MINUTES),
+            "created_at": now,
+            "expires_at": expires_at,
             "attempts": 0,
         }
 
@@ -187,7 +226,7 @@ class OTPService:
         Verify *otp_code* for *token* and issue an HMAC-signed session token bound to client_ip.
 
         Guarantees:
-          - Validates session existence and expiration.
+          - Validates session existence and expiration across Redis and in-memory stores.
           - Enforces attempt limits (MAX_OTP_ATTEMPTS).
           - Uses constant-time digest comparison (hmac.compare_digest).
           - Burns the OTP session immediately upon success (single-use guarantee).
@@ -196,23 +235,73 @@ class OTPService:
         Returns:
             (is_valid: bool, session_token: Optional[str], error_message: str)
         """
-        if token not in self.otp_storage:
-            return False, None, "OTP session not found. Please request a new OTP."
+        client = self._get_redis_client()
+        session: Optional[Dict[str, Any]] = None
+        using_redis = False
+        redis_failed = False
 
-        session = self.otp_storage[token]
+        if client is not None:
+            try:
+                raw_data = client.get(f"otp:session:{token}")
+                if raw_data:
+                    session = json.loads(raw_data)
+                    using_redis = True
+            except Exception as exc:
+                redis_failed = True
+                logger.warning(
+                    "Redis error during OTP lookup (%s), falling back to in-memory: token=%.8s…",
+                    exc,
+                    token,
+                )
 
-        if datetime.now(timezone.utc) > session["expires_at"]:
-            del self.otp_storage[token]
+        if session is None:
+            # Only fall back to local in-memory storage if Redis is not configured or threw an error.
+            # If Redis is active and the key is absent, the session was burned or expired across workers.
+            if client is None or redis_failed:
+                if token not in self.otp_storage:
+                    return False, None, "OTP session not found. Please request a new OTP."
+                session = self.otp_storage[token]
+            else:
+                self.otp_storage.pop(token, None)
+                return False, None, "OTP session not found. Please request a new OTP."
+
+        # Expiration check
+        expires_at = session["expires_at"]
+        if isinstance(expires_at, str):
+            expires_at = datetime.fromisoformat(expires_at)
+        if datetime.now(timezone.utc) > expires_at:
+            if using_redis and client is not None:
+                try:
+                    client.delete(f"otp:session:{token}")
+                except Exception:
+                    pass
+            self.otp_storage.pop(token, None)
             return False, None, "OTP has expired. Please request a new OTP."
 
-        if session["attempts"] >= MAX_OTP_ATTEMPTS:
-            del self.otp_storage[token]
+        # Attempt limits check (using atomic Redis INCR when available to prevent race conditions)
+        attempts = session.get("attempts", 0) + 1
+        if using_redis and client is not None:
+            try:
+                attempts_key = f"otp:session:{token}:attempts"
+                attempts = client.incr(attempts_key)
+                client.expire(attempts_key, OTP_EXPIRY_MINUTES * 60)
+            except Exception:
+                attempts = session.get("attempts", 0) + 1
+
+        session["attempts"] = attempts
+
+        if attempts > MAX_OTP_ATTEMPTS:
+            if using_redis and client is not None:
+                try:
+                    client.delete(f"otp:session:{token}")
+                    client.delete(f"otp:session:{token}:attempts")
+                except Exception:
+                    pass
+            self.otp_storage.pop(token, None)
             return False, None, (
                 f"Maximum OTP attempts ({MAX_OTP_ATTEMPTS}) exceeded. "
                 "Please request a new OTP."
             )
-
-        session["attempts"] += 1
 
         # Constant-time comparison — prevents timing side-channel (CWE-208)
         clean_code = str(otp_code or "").strip()
@@ -222,17 +311,40 @@ class OTPService:
                 data={"sub": token, "ip": client_ip},
                 expires_delta=timedelta(minutes=5)
             )
-            del self.otp_storage[token]  # Single-use: burn OTP immediately
+            if using_redis and client is not None:
+                try:
+                    client.delete(f"otp:session:{token}")
+                    client.delete(f"otp:session:{token}:attempts")
+                except Exception:
+                    pass
+            self.otp_storage.pop(token, None)  # Single-use: burn OTP immediately
             logger.info("OTP verified and session token issued for token %.8s…", token)
             return True, session_token, ""
 
-        remaining = MAX_OTP_ATTEMPTS - session["attempts"]
+        remaining = max(0, MAX_OTP_ATTEMPTS - attempts)
         if remaining <= 0:
-            del self.otp_storage[token]
+            if using_redis and client is not None:
+                try:
+                    client.delete(f"otp:session:{token}")
+                    client.delete(f"otp:session:{token}:attempts")
+                except Exception:
+                    pass
+            self.otp_storage.pop(token, None)
             return False, None, (
                 f"Maximum OTP attempts ({MAX_OTP_ATTEMPTS}) exceeded. "
                 "Please request a new OTP."
             )
+
+        # Persist incremented attempts into session JSON as well
+        if using_redis and client is not None:
+            try:
+                ttl = client.ttl(f"otp:session:{token}")
+                ex = ttl if ttl and ttl > 0 else OTP_EXPIRY_MINUTES * 60
+                client.set(f"otp:session:{token}", json.dumps(session), ex=ex)
+            except Exception:
+                pass
+        if token in self.otp_storage:
+            self.otp_storage[token]["attempts"] = attempts
 
         return False, None, f"Invalid OTP code. {remaining} attempt(s) remaining."
 
@@ -252,7 +364,14 @@ class OTPService:
         return False
 
     def clear_verification(self, token: str) -> None:
-        """Remove the OTP session for *token* if still present."""
+        """Remove the OTP session for *token* from Redis and in-memory store."""
+        client = self._get_redis_client()
+        if client is not None:
+            try:
+                client.delete(f"otp:session:{token}")
+                client.delete(f"otp:session:{token}:attempts")
+            except Exception:
+                pass
         if token in self.otp_storage:
             del self.otp_storage[token]
             logger.info("OTP verification cleared for token %.8s…", token)

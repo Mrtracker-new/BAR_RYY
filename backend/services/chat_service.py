@@ -23,14 +23,23 @@ import logging
 import os
 import secrets
 import string
+import time
+import json
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from enum import Enum
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 
 from fastapi import WebSocket
 from core.concurrency import track_background_task
+from core.config import settings
+from core import security
+
+try:
+    import redis.asyncio as aioredis
+except ImportError:
+    aioredis = None
 
 logger = logging.getLogger(__name__)
 
@@ -296,6 +305,19 @@ class _PinRateLimiter:
         allowed PIN attempts and should be rejected without calling
         :func:`join_session`.
         """
+        sync_client = security.get_redis_client()
+        if sync_client is not None:
+            try:
+                now_ts = time.time()
+                window_start = now_ts - self.WINDOW_SECONDS
+                key = f"chat:pin_fail:{client_ip}:{token}"
+                sync_client.zremrangebyscore(key, "-inf", window_start)
+                count = sync_client.zcard(key)
+                if count is not None and count >= self.MAX_FAILURES:
+                    return True
+            except Exception:
+                pass
+
         key = self._make_key(client_ip, token)
         now = datetime.now(timezone.utc)
         self._prune(key, now)
@@ -310,6 +332,23 @@ class _PinRateLimiter:
         (failures_in_window, remaining_attempts)
             ``remaining_attempts`` is ``0`` when the caller is now blocked.
         """
+        sync_client = security.get_redis_client()
+        if sync_client is not None:
+            try:
+                now_ts = time.time()
+                window_start = now_ts - self.WINDOW_SECONDS
+                key = f"chat:pin_fail:{client_ip}:{token}"
+                sync_client.zremrangebyscore(key, "-inf", window_start)
+                member = f"{now_ts}:{secrets.token_hex(4)}"
+                sync_client.zadd(key, {member: now_ts})
+                sync_client.expire(key, int(self.WINDOW_SECONDS))
+                count = sync_client.zcard(key)
+                failures = count if count is not None else 1
+                remaining = max(0, self.MAX_FAILURES - failures)
+                return failures, remaining
+            except Exception:
+                pass
+
         key = self._make_key(client_ip, token)
         now = datetime.now(timezone.utc)
         self._prune(key, now)
@@ -455,41 +494,216 @@ class _ChatSession:
 
 
 # ---------------------------------------------------------------------------
-# Global in-memory store (single-process; intentionally not Redis/DB)
+# Distributed Redis & In-memory Session Stores
 # ---------------------------------------------------------------------------
 
 _SESSIONS: Dict[str, _ChatSession] = {}
+_async_redis_client: Optional[Any] = None
+_last_async_redis_retry: float = 0.0
+_ASYNC_REDIS_RETRY_INTERVAL: float = 30.0
+
+# Active Redis Pub/Sub listener tasks per session token: token -> asyncio.Task
+_PUBSUB_TASKS: Dict[str, asyncio.Task] = {}
+
+
+def set_async_redis_client(client: Any) -> None:
+    """Set or override the async Redis client (useful for tests or manual injection)."""
+    global _async_redis_client
+    _async_redis_client = client
+
+
+async def get_async_redis_client() -> Optional[Any]:
+    """
+    Get or initialize the async Redis client.
+    Returns None if Redis is not configured, not installed, or unreachable.
+    Retries every 30 seconds if previously unavailable.
+    """
+    global _async_redis_client, _last_async_redis_retry
+    if _async_redis_client is not None:
+        return _async_redis_client
+
+    if aioredis is None:
+        return None
+
+    redis_url = getattr(settings, "redis_url", "") or os.getenv("REDIS_URL", "")
+    if not redis_url:
+        return None
+
+    now = time.time()
+    if now - _last_async_redis_retry < _ASYNC_REDIS_RETRY_INTERVAL:
+        return None
+
+    try:
+        client = aioredis.from_url(
+            redis_url,
+            decode_responses=True,
+            socket_timeout=2.0,
+            socket_connect_timeout=2.0,
+        )
+        await client.ping()
+        _async_redis_client = client
+        logger.info("Connected to Redis for distributed chat state & Pub/Sub")
+        return _async_redis_client
+    except Exception as exc:
+        _last_async_redis_retry = now
+        logger.warning(
+            "Could not connect to async Redis (%s). Falling back to in-memory chat (will retry in %ds).",
+            exc,
+            int(_ASYNC_REDIS_RETRY_INTERVAL),
+        )
+        return None
+
+
+async def _get_participant_list_async(session: _ChatSession) -> list[dict]:
+    """Get the global participant roster across all workers from Redis (or local session)."""
+    client = await get_async_redis_client()
+    if client is not None:
+        try:
+            raw_entries = await client.hvals(f"chat:session:{session.token}:participants")
+            if raw_entries:
+                return [json.loads(e) for e in raw_entries]
+        except Exception:
+            pass
+    return _make_participant_list(session)
+
+
+async def _get_participant_count_async(session: _ChatSession) -> int:
+    """Get the global participant count across all workers from Redis (or local session)."""
+    client = await get_async_redis_client()
+    if client is not None:
+        try:
+            count = await client.hlen(f"chat:session:{session.token}:participants")
+            return count
+        except Exception:
+            pass
+    return len(session.participants)
 
 
 # ---------------------------------------------------------------------------
-# Broadcast helper
+# Pub/Sub Listener & Local Delivery
 # ---------------------------------------------------------------------------
 
 
-async def _broadcast(
+async def _pubsub_listener(token: str) -> None:
+    """Listen to Redis Pub/Sub for room events and dispatch to local participants."""
+    channel = f"chat:channel:{token}"
+    while True:
+        session = _SESSIONS.get(token)
+        if session is None or len(session.participants) == 0:
+            break
+
+        client = await get_async_redis_client()
+        if client is None:
+            await asyncio.sleep(1.0)
+            continue
+
+        pubsub = client.pubsub()
+        try:
+            await pubsub.subscribe(channel)
+            async for message in pubsub.listen():
+                session = _SESSIONS.get(token)
+                if session is None:
+                    return
+
+                if message is None or message.get("type") != "message":
+                    continue
+                raw_data = message.get("data")
+                if not raw_data or not isinstance(raw_data, str):
+                    continue
+                try:
+                    data = json.loads(raw_data)
+                except Exception:
+                    continue
+
+                event = data.get("event")
+                if event == "broadcast":
+                    payload = data.get("payload", {})
+                    exclude_ws_id = data.get("exclude_ws_id")
+                    await _deliver_local_broadcast(session, payload, exclude_ws_id)
+                    if payload.get("type") == "destroyed":
+                        for participant in list(session.participants.values()):
+                            try:
+                                await participant.ws.close(code=1000, reason="Session expired")
+                            except Exception:
+                                pass
+                        session.participants.clear()
+                        destroy_task = getattr(session, "_destroy_task", None)
+                        if destroy_task and not destroy_task.done():
+                            try:
+                                if not destroy_task.get_loop().is_closed():
+                                    destroy_task.cancel()
+                            except (RuntimeError, Exception):
+                                pass
+                        _SESSIONS.pop(token, None)
+                        return
+                    elif payload.get("type") == "room_locked":
+                        session.locked = bool(payload.get("locked", True))
+                    elif payload.get("type") == "ttl_extended" and "expires_at" in payload:
+                        try:
+                            session.expires_at = datetime.fromisoformat(payload["expires_at"])
+                        except Exception:
+                            pass
+
+                elif event == "unicast":
+                    target_ws_id = data.get("target_ws_id")
+                    payload = data.get("payload", {})
+                    target = session.participants.get(target_ws_id)
+                    if target:
+                        try:
+                            await target.ws.send_json(payload)
+                        except Exception:
+                            pass
+
+                elif event == "kick":
+                    target_ws_id = data.get("target_ws_id")
+                    target = session.participants.pop(target_ws_id, None)
+                    if target:
+                        try:
+                            await target.ws.send_json(
+                                {"type": "error", "text": "You have been removed by the creator.", "code": "kicked"}
+                            )
+                            await target.ws.close(code=4001, reason="Kicked by creator")
+                        except Exception:
+                            pass
+                        try:
+                            await client.hdel(f"chat:session:{token}:participants", target_ws_id)
+                        except Exception:
+                            pass
+
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.debug("Pub/Sub listener error for %s: %s (reconnecting)", token[:8], exc)
+            await asyncio.sleep(0.5)
+        finally:
+            try:
+                await pubsub.unsubscribe(channel)
+                await pubsub.close()
+            except Exception:
+                pass
+
+    _PUBSUB_TASKS.pop(token, None)
+
+
+def _ensure_pubsub_listener(token: str) -> None:
+    """Ensure a background Redis Pub/Sub listener is active for this session token."""
+    task = _PUBSUB_TASKS.get(token)
+    if task is None or task.done():
+        listener_task = asyncio.create_task(_pubsub_listener(token))
+        track_background_task(listener_task)
+        _PUBSUB_TASKS[token] = listener_task
+
+
+async def _deliver_local_broadcast(
     session: _ChatSession,
     payload: dict,
     exclude_ws_id: Optional[str] = None,
 ) -> None:
     """
-    Broadcast a JSON payload concurrently to all connected session participants.
+    Concurrently deliver a broadcast payload to connected participants on this worker.
 
-    Concurrency & Security Contract:
-      - Dispatches each ``ws.send_json`` as an independent ``asyncio.Task``.
-      - Enforces a strict 3.0-second execution deadline via ``asyncio.wait``.
-      - Slowloris Mitigation: Any task not completing within the 3.0-second window
-        is explicitly cancelled to prevent stalled or adversarial clients from
-        blocking message delivery to responsive peers.
-      - Cleanup & Disconnect: Timed-out or errored connections are immediately
-        purged from the session participant registry and closed cleanly with
-        WebSocket code 1001 ("Broadcast timeout or connection error").
-      - Disconnect Notification: Triggers an updated participant roster broadcast
-        reflecting only healthy, active connections.
-
-    Args:
-        session: Target chat session instance.
-        payload: JSON-serializable dictionary to broadcast.
-        exclude_ws_id: Optional participant websocket UUID to omit from broadcast (e.g., sender).
+    Enforces a strict 1.0s deadline via asyncio.wait. Any stalled connections
+    are cancelled and cleaned up.
     """
     targets = [
         (ws_id, participant)
@@ -507,7 +721,7 @@ async def _broadcast(
         for ws_id, p in targets
     }
 
-    done, pending = await asyncio.wait(task_map.keys(), timeout=3.0)
+    done, pending = await asyncio.wait(task_map.keys(), timeout=1.0)
 
     dead: list[str] = []
     # Cancel any broadcasts that did not finish within the 3.0s timeout
@@ -523,29 +737,60 @@ async def _broadcast(
         except Exception:
             dead.append(ws_id)
 
-    # Pop all dead connections first, then announce — so the participant_list
-    # in each notification already excludes every disconnected member.
     removed = [session.participants.pop(ws_id, None) for ws_id in dead]
     removed = [p for p in removed if p is not None]
 
-    # Close dead/timed-out WebSockets cleanly so sockets are released and clients are notified
+    client = await get_async_redis_client()
     for p in removed:
         try:
             await p.ws.close(code=1001, reason="Broadcast timeout or connection error")
         except Exception:
             pass
+        if client is not None:
+            try:
+                await client.hdel(f"chat:session:{session.token}:participants", p.ws_id)
+            except Exception:
+                pass
 
-    for participant in removed:
-        participant_list = _make_participant_list(session)
-        await _broadcast(
-            session,
-            {
-                "type": "system",
-                "text": f"{participant.display_name} disconnected",
-                "participant_count": len(session.participants),
-                "participant_list": participant_list,
-            },
-        )
+    if removed:
+        participant_list = await _get_participant_list_async(session)
+        participant_count = await _get_participant_count_async(session)
+        for participant in removed:
+            await _broadcast(
+                session,
+                {
+                    "type": "system",
+                    "text": f"{participant.display_name} disconnected",
+                    "participant_count": participant_count,
+                    "participant_list": participant_list,
+                },
+            )
+
+
+async def _broadcast(
+    session: _ChatSession,
+    payload: dict,
+    exclude_ws_id: Optional[str] = None,
+) -> None:
+    """
+    Broadcast a JSON payload. If Redis is available, publishes to Redis Pub/Sub
+    channel so all worker processes receive it. Otherwise falls back to local delivery.
+    """
+    client = await get_async_redis_client()
+    if client is not None:
+        try:
+            msg = json.dumps({
+                "event": "broadcast",
+                "payload": payload,
+                "exclude_ws_id": exclude_ws_id,
+            })
+            await client.publish(f"chat:channel:{session.token}", msg)
+            return
+        except Exception as exc:
+            logger.warning("Redis publish failed (%s), falling back to local broadcast", exc)
+
+    # In-memory fallback direct delivery
+    await _deliver_local_broadcast(session, payload, exclude_ws_id)
 
 
 # ---------------------------------------------------------------------------
@@ -564,10 +809,6 @@ async def _countdown_loop(token: str, session: _ChatSession) -> None:
 
     Remaining time is always computed from ``session.expires_at - now`` so
     that event-loop contention and GC pauses do not accumulate into drift.
-
-    The sleep floor of 0.05 s prevents a tight spin loop in the degenerate
-    case where ``remaining`` drifts to a positive value smaller than the
-    normal interval (e.g. after a GC pause in the last 1-second tick).
 
     Calls ``_destroy_session`` when the TTL expires.
     """
@@ -605,15 +846,25 @@ async def _destroy_session(token: str) -> None:
     """
     Destroy a chat session completely.
 
-    1. Broadcasts ``{"type": "destroyed"}`` to all connected clients.
+    1. Broadcasts ``{"type": "destroyed"}`` to all connected clients (via Pub/Sub if Redis active).
     2. Closes every WebSocket.
-    3. Removes the session from ``_SESSIONS`` — GC frees the memory.
+    3. Removes the session from Redis and ``_SESSIONS`` — GC frees the memory.
 
     Idempotent: calling it on an already-destroyed session is a no-op.
     """
     session = _SESSIONS.get(token)
     if session is None:
-        return  # Already destroyed.
+        client = await get_async_redis_client()
+        if client is not None:
+            try:
+                await client.delete(f"chat:session:{token}")
+                await client.delete(f"chat:session:{token}:participants")
+                await client.zrem("chat:active_sessions", token)
+                msg = json.dumps({"event": "broadcast", "payload": {"type": "destroyed"}})
+                await client.publish(f"chat:channel:{token}", msg)
+            except Exception:
+                pass
+        return
 
     logger.info("Destroying burn chat session %s…", token[:8])
 
@@ -636,6 +887,21 @@ async def _destroy_session(token: str) -> None:
         except (RuntimeError, Exception):
             pass
 
+    # Clean up Pub/Sub listener task
+    task = _PUBSUB_TASKS.pop(token, None)
+    if task and not task.done():
+        task.cancel()
+
+    # Delete from Redis
+    client = await get_async_redis_client()
+    if client is not None:
+        try:
+            await client.delete(f"chat:session:{token}")
+            await client.delete(f"chat:session:{token}:participants")
+            await client.zrem("chat:active_sessions", token)
+        except Exception:
+            pass
+
     # Remove from memory — this is the burn.
     _SESSIONS.pop(token, None)
     logger.info(
@@ -644,7 +910,8 @@ async def _destroy_session(token: str) -> None:
 
 
 async def close_chat_service() -> None:
-    """Cancel all active countdown tasks and clear sessions on shutdown."""
+    """Cancel all active countdown tasks, Pub/Sub listeners, and clear sessions on shutdown."""
+    global _async_redis_client
     for session in list(_SESSIONS.values()):
         destroy_task = getattr(session, "_destroy_task", None)
         if destroy_task and not destroy_task.done():
@@ -653,7 +920,22 @@ async def close_chat_service() -> None:
                     destroy_task.cancel()
             except (RuntimeError, Exception):
                 pass
+
+    for task in list(_PUBSUB_TASKS.values()):
+        if not task.done():
+            try:
+                task.cancel()
+            except Exception:
+                pass
+    _PUBSUB_TASKS.clear()
     _SESSIONS.clear()
+
+    if _async_redis_client is not None:
+        try:
+            await _async_redis_client.close()
+        except Exception:
+            pass
+        _async_redis_client = None
 
 
 # ---------------------------------------------------------------------------
@@ -681,15 +963,47 @@ def create_session(ttl_seconds: int) -> tuple[str, str, datetime]:
         raise ValueError(
             f"ttl_seconds must be between {MIN_TTL_SECONDS} and {MAX_TTL_SECONDS}"
         )
+    sync_client = security.get_redis_client()
+    if sync_client is not None:
+        try:
+            now_ts = time.time()
+            sync_client.zremrangebyscore("chat:active_sessions", "-inf", now_ts)
+            global_count = sync_client.zcard("chat:active_sessions")
+            if global_count is not None and global_count >= MAX_SESSIONS:
+                raise RuntimeError("Maximum concurrent chat sessions reached — try again later")
+        except RuntimeError:
+            raise
+        except Exception:
+            pass
+
     if len(_SESSIONS) >= MAX_SESSIONS:
         raise RuntimeError("Maximum concurrent chat sessions reached — try again later")
 
     token = str(uuid.uuid4())
     pin = _generate_pin()
-    expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(seconds=ttl_seconds)
 
-    session = _ChatSession(token=token, creator_pin=pin, expires_at=expires_at)
+    session = _ChatSession(token=token, creator_pin=pin, expires_at=expires_at, created_at=now)
     _SESSIONS[token] = session
+
+    # Store in Redis with TTL expiration if available
+    if sync_client is not None:
+        try:
+            sync_client.set(
+                f"chat:session:{token}",
+                json.dumps({
+                    "token": token,
+                    "creator_pin": pin,
+                    "expires_at": expires_at.isoformat(),
+                    "created_at": now.isoformat(),
+                    "locked": False,
+                }),
+                ex=ttl_seconds,
+            )
+            sync_client.zadd("chat:active_sessions", {token: expires_at.timestamp()})
+        except Exception as exc:
+            logger.warning("Failed to store chat session in Redis: %s", exc)
 
     # Start the countdown / auto-destroy background task.
     task = asyncio.create_task(_countdown_loop(token, session))
@@ -709,14 +1023,48 @@ def get_session(token: str) -> Optional[_ChatSession]:
     """
     Return the live session for *token*, or ``None`` if expired / not found.
 
-    Does NOT mutate state — safe to call from read paths.
+    Checks local ``_SESSIONS`` first, and queries Redis if missing to support
+    multi-worker routing. Does NOT mutate state — safe to call from read paths.
     """
     session = _SESSIONS.get(token)
-    if session is None:
+    now = datetime.now(timezone.utc)
+    if session is not None and now >= session.expires_at:
+        _SESSIONS.pop(token, None)
         return None
-    if datetime.now(timezone.utc) >= session.expires_at:
-        # The countdown task should destroy it, but return None conservatively.
-        return None
+
+    # Check Redis so Worker 2 knows the session exists even if created on Worker 1
+    sync_client = security.get_redis_client()
+    if sync_client is not None:
+        try:
+            raw = sync_client.get(f"chat:session:{token}")
+            if raw:
+                meta = json.loads(raw)
+                expires_at = datetime.fromisoformat(meta["expires_at"])
+                if now >= expires_at:
+                    _SESSIONS.pop(token, None)
+                    return None
+                created_at = datetime.fromisoformat(meta["created_at"])
+                if session is None:
+                    session = _ChatSession(
+                        token=meta["token"],
+                        creator_pin=meta["creator_pin"],
+                        expires_at=expires_at,
+                        created_at=created_at,
+                        locked=meta.get("locked", False),
+                    )
+                    _SESSIONS[token] = session
+                else:
+                    session.locked = meta.get("locked", False)
+                    session.expires_at = expires_at
+                return session
+            elif raw is None:
+                # Session was destroyed, burned, or expired in Redis across workers
+                if session is not None:
+                    _SESSIONS.pop(token, None)
+                return None
+        except Exception:
+            pass
+
     return session
 
 
@@ -726,11 +1074,22 @@ def session_info(token: str) -> Optional[dict]:
         return None
     now = datetime.now(timezone.utc)
     remaining = max(0, int((session.expires_at - now).total_seconds()))
+
+    participant_count = len(session.participants)
+    sync_client = security.get_redis_client()
+    if sync_client is not None:
+        try:
+            count = sync_client.hlen(f"chat:session:{token}:participants")
+            if count is not None:
+                participant_count = count
+        except Exception:
+            pass
+
     return {
         "token": token,
         "expires_at": session.expires_at.isoformat(),
         "seconds_remaining": remaining,
-        "participant_count": len(session.participants),
+        "participant_count": participant_count,
         "locked": session.locked,
         "created_at": session.created_at.isoformat(),
     }
@@ -746,7 +1105,17 @@ async def join_session(
     if session is None:
         return None, JoinStatus.SESSION_NOT_FOUND
 
-    if len(session.participants) >= MAX_PARTICIPANTS:
+    client = await get_async_redis_client()
+
+    # Participant count check (global)
+    current_count = len(session.participants)
+    if client is not None:
+        try:
+            current_count = await client.hlen(f"chat:session:{token}:participants")
+        except Exception:
+            pass
+
+    if current_count >= MAX_PARTICIPANTS:
         return None, JoinStatus.SESSION_FULL
 
     # Locked rooms only admit the creator.
@@ -754,10 +1123,21 @@ async def join_session(
     if pin:
         if not secrets.compare_digest(pin, session.creator_pin):
             return None, JoinStatus.PIN_INVALID
-        # Reject if another creator is already connected — allowing two
-        # creators would cause each to generate an independent E2E session
-        # key, splitting participants into incompatible encryption groups.
-        if any(p.is_creator for p in session.participants.values()):
+
+        # Check if creator is already connected (global)
+        creator_connected = any(p.is_creator for p in session.participants.values())
+        if not creator_connected and client is not None:
+            try:
+                raw_entries = await client.hvals(f"chat:session:{token}:participants")
+                for e in raw_entries:
+                    p_info = json.loads(e)
+                    if p_info.get("is_creator"):
+                        creator_connected = True
+                        break
+            except Exception:
+                pass
+
+        if creator_connected:
             return None, JoinStatus.CREATOR_ALREADY_CONNECTED
         is_creator = True
 
@@ -784,13 +1164,38 @@ async def join_session(
     )
     session.participants[pid] = participant
 
-    participant_list = _make_participant_list(session)
+    # Save to Redis hash if client available
+    if client is not None:
+        try:
+            p_dict = {
+                "participant_id": pid,
+                "participant_token": ptoken,
+                "ws_id": pid,
+                "display_name": safe_name,
+                "name": safe_name,
+                "role": role_label,
+                "is_creator": is_creator,
+                "public_key": None,
+            }
+            await client.hset(f"chat:session:{token}:participants", pid, json.dumps(p_dict))
+            ttl = await client.ttl(f"chat:session:{token}")
+            if ttl and ttl > 0:
+                await client.expire(f"chat:session:{token}:participants", ttl)
+        except Exception as exc:
+            logger.warning("Failed to store participant in Redis: %s", exc)
+
+    # Start Pub/Sub listener on this worker if not already running
+    _ensure_pubsub_listener(token)
+
+    participant_list = await _get_participant_list_async(session)
+    participant_count = await _get_participant_count_async(session)
+
     await _broadcast(
         session,
         {
             "type": "system",
             "text": f"{safe_name} joined as {role_label}",
-            "participant_count": len(session.participants),
+            "participant_count": participant_count,
             "participant_list": participant_list,
         },
         exclude_ws_id=pid,
@@ -808,7 +1213,7 @@ async def join_session(
                 "token": token,
                 "is_creator": is_creator,
                 "seconds_remaining": remaining,
-                "participant_count": len(session.participants),
+                "participant_count": participant_count,
                 "participant_list": participant_list,
                 "locked": session.locked,
                 "expires_at": session.expires_at.isoformat(),
@@ -816,14 +1221,20 @@ async def join_session(
         )
     except Exception as exc:
         session.participants.pop(pid, None)
+        if client is not None:
+            try:
+                await client.hdel(f"chat:session:{token}:participants", pid)
+            except Exception:
+                pass
         logger.debug("Failed to send joined confirmation to %s: %s", pid, exc)
-        participant_list = _make_participant_list(session)
+        participant_list = await _get_participant_list_async(session)
+        participant_count = await _get_participant_count_async(session)
         await _broadcast(
             session,
             {
                 "type": "system",
                 "text": f"{safe_name} disconnected",
-                "participant_count": len(session.participants),
+                "participant_count": participant_count,
                 "participant_list": participant_list,
             },
         )
@@ -952,14 +1363,34 @@ async def leave_session(token: str, ws_id: str) -> None:
         return
 
     participant = session.participants.pop(ws_id, None)
-    if participant:
-        participant_list = _make_participant_list(session)
+    client = await get_async_redis_client()
+
+    p_name = participant.display_name if participant else None
+    if client is not None:
+        try:
+            if not p_name:
+                raw_p = await client.hget(f"chat:session:{token}:participants", ws_id)
+                if raw_p:
+                    p_name = json.loads(raw_p).get("display_name")
+            await client.hdel(f"chat:session:{token}:participants", ws_id)
+        except Exception:
+            pass
+
+    # If no more local participants on this worker, stop Pub/Sub listener
+    if len(session.participants) == 0:
+        task = _PUBSUB_TASKS.pop(token, None)
+        if task and not task.done():
+            task.cancel()
+
+    if p_name:
+        participant_list = await _get_participant_list_async(session)
+        participant_count = await _get_participant_count_async(session)
         await _broadcast(
             session,
             {
                 "type": "system",
-                "text": f"{participant.display_name} left",
-                "participant_count": len(session.participants),
+                "text": f"{p_name} left",
+                "participant_count": participant_count,
                 "participant_list": participant_list,
             },
         )
@@ -988,7 +1419,15 @@ async def relay_e2e_pubkey(
     if session is None:
         return False
 
-    if sender_ws_id not in session.participants:
+    client = await get_async_redis_client()
+    sender_exists = sender_ws_id in session.participants
+    if not sender_exists and client is not None:
+        try:
+            sender_exists = await client.hexists(f"chat:session:{token}:participants", sender_ws_id)
+        except Exception:
+            pass
+
+    if not sender_exists:
         return False
 
     # Validate: non-empty, strict base64, within size cap.
@@ -999,7 +1438,18 @@ async def relay_e2e_pubkey(
     # Persist the validated pubkey on the participant so late-joining peers
     # receive it in the 'joined' participant_list and can unwrap session keys
     # without waiting for a re-broadcast that may never arrive.
-    session.participants[sender_ws_id].public_key = key_str
+    if sender_ws_id in session.participants:
+        session.participants[sender_ws_id].public_key = key_str
+
+    if client is not None:
+        try:
+            raw_p = await client.hget(f"chat:session:{token}:participants", sender_ws_id)
+            if raw_p:
+                p_data = json.loads(raw_p)
+                p_data["public_key"] = key_str
+                await client.hset(f"chat:session:{token}:participants", sender_ws_id, json.dumps(p_data))
+        except Exception:
+            pass
 
     await _broadcast(
         session,
@@ -1033,8 +1483,16 @@ async def relay_e2e_session_key(
     if actor is None or not actor.is_creator:
         return False
 
+    client = await get_async_redis_client()
     target = session.participants.get(for_ws_id)
-    if target is None:
+    target_exists = target is not None
+    if not target_exists and client is not None:
+        try:
+            target_exists = await client.hexists(f"chat:session:{token}:participants", for_ws_id)
+        except Exception:
+            pass
+
+    if not target_exists:
         return False  # recipient already left
 
     # Validate: non-empty, base64 only, within size cap.
@@ -1042,18 +1500,32 @@ async def relay_e2e_session_key(
     if not key_str or not _B64_RE.match(key_str):
         return False
 
-    try:
-        await target.ws.send_json(
-            {
-                "type": "session_key",
-                "from_ws_id": actor_ws_id,
-                "wrapped_key": key_str,
-            }
-        )
-    except Exception:
-        return False
+    payload = {
+        "type": "session_key",
+        "from_ws_id": actor_ws_id,
+        "wrapped_key": key_str,
+    }
 
-    return True
+    if client is not None:
+        try:
+            msg = json.dumps({
+                "event": "unicast",
+                "target_ws_id": for_ws_id,
+                "payload": payload,
+            })
+            await client.publish(f"chat:channel:{token}", msg)
+            return True
+        except Exception as exc:
+            logger.warning("Redis unicast publish failed: %s", exc)
+
+    if target is not None:
+        try:
+            await target.ws.send_json(payload)
+            return True
+        except Exception:
+            return False
+
+    return False
 
 
 async def kick_participant(token: str, actor_ws_id: str, target_ws_id: str) -> bool:
@@ -1074,25 +1546,55 @@ async def kick_participant(token: str, actor_ws_id: str, target_ws_id: str) -> b
     if target_ws_id == actor_ws_id:
         return False  # no self-kick
 
+    client = await get_async_redis_client()
     target = session.participants.pop(target_ws_id, None)
-    if target is None:
+    target_name = target.display_name if target else None
+
+    if target is None and client is not None:
+        try:
+            raw_p = await client.hget(f"chat:session:{token}:participants", target_ws_id)
+            if raw_p:
+                p_data = json.loads(raw_p)
+                target_name = p_data.get("display_name", "Participant")
+                await client.hdel(f"chat:session:{token}:participants", target_ws_id)
+        except Exception:
+            pass
+
+    if target is None and target_name is None:
         return False
 
-    try:
-        await target.ws.send_json(
-            {"type": "error", "text": "You have been removed by the creator.", "code": "kicked"}
-        )
-        await target.ws.close(code=4001, reason="Kicked by creator")
-    except Exception:
-        pass
+    if target is not None:
+        try:
+            await target.ws.send_json(
+                {"type": "error", "text": "You have been removed by the creator.", "code": "kicked"}
+            )
+            await target.ws.close(code=4001, reason="Kicked by creator")
+        except Exception:
+            pass
+        if client is not None:
+            try:
+                await client.hdel(f"chat:session:{token}:participants", target_ws_id)
+            except Exception:
+                pass
 
-    participant_list = _make_participant_list(session)
+    if client is not None:
+        try:
+            msg = json.dumps({
+                "event": "kick",
+                "target_ws_id": target_ws_id,
+            })
+            await client.publish(f"chat:channel:{token}", msg)
+        except Exception:
+            pass
+
+    participant_list = await _get_participant_list_async(session)
+    participant_count = await _get_participant_count_async(session)
     await _broadcast(
         session,
         {
             "type": "system",
-            "text": f"{target.display_name} was removed by the creator",
-            "participant_count": len(session.participants),
+            "text": f"{target_name or 'Participant'} was removed by the creator",
+            "participant_count": participant_count,
             "participant_list": participant_list,
         },
     )
@@ -1115,6 +1617,20 @@ async def lock_room(token: str, actor_ws_id: str, locked: bool) -> bool:
         return False
 
     session.locked = locked
+
+    client = await get_async_redis_client()
+    if client is not None:
+        try:
+            raw = await client.get(f"chat:session:{token}")
+            if raw:
+                meta = json.loads(raw)
+                meta["locked"] = locked
+                ttl = await client.ttl(f"chat:session:{token}")
+                ex = ttl if ttl and ttl > 0 else None
+                await client.set(f"chat:session:{token}", json.dumps(meta), ex=ex)
+        except Exception as exc:
+            logger.warning("Failed to update locked state in Redis: %s", exc)
+
     await _broadcast(
         session,
         {"type": "room_locked", "locked": locked},
@@ -1150,6 +1666,19 @@ async def extend_ttl(token: str, actor_ws_id: str, extra_seconds: int) -> bool:
     session.expires_at = new_expiry
     now = datetime.now(timezone.utc)
     remaining = max(0, int((session.expires_at - now).total_seconds()))
+
+    client = await get_async_redis_client()
+    if client is not None:
+        try:
+            raw = await client.get(f"chat:session:{token}")
+            if raw:
+                meta = json.loads(raw)
+                meta["expires_at"] = new_expiry.isoformat()
+                await client.set(f"chat:session:{token}", json.dumps(meta), ex=remaining)
+            await client.expire(f"chat:session:{token}:participants", remaining)
+        except Exception as exc:
+            logger.warning("Failed to update TTL in Redis: %s", exc)
+
     await _broadcast(
         session,
         {"type": "ttl_extended", "seconds_remaining": remaining, "expires_at": session.expires_at.isoformat()},
