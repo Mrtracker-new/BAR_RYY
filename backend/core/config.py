@@ -72,6 +72,9 @@ class Settings(BaseSettings):
         """Return absolute filesystem path for the SQLite database."""
         return resolve_sqlite_db_path(self.database_url)
     
+    # Redis (for distributed rate limiting & brute-force protection)
+    redis_url: str = os.getenv("REDIS_URL", "")
+    
     # 2FA
     require_2fa: bool = os.getenv("REQUIRE_2FA", "false").lower() == "true"
 

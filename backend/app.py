@@ -70,6 +70,7 @@ async def lifespan(app: FastAPI):
     await analytics.close_httpx_client()
     await webhook_service.get_webhook_service().close()
     await database.close_database()
+    security.close_redis_client()
     logger.info("%s shutdown complete", settings.app_name)
 
 

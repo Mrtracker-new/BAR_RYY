@@ -22,12 +22,138 @@ import logging
 from typing import Dict, Optional
 from core.config import settings
 
+try:
+    import redis
+except ImportError:
+    redis = None
+
 logger = logging.getLogger(__name__)
 
-# Rate limiting storage (in production, use Redis)
+# Redis client instance for rate limiting and brute force protection
+_redis_client: Optional[object] = None
+_last_redis_retry_time: float = 0.0
+_REDIS_RETRY_INTERVAL: float = 30.0
+
+
+def get_redis_client():
+    """
+    Get or initialize the Redis client.
+    Returns None if Redis is not configured, not installed, or unavailable.
+    Retries every 30 seconds if previously unavailable.
+    """
+    global _redis_client, _last_redis_retry_time
+    if _redis_client is not None:
+        return _redis_client
+
+    redis_url = getattr(settings, "redis_url", "") or os.getenv("REDIS_URL", "")
+    if not redis_url or redis is None:
+        return None
+
+    now = time.time()
+    if now - _last_redis_retry_time < _REDIS_RETRY_INTERVAL:
+        return None
+
+    try:
+        client = redis.from_url(
+            redis_url,
+            decode_responses=True,
+            socket_timeout=1.0,
+            socket_connect_timeout=1.0,
+            retry_on_timeout=True,
+        )
+        client.ping()
+        _redis_client = client
+        logger.info("Connected to Redis for distributed rate limiting & brute-force protection")
+        return _redis_client
+    except Exception as e:
+        _last_redis_retry_time = now
+        logger.warning(
+            "Could not connect to Redis (%s). Falling back to in-memory rate limiting (will retry in %ds).",
+            e,
+            int(_REDIS_RETRY_INTERVAL),
+        )
+        return None
+
+
+def set_redis_client(client) -> None:
+    """Set or override the Redis client (useful for testing or manual injection)."""
+    global _redis_client, _last_redis_retry_time
+    _redis_client = client
+    _last_redis_retry_time = 0.0
+
+
+def close_redis_client() -> None:
+    """Close the Redis client connection pool on shutdown."""
+    global _redis_client
+    if _redis_client is not None:
+        try:
+            _redis_client.close()
+        except Exception:
+            pass
+        _redis_client = None
+
+
+def _handle_redis_failure(e: Exception) -> None:
+    """Handle a runtime Redis operation failure by backing off and falling back."""
+    global _redis_client, _last_redis_retry_time
+    logger.warning("Redis operation failed (%s); falling back to in-memory store", e)
+    if redis is not None and isinstance(e, (redis.ConnectionError, redis.TimeoutError)):
+        _redis_client = None
+        _last_redis_retry_time = time.time()
+
+
+# Lua script for atomic sliding-window rate limiting using ZREMRANGEBYSCORE and ZADD
+_SLIDING_WINDOW_LUA = """
+local key = KEYS[1]
+local now = tonumber(ARGV[1])
+local window_start = tonumber(ARGV[2])
+local limit = tonumber(ARGV[3])
+local ttl = tonumber(ARGV[4])
+local member = ARGV[5]
+
+redis.call('ZREMRANGEBYSCORE', key, '-inf', window_start)
+local current_count = redis.call('ZCARD', key)
+
+if current_count < limit then
+    redis.call('ZADD', key, now, member)
+    redis.call('EXPIRE', key, ttl)
+    return {1, current_count + 1}
+else
+    return {0, current_count}
+end
+"""
+
+
+def _eval_sliding_window_redis(client, key: str, limit: int, window_seconds: int) -> bool:
+    """
+    Execute atomic sliding-window rate limit check in Redis using ZADD/ZREMRANGEBYSCORE.
+    Returns True if allowed, False if limit exceeded.
+    """
+    redis_key = f"rl:{key}"
+    now = time.time()
+    window_start = now - window_seconds
+    ttl = max(window_seconds * 2, 300)
+    member = f"{now}:{secrets.token_hex(4)}"
+
+    res = client.eval(
+        _SLIDING_WINDOW_LUA,
+        1,
+        redis_key,
+        now,
+        window_start,
+        limit,
+        ttl,
+        member,
+    )
+    if isinstance(res, (list, tuple)):
+        return bool(res[0])
+    return bool(res)
+
+
+# Rate limiting storage (fallback when Redis is not configured)
 rate_limit_storage: Dict[str, list] = defaultdict(list)
 
-# Password brute force protection storage
+# Password brute force protection storage (fallback when Redis is not configured)
 # Format: {"ip:token": [{"timestamp": datetime, "success": bool}, ...]}
 password_attempts: Dict[str, list] = defaultdict(list)
 
@@ -189,6 +315,21 @@ def check_rate_limit_keyed(key: str, limit: int = 60, window_seconds: int = 60) 
     Raises:
         HTTPException 429 if the bucket is exhausted.
     """
+    client = get_redis_client()
+    if client is not None:
+        try:
+            allowed = _eval_sliding_window_redis(client, key, limit, window_seconds)
+            if not allowed:
+                raise HTTPException(
+                    status_code=429,
+                    detail="Rate limit exceeded. Please try again later."
+                )
+            return
+        except HTTPException:
+            raise
+        except Exception as e:
+            _handle_redis_failure(e)
+
     current_time = datetime.now(timezone.utc)
     cutoff_time = current_time - timedelta(seconds=window_seconds)
 
@@ -234,6 +375,17 @@ def check_ws_rate_limit(
         return True
 
     key = f"ws_connect:{client_ip}"
+    client = get_redis_client()
+    if client is not None:
+        try:
+            allowed = _eval_sliding_window_redis(client, key, limit, window_seconds)
+            if not allowed:
+                logger.warning("WS connect rate limit exceeded ip=%s", client_ip)
+                return False
+            return True
+        except Exception as e:
+            _handle_redis_failure(e)
+
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(seconds=window_seconds)
     rate_limit_storage[key] = [ts for ts in rate_limit_storage[key] if ts > cutoff]
@@ -305,6 +457,46 @@ def check_password_brute_force(client_ip: str, resource_id: str = None) -> tuple
         HTTPException: If client is locked out (429 Too Many Requests)
     """
     key = f"{client_ip}:{resource_id}" if resource_id else client_ip
+    redis_key = f"bf:{key}"
+    client = get_redis_client()
+
+    if client is not None:
+        try:
+            now = time.time()
+            lockout_cutoff = now - (LOCKOUT_DURATION_MINUTES * 60)
+
+            pipe = client.pipeline()
+            pipe.zremrangebyscore(redis_key, '-inf', lockout_cutoff)
+            pipe.zcard(redis_key)
+            pipe.zrange(redis_key, 0, 0, withscores=True)
+            results = pipe.execute()
+
+            failed_count = results[1]
+            oldest = results[2]
+
+            if failed_count >= MAX_PASSWORD_ATTEMPTS:
+                oldest_failed_ts = float(oldest[0][1]) if (oldest and len(oldest) > 0) else now
+                lockout_expires = oldest_failed_ts + (LOCKOUT_DURATION_MINUTES * 60)
+                time_remaining = lockout_expires - now
+                minutes_remaining = max(1, int(time_remaining / 60))
+
+                message = (
+                    f"Too many failed password attempts. "
+                    f"Account locked for {minutes_remaining} minutes. "
+                    f"Please try again later."
+                )
+
+                raise HTTPException(
+                    status_code=429,
+                    detail=message
+                )
+
+            return False, failed_count, ""
+        except HTTPException:
+            raise
+        except Exception as e:
+            _handle_redis_failure(e)
+
     current_time = datetime.now(timezone.utc)
     lockout_cutoff = current_time - timedelta(minutes=LOCKOUT_DURATION_MINUTES)
     
@@ -353,7 +545,24 @@ def record_password_attempt(client_ip: str, success: bool, resource_id: str = No
         resource_id: Optional resource identifier (token/bar_id)
     """
     key = f"{client_ip}:{resource_id}" if resource_id else client_ip
-    
+    redis_key = f"bf:{key}"
+    client = get_redis_client()
+
+    if client is not None:
+        try:
+            if success:
+                client.delete(redis_key)
+            else:
+                now = time.time()
+                member = f"{now}:{secrets.token_hex(4)}"
+                ttl = LOCKOUT_DURATION_MINUTES * 60 + 300
+                pipe = client.pipeline()
+                pipe.zadd(redis_key, {member: now})
+                pipe.expire(redis_key, ttl)
+                pipe.execute()
+        except Exception as e:
+            _handle_redis_failure(e)
+
     password_attempts[key].append({
         "timestamp": datetime.now(timezone.utc),
         "success": success
