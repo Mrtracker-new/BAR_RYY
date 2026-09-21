@@ -194,8 +194,13 @@ class SSRFSafeAsyncHTTPTransport(httpx.AsyncHTTPTransport):
 class WebhookService:
     """Service for sending webhook notifications"""
     
-    def __init__(self):
-        self.timeout = 10.0  # 10 second timeout for webhook calls
+    def __init__(
+        self,
+        timeout: float = 10.0,
+        retry_delays: Union[tuple[float, ...], List[float]] = (1.0, 2.0)
+    ):
+        self.timeout = timeout  # 10 second timeout for webhook calls
+        self.retry_delays = tuple(retry_delays)
         self._client: Optional[httpx.AsyncClient] = None
 
     def _get_client(self) -> httpx.AsyncClient:
@@ -226,7 +231,8 @@ class WebhookService:
         self,
         webhook_url: str,
         event_type: str,
-        data: Dict[str, Any]
+        data: Dict[str, Any],
+        retry_delays: Optional[Union[tuple[float, ...], List[float]]] = None
     ) -> tuple[bool, Optional[str]]:
         """
         Send a webhook notification to the specified URL
@@ -234,7 +240,8 @@ class WebhookService:
         Returns:
             (success: bool, error_message: Optional[str])
         """
-        if not webhook_url or webhook_url.strip() == "":
+        webhook_url = (webhook_url or "").strip()
+        if not webhook_url:
             return False, "No webhook URL provided"
         
         # ------------------------------------------------------------------ #
@@ -244,7 +251,8 @@ class WebhookService:
         # making the outbound connection, closing the TOCTOU window that       #
         # exists between initial validation at /seal time and this call.       #
         # ------------------------------------------------------------------ #
-        if not _ssrf_safe_url(webhook_url):
+        is_safe = await asyncio.to_thread(_ssrf_safe_url, webhook_url)
+        if not is_safe:
             error_msg = "Webhook URL blocked by SSRF guard at request time"
             logger.error(
                 "send_webhook: SSRF guard blocked outbound request to '%s' for event '%s'.",
@@ -253,12 +261,12 @@ class WebhookService:
             return False, error_msg
 
         try:
-            # Prepare the payload
+            # Prepare the payload (unpack caller data first so authoritative fields are not overwritten)
             payload = {
+                **data,
                 "event": event_type,
                 "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
                 "service": "BAR Web",
-                **data
             }
 
             # Detect webhook type and format accordingly
@@ -276,31 +284,91 @@ class WebhookService:
             # all URL-level validation — we refuse to follow any redirect.     #
             # ---------------------------------------------------------------- #
             client = self._get_client()
-            response = await client.post(
-                webhook_url,
-                json=payload,
-                headers={"Content-Type": "application/json"}
-            )
+            delays = tuple(retry_delays) if retry_delays is not None else self.retry_delays
+            total_attempts = len(delays) + 1
 
-            if response.status_code in [200, 204]:
-                logger.info("send_webhook: event '%s' delivered successfully.", event_type)
-                return True, None
-            else:
-                error_msg = f"Webhook returned status {response.status_code}"
-                logger.warning(
-                    "send_webhook: event '%s' delivery failed — %s.",
-                    event_type, error_msg
-                )
-                return False, error_msg
+            for attempt in range(1, total_attempts + 1):
+                try:
+                    response = await client.post(
+                        webhook_url,
+                        json=payload,
+                        headers={"Content-Type": "application/json"}
+                    )
 
-        except httpx.ConnectError as e:
-            error_msg = f"Webhook connection blocked by SSRF guard: {str(e)}"
-            logger.warning("send_webhook: connection error for event '%s': %s", event_type, error_msg)
-            return False, error_msg
-        except asyncio.TimeoutError:
-            error_msg = "Webhook request timed out"
-            logger.warning("send_webhook: event '%s' timed out.", event_type)
-            return False, error_msg
+                    if 200 <= response.status_code < 300:
+                        logger.info("send_webhook: event '%s' delivered successfully.", event_type)
+                        return True, None
+                    elif response.status_code == 429 or 500 <= response.status_code < 600:
+                        if attempt < total_attempts:
+                            delay = delays[attempt - 1]
+                            if response.status_code == 429:
+                                retry_after = response.headers.get("Retry-After")
+                                if retry_after:
+                                    try:
+                                        delay = min(max(float(retry_after), delay), 30.0)
+                                    except (ValueError, TypeError):
+                                        pass
+                            logger.warning(
+                                "send_webhook: event '%s' attempt %d/%d failed with status %d — retrying in %ss.",
+                                event_type, attempt, total_attempts, response.status_code, delay
+                            )
+                            await asyncio.sleep(delay)
+                            continue
+                        else:
+                            error_msg = f"Webhook returned status {response.status_code}"
+                            logger.warning(
+                                "send_webhook: event '%s' delivery failed after %d attempts — %s.",
+                                event_type, total_attempts, error_msg
+                            )
+                            return False, error_msg
+                    else:
+                        error_msg = f"Webhook returned status {response.status_code}"
+                        logger.warning(
+                            "send_webhook: event '%s' delivery failed — %s.",
+                            event_type, error_msg
+                        )
+                        return False, error_msg
+
+                except (httpx.TimeoutException, asyncio.TimeoutError):
+                    if attempt < total_attempts:
+                        delay = delays[attempt - 1]
+                        logger.warning(
+                            "send_webhook: event '%s' attempt %d/%d timed out — retrying in %ss.",
+                            event_type, attempt, total_attempts, delay
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+                    else:
+                        error_msg = "Webhook request timed out"
+                        logger.warning(
+                            "send_webhook: event '%s' timed out after %d attempts.",
+                            event_type, total_attempts
+                        )
+                        return False, error_msg
+
+                except httpx.NetworkError as e:
+                    err_str = str(e)
+                    if "SSRF Guard" in err_str or "SSRF guard" in err_str:
+                        error_msg = f"Webhook connection blocked by SSRF guard: {err_str}"
+                        logger.warning("send_webhook: connection error for event '%s': %s", event_type, error_msg)
+                        return False, error_msg
+
+                    if attempt < total_attempts:
+                        delay = delays[attempt - 1]
+                        logger.warning(
+                            "send_webhook: event '%s' attempt %d/%d network error (%s) — retrying in %ss.",
+                            event_type, attempt, total_attempts, err_str, delay
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+                    else:
+                        error_msg = f"Webhook network error: {err_str}"
+                        logger.warning(
+                            "send_webhook: event '%s' delivery failed after %d attempts — %s.",
+                            event_type, total_attempts, error_msg
+                        )
+                        return False, error_msg
+
         except Exception as e:
             error_msg = f"Webhook failed: {str(e)}"
             logger.error("send_webhook: unexpected error for event '%s'.", event_type, exc_info=True)
@@ -330,15 +398,24 @@ class WebhookService:
         fields = []
         for key, value in data.items():
             if key not in ["timestamp"]:  # Skip timestamp as it's in footer
+                name = key.replace("_", " ").title()[:256]
+                val_str = str(value).strip() if value is not None else ""
+                if not val_str:
+                    val_str = "N/A"
+                elif len(val_str) > 1024:
+                    val_str = val_str[:1020] + "..."
+
                 fields.append({
-                    "name": key.replace("_", " ").title(),
-                    "value": str(value),
+                    "name": name,
+                    "value": val_str,
                     "inline": True
                 })
+                if len(fields) >= 25:
+                    break
         
         return {
             "embeds": [{
-                "title": f"{emoji} BAR Web Alert: {event_type.replace('_', ' ').title()}",
+                "title": f"{emoji} BAR Web Alert: {event_type.replace('_', ' ').title()}"[:256],
                 "color": color,
                 "fields": fields,
                 "footer": {
