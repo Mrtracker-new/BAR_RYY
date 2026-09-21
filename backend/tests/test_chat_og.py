@@ -12,8 +12,7 @@ from services import chat_service
 
 @pytest.fixture
 def client():
-    with TestClient(app) as test_client:
-        yield test_client
+    return TestClient(app)
 
 
 def test_og_chat_invalid_token_rejected_400(client):
@@ -44,17 +43,15 @@ def test_og_chat_valid_token_expired_session(client):
     assert fake_token in res.text
 
 
-@pytest.mark.asyncio
-async def test_og_chat_valid_token_active_session():
+def test_og_chat_valid_token_active_session(client):
     """Ensure active session returns 200 with remaining time and participant count."""
     token, pin, expires_at = chat_service.create_session(ttl_seconds=300)
     try:
-        with TestClient(app) as client:
-            res = client.get(f"/og/chat/{token}")
-            assert res.status_code == 200
-            assert "text/html" in res.headers["content-type"]
-            assert "Join Burn Chat" in res.text
-            assert token in res.text
+        res = client.get(f"/og/chat/{token}")
+        assert res.status_code == 200
+        assert "text/html" in res.headers["content-type"]
+        assert "Join Burn Chat" in res.text
+        assert token in res.text
     finally:
         session = chat_service._SESSIONS.pop(token, None)
         if session and session._destroy_task and not session._destroy_task.done():

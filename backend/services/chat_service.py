@@ -1120,9 +1120,13 @@ def create_session(ttl_seconds: int) -> tuple[str, str, datetime]:
             logger.warning("Failed to store chat session in Redis: %s", exc)
 
     # Start the countdown / auto-destroy background task.
-    task = asyncio.create_task(_countdown_loop(token, session))
-    track_background_task(task)
-    session._destroy_task = task
+    try:
+        loop = asyncio.get_running_loop()
+        task = loop.create_task(_countdown_loop(token, session))
+        track_background_task(task)
+        session._destroy_task = task
+    except RuntimeError:
+        session._destroy_task = None
 
     logger.info(
         "Created burn chat session %s (TTL=%ds, expires=%s)",
